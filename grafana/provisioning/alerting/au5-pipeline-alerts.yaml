@@ -1,0 +1,260 @@
+# AU-5 (Response to Audit Processing Failures): source-silence alerting.
+# Each rule measures seconds since the newest event in a siem.* table and
+# fires when a live source goes quiet — the SIEM detecting its own failure.
+# NoData/Error also alert, so a ClickHouse outage fires everything.
+#
+# AWS-source rules ship PAUSED (isPaused: true): un-pause them when AWS
+# ingestion goes live (docs/aws-ingestion.md), otherwise they'd fire forever.
+# GuardDuty note: findings are rare by nature, so its staleness threshold is
+# a week and it stays a weak signal — pipeline health for AWS is better read
+# from the CloudTrail rule.
+#
+# Notifications route to the "siem-oncall" contact point below — replace the
+# placeholder address and configure SMTP (GF_SMTP_*) for actual delivery;
+# firing alerts are visible in Grafana -> Alerting regardless.
+
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: siem-oncall
+    receivers:
+      - uid: siem-oncall-email
+        type: email
+        settings:
+          addresses: soc@REPLACE.example.org
+
+policies:
+  - orgId: 1
+    receiver: siem-oncall
+    group_by: ["alertname"]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h
+
+groups:
+  - orgId: 1
+    name: AU-5 pipeline health
+    folder: SIEM
+    interval: 5m
+    rules:
+      - uid: au5-linux-stale
+        title: "AU-5: Linux ingestion silent (linux_syslog)"
+        condition: B
+        for: 5m
+        noDataState: Alerting
+        execErrState: Alerting
+        labels: { severity: critical, control: AU-5 }
+        annotations:
+          summary: "No Linux agent events for over 30 minutes"
+          description: "siem.linux_syslog has received nothing recently. Check agents (systemctl status vector on hosts) and the vector-hosts aggregator."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: siem-analyst
+            model:
+              refId: A
+              editorType: sql
+              queryType: table
+              format: 1
+              rawSql: "SELECT toUInt64(now()) - toUInt64(coalesce(max(event_time), toDateTime(0))) AS lag_seconds FROM siem.linux_syslog"
+          - refId: B
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: "__expr__"
+            model:
+              refId: B
+              type: threshold
+              datasource: { type: "__expr__", uid: "__expr__" }
+              expression: A
+              conditions:
+                - evaluator: { params: [1800], type: gt }
+
+      - uid: au5-windows-stale
+        title: "AU-5: Windows ingestion silent (windows_events)"
+        condition: B
+        for: 5m
+        noDataState: Alerting
+        execErrState: Alerting
+        labels: { severity: critical, control: AU-5 }
+        annotations:
+          summary: "No Windows agent events for over 1 hour"
+          description: "siem.windows_events has received nothing recently. This is also the tripwire for the windows_event_log idle-freeze bug (vectordotdev/vector#25194): if the vector service is Running but silent, Restart-Service vector."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: siem-analyst
+            model:
+              refId: A
+              editorType: sql
+              queryType: table
+              format: 1
+              rawSql: "SELECT toUInt64(now()) - toUInt64(coalesce(max(event_time), toDateTime(0))) AS lag_seconds FROM siem.windows_events"
+          - refId: B
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: "__expr__"
+            model:
+              refId: B
+              type: threshold
+              datasource: { type: "__expr__", uid: "__expr__" }
+              expression: A
+              conditions:
+                - evaluator: { params: [3600], type: gt }
+
+      - uid: au5-k8s-stale
+        title: "AU-5: Kubernetes ingestion silent (k8s_logs)"
+        condition: B
+        for: 5m
+        noDataState: Alerting
+        execErrState: Alerting
+        labels: { severity: critical, control: AU-5 }
+        annotations:
+          summary: "No Kubernetes events for over 1 hour"
+          description: "siem.k8s_logs has received nothing recently. Check the vector-shipper DaemonSet in each cluster and the vector-hosts aggregator HEC listener (:8088)."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: siem-analyst
+            model:
+              refId: A
+              editorType: sql
+              queryType: table
+              format: 1
+              rawSql: "SELECT toUInt64(now()) - toUInt64(coalesce(max(event_time), toDateTime(0))) AS lag_seconds FROM siem.k8s_logs"
+          - refId: B
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: "__expr__"
+            model:
+              refId: B
+              type: threshold
+              datasource: { type: "__expr__", uid: "__expr__" }
+              expression: A
+              conditions:
+                - evaluator: { params: [3600], type: gt }
+
+      - uid: au5-cloudtrail-stale
+        title: "AU-5: CloudTrail ingestion silent"
+        condition: B
+        for: 5m
+        isPaused: true            # un-pause at AWS go-live
+        noDataState: Alerting
+        execErrState: Alerting
+        labels: { severity: critical, control: AU-5 }
+        annotations:
+          summary: "No CloudTrail events for over 1 hour"
+          description: "Management events flow continuously in active accounts. Check the vector (aws profile) service, SQS queue depth, and trail delivery."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: siem-analyst
+            model:
+              refId: A
+              editorType: sql
+              queryType: table
+              format: 1
+              rawSql: "SELECT toUInt64(now()) - toUInt64(coalesce(max(event_time), toDateTime(0))) AS lag_seconds FROM siem.cloudtrail"
+          - refId: B
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: "__expr__"
+            model:
+              refId: B
+              type: threshold
+              datasource: { type: "__expr__", uid: "__expr__" }
+              expression: A
+              conditions:
+                - evaluator: { params: [3600], type: gt }
+
+      - uid: au5-vpcflow-stale
+        title: "AU-5: VPC Flow ingestion silent"
+        condition: B
+        for: 5m
+        isPaused: true            # un-pause at AWS go-live
+        noDataState: Alerting
+        execErrState: Alerting
+        labels: { severity: critical, control: AU-5 }
+        annotations:
+          summary: "No VPC Flow records for over 1 hour"
+          description: "Flow logs are near-continuous for in-scope VPCs. Check SQS and the vector (aws profile) service."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: siem-analyst
+            model:
+              refId: A
+              editorType: sql
+              queryType: table
+              format: 1
+              rawSql: "SELECT toUInt64(now()) - toUInt64(coalesce(max(event_time), toDateTime(0))) AS lag_seconds FROM siem.vpc_flow"
+          - refId: B
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: "__expr__"
+            model:
+              refId: B
+              type: threshold
+              datasource: { type: "__expr__", uid: "__expr__" }
+              expression: A
+              conditions:
+                - evaluator: { params: [3600], type: gt }
+
+      - uid: au5-s3access-stale
+        title: "AU-5: S3 access-log ingestion silent"
+        condition: B
+        for: 5m
+        isPaused: true            # un-pause at AWS go-live
+        noDataState: Alerting
+        execErrState: Alerting
+        labels: { severity: warning, control: AU-5 }
+        annotations:
+          summary: "No S3 access-log events for over 24 hours"
+          description: "Threshold is generous: delivery depends on bucket traffic. Check bucket logging config and SQS."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: siem-analyst
+            model:
+              refId: A
+              editorType: sql
+              queryType: table
+              format: 1
+              rawSql: "SELECT toUInt64(now()) - toUInt64(coalesce(max(event_time), toDateTime(0))) AS lag_seconds FROM siem.s3_access"
+          - refId: B
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: "__expr__"
+            model:
+              refId: B
+              type: threshold
+              datasource: { type: "__expr__", uid: "__expr__" }
+              expression: A
+              conditions:
+                - evaluator: { params: [86400], type: gt }
+
+      - uid: au5-guardduty-stale
+        title: "AU-5: GuardDuty export silent (weak signal)"
+        condition: B
+        for: 5m
+        isPaused: true            # un-pause at AWS go-live
+        noDataState: Alerting
+        execErrState: Alerting
+        labels: { severity: warning, control: AU-5 }
+        annotations:
+          summary: "No GuardDuty findings for over 7 days"
+          description: "Findings are rare by nature; long silence may be healthy. Treat as a prompt to verify the export path, not as an outage."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: siem-analyst
+            model:
+              refId: A
+              editorType: sql
+              queryType: table
+              format: 1
+              rawSql: "SELECT toUInt64(now()) - toUInt64(coalesce(max(event_time), toDateTime(0))) AS lag_seconds FROM siem.guardduty"
+          - refId: B
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: "__expr__"
+            model:
+              refId: B
+              type: threshold
+              datasource: { type: "__expr__", uid: "__expr__" }
+              expression: A
+              conditions:
+                - evaluator: { params: [604800], type: gt }

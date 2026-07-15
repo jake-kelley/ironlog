@@ -1,0 +1,106 @@
+{
+  "uid": "aws-security-overview",
+  "title": "AWS Security Overview",
+  "tags": ["siem", "aws", "cloudtrail", "AU-6"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Console logins (success vs failure)",
+      "description": "AWS Management Console sign-ins from CloudTrail. Failures spike on brute-force or credential-stuffing attempts.",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "siem-analyst" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "bars", "fillOpacity": 60, "stacking": { "mode": "normal" } },
+          "unit": "short"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "failure" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
+          { "matcher": { "id": "byName", "options": "success" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "siem-analyst" },
+          "editorType": "sql",
+          "queryType": "timeseries",
+          "format": 0,
+          "rawSql": "SELECT toStartOfInterval(event_time, INTERVAL 1 HOUR) AS t, if(error_message = '', 'success', 'failure') AS outcome, count() AS logins FROM siem.cloudtrail WHERE event_name = 'ConsoleLogin' AND $__timeFilter(event_time) GROUP BY t, outcome ORDER BY t"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "AccessDenied / Unauthorized trend",
+      "description": "Authorization failures across all CloudTrail management events. A rising trend means something (or someone) is probing.",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "siem-analyst" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "fillOpacity": 25, "showPoints": "never" },
+          "color": { "mode": "fixed", "fixedColor": "orange" },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "siem-analyst" },
+          "editorType": "sql",
+          "queryType": "timeseries",
+          "format": 0,
+          "rawSql": "SELECT toStartOfInterval(event_time, INTERVAL 1 HOUR) AS t, count() AS denied FROM siem.cloudtrail WHERE error_code IN ('AccessDenied', 'UnauthorizedOperation', 'Client.UnauthorizedOperation', 'AccessDeniedException') AND $__timeFilter(event_time) GROUP BY t ORDER BY t"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "Root account activity",
+      "description": "Any use of the AWS root principal. Expected: none. Investigate every row (CIS 1.7 / IA-2).",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 9 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "siem-analyst" },
+      "fieldConfig": { "defaults": { "custom": { "filterable": true } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "siem-analyst" },
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT event_time, event_name, aws_region, source_ip, user_agent, error_code FROM siem.cloudtrail WHERE principal_type = 'Root' AND $__timeFilter(event_time) ORDER BY event_time DESC LIMIT 200"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "IAM changes (writes only)",
+      "description": "Non-read-only calls to iam.amazonaws.com: user/role/policy create, delete, attach, key rotation. Review daily (AC-2).",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 9 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "siem-analyst" },
+      "fieldConfig": { "defaults": { "custom": { "filterable": true } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "siem-analyst" },
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT event_time, event_name, principal_arn, source_ip, error_code FROM siem.cloudtrail WHERE event_source = 'iam.amazonaws.com' AND read_only = false AND $__timeFilter(event_time) ORDER BY event_time DESC LIMIT 200"
+        }
+      ]
+    }
+  ]
+}

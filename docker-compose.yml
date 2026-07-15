@@ -1,0 +1,282 @@
+# SIEM core platform — Phase 1
+# Services: ClickHouse (storage/query), Grafana OSS (UI), Keycloak (OIDC/MFA), Postgres (Keycloak state)
+# The Vector aggregator is added in Phase 2 (see comment stub at the bottom).
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: siem-clickhouse
+    restart: unless-stopped
+    environment:
+      # Bootstrap admin user (created by the official image on first start)
+      CLICKHOUSE_USER: ${CH_ADMIN_USER}
+      CLICKHOUSE_PASSWORD: ${CH_ADMIN_PASSWORD}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      # Passed through to initdb/99-rbac.sh for service-account creation
+      CH_VECTOR_PASSWORD: ${CH_VECTOR_PASSWORD}
+      CH_GRAFANA_ANALYST_PASSWORD: ${CH_GRAFANA_ANALYST_PASSWORD}
+      CH_GRAFANA_AUDITOR_PASSWORD: ${CH_GRAFANA_AUDITOR_PASSWORD}
+      CH_HYPERDX_PASSWORD: ${CH_HYPERDX_PASSWORD}
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse/config.d:/etc/clickhouse-server/config.d:ro
+      # Mount our lockdown file individually (not the whole dir) so the image
+      # entrypoint can still write users.d/default-user.xml when CLICKHOUSE_USER
+      # is set. Mounting the directory :ro makes the entrypoint crash-loop.
+      - ./clickhouse/users.d/00-lockdown.xml:/etc/clickhouse-server/users.d/00-lockdown.xml:ro
+      - ./clickhouse/initdb:/docker-entrypoint-initdb.d:ro
+      - ./clickhouse/ddl:/ddl:ro
+    ports:
+      - "127.0.0.1:8123:8123"   # HTTP — bound to localhost for admin use only
+      - "127.0.0.1:9000:9000"   # native — bound to localhost for admin use only
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--user", "${CH_ADMIN_USER}", "--password", "${CH_ADMIN_PASSWORD}", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: siem-keycloak-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD}
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: siem-keycloak
+    restart: unless-stopped
+    command: ["start", "--import-realm", "--http-enabled=true", "--proxy-headers=xforwarded"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
+      KC_HOSTNAME: ${KC_HOSTNAME}          # e.g. http://keycloak:8080 for local, https://sso.example.com in prod
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+      GRAFANA_CLIENT_SECRET: ${GRAFANA_OAUTH_SECRET}
+    volumes:
+      - ./keycloak/realm-export:/opt/keycloak/data/import:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana-oss:11.4.0
+    container_name: siem-grafana
+    restart: unless-stopped
+    environment:
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL}
+      # --- Local auth locked down; SSO only (break-glass: temporarily set DISABLE_LOGIN_FORM=false) ---
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      # --- OIDC via Keycloak ---
+      GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
+      GF_AUTH_GENERIC_OAUTH_NAME: Keycloak
+      GF_AUTH_GENERIC_OAUTH_CLIENT_ID: grafana
+      GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET: ${GRAFANA_OAUTH_SECRET}
+      GF_AUTH_GENERIC_OAUTH_SCOPES: openid profile email
+      GF_AUTH_GENERIC_OAUTH_AUTH_URL: ${KC_PUBLIC_URL}/realms/siem/protocol/openid-connect/auth
+      GF_AUTH_GENERIC_OAUTH_TOKEN_URL: ${KC_PUBLIC_URL}/realms/siem/protocol/openid-connect/token
+      GF_AUTH_GENERIC_OAUTH_API_URL: ${KC_PUBLIC_URL}/realms/siem/protocol/openid-connect/userinfo
+      GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP: "true"
+      GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN: "true"
+      GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_STRICT: "true"
+      GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH: >-
+        contains(roles[*], 'siem_admin') && 'Admin' ||
+        contains(roles[*], 'siem_analyst') && 'Editor' ||
+        contains(roles[*], 'siem_auditor') && 'Viewer'
+      # --- ClickHouse datasource credentials (referenced by provisioning yaml) ---
+      CH_GRAFANA_ANALYST_PASSWORD: ${CH_GRAFANA_ANALYST_PASSWORD}
+      CH_GRAFANA_AUDITOR_PASSWORD: ${CH_GRAFANA_AUDITOR_PASSWORD}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+
+  # ---------------------------------------------------------------
+  # HyperDX (ClickStack) — search/investigation UI on the siem.* tables.
+  # MIT-licensed. Reads ClickHouse as svc_hyperdx (SELECT on siem.* only, via
+  # the siem_analyst role) so every query it runs lands in audit.query_archive.
+  # NOT published to the host: all access goes through oauth2-proxy below
+  # (OSS HyperDX has no SSO; the proxy enforces Keycloak OIDC + MFA first,
+  # HyperDX's own local accounts remain as a second layer).
+  hyperdx:
+    image: docker.hyperdx.io/hyperdx/hyperdx:2.19.0
+    container_name: siem-hyperdx
+    restart: unless-stopped
+    environment:
+      MONGO_URI: mongodb://hyperdx:${HYPERDX_DB_PASSWORD}@hyperdx-db:27017/hyperdx?authSource=admin
+      FRONTEND_URL: http://localhost:8081          # the oauth2-proxy URL the browser sees
+      HYPERDX_APP_PORT: 8080
+      HYPERDX_API_PORT: 8000
+      HYPERDX_LOG_LEVEL: info
+      USAGE_STATS_ENABLED: "false"                 # no phone-home
+      DEFAULT_CONNECTIONS: '[{"name":"SIEM ClickHouse","host":"http://clickhouse:8123","username":"svc_hyperdx","password":"${CH_HYPERDX_PASSWORD}"}]'
+      DEFAULT_SOURCES: '[{"from":{"databaseName":"siem","tableName":"cloudtrail"},"kind":"log","name":"CloudTrail","timestampValueExpression":"event_time","displayedTimestampValueExpression":"event_time","implicitColumnExpression":"raw","bodyExpression":"raw","serviceNameExpression":"event_source","defaultTableSelectExpression":"event_time,event_name,principal_arn,source_ip,error_code","connection":"SIEM ClickHouse"},{"from":{"databaseName":"siem","tableName":"guardduty"},"kind":"log","name":"GuardDuty","timestampValueExpression":"event_time","displayedTimestampValueExpression":"event_time","implicitColumnExpression":"title","bodyExpression":"title","serviceNameExpression":"finding_type","defaultTableSelectExpression":"event_time,finding_type,severity,resource_type,resource_id,title","connection":"SIEM ClickHouse"},{"from":{"databaseName":"siem","tableName":"vpc_flow"},"kind":"log","name":"VPC Flow","timestampValueExpression":"event_time","displayedTimestampValueExpression":"event_time","implicitColumnExpression":"interface_id","bodyExpression":"concat(toString(src_addr),'':'',toString(src_port),'' -> '',toString(dst_addr),'':'',toString(dst_port))","defaultTableSelectExpression":"event_time,aws_account,src_addr,src_port,dst_addr,dst_port,protocol,action,bytes","connection":"SIEM ClickHouse"},{"from":{"databaseName":"siem","tableName":"s3_access"},"kind":"log","name":"S3 Access","timestampValueExpression":"event_time","displayedTimestampValueExpression":"event_time","implicitColumnExpression":"object_key","bodyExpression":"concat(operation,'' '',object_key)","serviceNameExpression":"bucket","defaultTableSelectExpression":"event_time,bucket,operation,object_key,remote_ip,http_status","connection":"SIEM ClickHouse"}]'
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      hyperdx-db:
+        condition: service_healthy
+
+  hyperdx-db:
+    image: mongo:7.0
+    container_name: siem-hyperdx-db
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: hyperdx
+      MONGO_INITDB_ROOT_PASSWORD: ${HYPERDX_DB_PASSWORD}
+    volumes:
+      - hyperdx-db-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # SSO gate for HyperDX: browser -> :8081 -> Keycloak OIDC (+ TOTP) -> proxy
+  # to the unpublished hyperdx container. Only siem_* realm roles pass.
+  hyperdx-auth:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
+    container_name: siem-hyperdx-auth
+    restart: unless-stopped
+    environment:
+      OAUTH2_PROXY_PROVIDER: keycloak-oidc
+      OAUTH2_PROXY_OIDC_ISSUER_URL: ${KC_PUBLIC_URL}/realms/siem
+      OAUTH2_PROXY_CLIENT_ID: hyperdx
+      OAUTH2_PROXY_CLIENT_SECRET: ${HYPERDX_OAUTH_SECRET}
+      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_PROXY_COOKIE_SECRET}
+      OAUTH2_PROXY_EMAIL_DOMAINS: "*"
+      OAUTH2_PROXY_ALLOWED_ROLES: siem_admin,siem_analyst,siem_auditor
+      OAUTH2_PROXY_UPSTREAMS: http://hyperdx:8080
+      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
+      OAUTH2_PROXY_REDIRECT_URL: http://localhost:8081/oauth2/callback
+      OAUTH2_PROXY_COOKIE_SECURE: "false"          # local HTTP; set true behind TLS in prod
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+    ports:
+      - "8081:4180"
+    depends_on:
+      keycloak:
+        condition: service_started
+      hyperdx:
+        condition: service_started
+
+  # ---------------------------------------------------------------
+  # Phase 3 — Vector aggregator for hosts + Kubernetes (always on).
+  # :8088 splunk_hec (K8s clusters push, token in .env)
+  # :6000 vector native protocol (Linux agents, vector/agent-linux.yaml)
+  vector-hosts:
+    image: timberio/vector:0.57.0-debian
+    container_name: siem-vector-hosts
+    restart: unless-stopped
+    volumes:
+      - ./vector/hosts.yaml:/etc/vector/vector.yaml:ro
+      - vector-hosts-buffer:/var/lib/vector
+    environment:
+      # Vector >=0.57 disables ${VAR} interpolation in configs by default;
+      # our configs deliberately pull secrets from the environment.
+      VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION: "true"
+      CH_VECTOR_PASSWORD: ${CH_VECTOR_PASSWORD}
+      SPLUNK_HEC_TOKEN: ${SPLUNK_HEC_TOKEN}
+    ports:
+      - "8088:8088"   # splunk_hec ingest (K8s)
+      - "6000:6000"   # vector agent ingest (Linux)
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8686 && printf 'GET /health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q 200 <&3"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------
+  # Local k3s demo/test cluster (compose profile "k3s") — exercises the K8s
+  # ingestion path end-to-end. k8s/vector-shipper.yaml is auto-applied via the
+  # k3s manifests dir; the HEC token Secret is created once after first boot:
+  #   docker exec siem-k3s kubectl -n siem-logging create secret generic \
+  #     siem-hec --from-literal=token=<SPLUNK_HEC_TOKEN from .env>
+  # Not part of the SIEM itself — a producer for testing/demo.
+  k3s:
+    image: rancher/k3s:v1.35.6-k3s1
+    container_name: siem-k3s
+    restart: unless-stopped
+    profiles: ["k3s"]
+    command: server --disable traefik --disable servicelb
+    privileged: true
+    tmpfs:
+      - /run
+      - /var/run
+    volumes:
+      - k3s-data:/var/lib/rancher/k3s
+      - ./k8s/vector-shipper.yaml:/var/lib/rancher/k3s/server/manifests/vector-shipper.yaml:ro
+    depends_on:
+      vector-hosts:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------
+  # Phase 2 — Vector aggregator (AWS ingestion).
+  # Gated behind the "aws" compose profile: it only starts once real AWS
+  # credentials + SQS queue URLs are in .env and COMPOSE_PROFILES=aws is set
+  # (or `docker compose --profile aws up -d`). Keeps the core stack green
+  # before the AWS side is wired up (see docs/aws-ingestion.md).
+  vector:
+    image: timberio/vector:0.57.0-debian
+    container_name: siem-vector
+    restart: unless-stopped
+    profiles: ["aws"]
+    volumes:
+      - ./vector/vector.yaml:/etc/vector/vector.yaml:ro
+      - vector-buffer:/var/lib/vector
+    environment:
+      # Vector >=0.57 disables ${VAR} interpolation in configs by default;
+      # our configs deliberately pull secrets from the environment.
+      VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION: "true"
+      CH_VECTOR_PASSWORD: ${CH_VECTOR_PASSWORD}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      SQS_URL_CLOUDTRAIL: ${SQS_URL_CLOUDTRAIL:-}
+      SQS_URL_GUARDDUTY: ${SQS_URL_GUARDDUTY:-}
+      SQS_URL_VPCFLOW: ${SQS_URL_VPCFLOW:-}
+      SQS_URL_S3ACCESS: ${SQS_URL_S3ACCESS:-}
+    # ports:
+    #   - "8088:8088"   # splunk_hec source (Phase 3)
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+  # ---------------------------------------------------------------
+
+volumes:
+  clickhouse-data:
+  keycloak-db-data:
+  grafana-data:
+  vector-buffer:
+  vector-hosts-buffer:
+  hyperdx-db-data:
+  k3s-data:

@@ -1,0 +1,169 @@
+# Unit tests for the Phase 3 (hosts.yaml) transforms. Run:
+#   docker run --rm -v "$PWD/vector:/cfg:ro" -e SPLUNK_HEC_TOKEN=x -e CH_VECTOR_PASSWORD=x \
+#     timberio/vector:0.57.0-debian test /cfg/hosts.yaml /cfg/tests-hosts.yaml
+
+tests:
+  - name: k8s_hec_json_object_event
+    inputs:
+      - insert_at: k8s_map
+        type: log
+        log_fields:
+          message: '{"cluster":"prod-east","namespace":"payments","node":"node-3","container":"api","pod":"api-7d9f8b6c5-x2vqz","level":"error","message":"connection refused to db"}'
+    outputs:
+      - extract_from: k8s_map
+        conditions:
+          - type: vrl
+            source: |-
+              assert_eq!(.cluster, "prod-east")
+              assert_eq!(.namespace, "payments")
+              assert_eq!(.node, "node-3")
+              assert_eq!(.container, "api")
+              assert_eq!(.pod, "api-7d9f8b6c5-x2vqz")
+              assert_eq!(.level, "error")
+              assert_eq!(.message, "connection refused to db")
+              assert!(is_integer(.event_time))
+              assert!(is_string(.raw))
+
+  - name: k8s_hec_plain_text_event_gets_defaults
+    inputs:
+      - insert_at: k8s_map
+        type: log
+        log_fields:
+          message: "plain non-JSON log line from a lazy shipper"
+    outputs:
+      - extract_from: k8s_map
+        conditions:
+          - type: vrl
+            source: |-
+              assert_eq!(.cluster, "")
+              assert_eq!(.namespace, "")
+              assert_eq!(.message, "plain non-JSON log line from a lazy shipper")
+
+  - name: linux_journald_sshd_event
+    inputs:
+      - insert_at: linux_map
+        type: log
+        log_fields:
+          source_type: journald
+          host: web-01
+          message: "Failed password for invalid user admin from 203.0.113.9 port 55555 ssh2"
+          SYSLOG_IDENTIFIER: sshd
+          PRIORITY: "4"
+          _SYSTEMD_UNIT: ssh.service
+          _PID: "1234"
+          _UID: "0"
+    outputs:
+      - extract_from: linux_map
+        conditions:
+          - type: vrl
+            source: |-
+              assert_eq!(.host, "web-01")
+              assert_eq!(.source, "journald")
+              assert_eq!(.unit, "ssh.service")
+              assert_eq!(.identifier, "sshd")
+              assert_eq!(.priority, 4)
+              assert_eq!(.pid, 1234)
+              assert_eq!(.audit_type, "")
+              assert!(contains(string!(.message), "Failed password"))
+
+  - name: linux_auditd_file_line
+    inputs:
+      - insert_at: linux_map
+        type: log
+        log_fields:
+          source: auditd
+          host: web-01
+          message: 'type=USER_CMD msg=audit(1752470000.123:4567): pid=2211 uid=1000 auid=1000 ses=3 subj=unconfined msg=''cwd="/home/jake" cmd="visudo" exe="/usr/bin/sudo" acct="jake" terminal=pts/0 res=success'''
+    outputs:
+      - extract_from: linux_map
+        conditions:
+          - type: vrl
+            source: |-
+              assert_eq!(.audit_type, "USER_CMD")
+              assert_eq!(.event_time, 1752470000)
+              assert_eq!(.host, "web-01")
+              assert_eq!(.source, "auditd")
+              assert_eq!(.identifier, "audit")
+              assert_eq!(.uid, 1000)
+              assert_eq!(.user_name, "jake")
+
+  - name: windows_system_event_real_sample
+    inputs:
+      - insert_at: agent_route
+        type: log
+        log_fields:
+          source: wineventlog
+          channel: System
+          computer: jdesktop
+          host: jdesktop
+          event_id: 7040
+          level: Information
+          provider_name: Service Control Manager
+          user_id: S-1-5-18
+          user_name: 'NT AUTHORITY\SYSTEM'
+          message: The start type of the BITS service was changed from auto start to demand start.
+          event_data.param1: Background Intelligent Transfer Service
+          event_data.param2: auto start
+    outputs:
+      - extract_from: windows_map
+        conditions:
+          - type: vrl
+            source: |-
+              assert_eq!(.computer, "jdesktop")
+              assert_eq!(.channel, "System")
+              assert_eq!(.provider, "Service Control Manager")
+              assert_eq!(.event_id, 7040)
+              assert_eq!(.level, "Information")
+              assert_eq!(.user_sid, "S-1-5-18")
+              assert_eq!(.logon_type, 0)
+              assert!(contains(string!(.message), "BITS"))
+
+  - name: windows_security_4625_logon_fields
+    inputs:
+      - insert_at: agent_route
+        type: log
+        log_fields:
+          source: wineventlog
+          channel: Security
+          computer: jdesktop
+          event_id: 4625
+          level: Information
+          provider_name: Microsoft-Windows-Security-Auditing
+          user_id: ""
+          message: An account failed to log on.
+          event_data.TargetUserName: admin
+          event_data.LogonType: "10"
+          event_data.IpAddress: 203.0.113.7
+          event_data.ProcessName: 'C:\Windows\System32\svchost.exe'
+    outputs:
+      - extract_from: windows_map
+        conditions:
+          - type: vrl
+            source: |-
+              assert_eq!(.event_id, 4625)
+              assert_eq!(.logon_type, 10)
+              assert_eq!(.src_ip, "203.0.113.7")
+              assert_eq!(.process_name, "C:\\Windows\\System32\\svchost.exe")
+              assert!(contains(string!(.raw), "TargetUserName"))
+
+  - name: windows_event_not_routed_to_linux
+    inputs:
+      - insert_at: agent_route
+        type: log
+        log_fields:
+          source: wineventlog
+          channel: System
+          computer: jdesktop
+          event_id: 1
+          message: x
+    no_outputs_from: [linux_map]
+
+  - name: linux_auditd_garbage_dropped
+    inputs:
+      - insert_at: linux_map
+        type: log
+        log_fields:
+          source: auditd
+          host: web-01
+          message: "not an audit line at all"
+    no_outputs_from: [linux_map]

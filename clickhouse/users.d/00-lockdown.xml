@@ -1,0 +1,13 @@
+<clickhouse>
+    <!-- Confine the built-in 'default' user to loopback inside the container.
+         All real access goes through named users created by initdb/99-init.sh. -->
+    <users>
+        <default>
+            <networks replace="replace">
+                <ip>::1</ip>
+                <ip>127.0.0.1</ip>
+            </networks>
+            <access_management>0</access_management>
+        </default>
+    </users>
+</clickhouse>

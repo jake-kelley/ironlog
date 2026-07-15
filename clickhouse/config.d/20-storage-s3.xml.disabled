@@ -1,0 +1,24 @@
+<!-- Phase 5: rename to 20-storage-s3.xml, fill in bucket/credentials, restart,
+     then add `TTL event_time + INTERVAL 30 DAY TO VOLUME 's3', event_time + INTERVAL 400 DAY DELETE`
+     to each table (ALTER TABLE ... MODIFY TTL). Numbers per docs/retention-policy.md. -->
+<clickhouse>
+    <storage_configuration>
+        <disks>
+            <s3_cold>
+                <type>s3</type>
+                <endpoint>https://s3.us-east-1.amazonaws.com/YOUR-SIEM-COLD-BUCKET/clickhouse/</endpoint>
+                <use_environment_credentials>true</use_environment_credentials>
+                <metadata_path>/var/lib/clickhouse/disks/s3_cold/</metadata_path>
+            </s3_cold>
+        </disks>
+        <policies>
+            <hot_to_s3>
+                <volumes>
+                    <hot><disk>default</disk></hot>
+                    <s3><disk>s3_cold</disk></s3>
+                </volumes>
+                <move_factor>0.1</move_factor>
+            </hot_to_s3>
+        </policies>
+    </storage_configuration>
+</clickhouse>

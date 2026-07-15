@@ -1,0 +1,9 @@
+<clickhouse>
+    <!-- The stock image listens on loopback only, which makes the container
+         unreachable from Grafana and Vector (and from the published 127.0.0.1
+         host ports). Listen on all interfaces INSIDE the container; exposure
+         is still bounded by: docker networking (only compose services reach
+         it), the loopback-only 'default' user (users.d/00-lockdown.xml), and
+         password auth on every named account. -->
+    <listen_host>0.0.0.0</listen_host>  <!-- IPv4-only: the compose network has no IPv6; '::' fails to bind (exit 210) -->
+</clickhouse>

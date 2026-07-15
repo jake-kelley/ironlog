@@ -1,0 +1,47 @@
+# Vector AGENT config for Linux hosts (Phase 3). Deploy to each in-scope host
+# at /etc/vector/vector.yaml (see docs/host-ingestion.md for install + perms).
+#
+# Ships the AU-2 committed sources — journald (auth, sudo, systemd units) and
+# auditd (/var/log/audit/audit.log) — to the SIEM aggregator over Vector's
+# native protocol. Normalization happens ON THE AGGREGATOR (vector/hosts.yaml);
+# agents stay dumb: tag and forward. Buffer to disk locally if the aggregator
+# is unreachable (AU-5: no silent loss on network blips).
+#
+# Required env (systemd drop-in or /etc/default/vector):
+#   VECTOR_AGGREGATOR_ADDR  e.g. siem.example.internal:6000
+#   VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true
+#     (Vector >=0.57 disables env-var config interpolation by default.
+#      NB: interpolation is pre-parse text substitution, so dollar-brace
+#      references are expanded EVEN INSIDE COMMENTS — never write one here.)
+
+data_dir: /var/lib/vector
+
+sources:
+  journald:
+    type: journald
+    # all units; the aggregator + detection SQL narrow scope, the catalog
+    # commits categories, and journald volume on servers is manageable
+
+  auditd_log:
+    type: file
+    include: ["/var/log/audit/audit.log"]
+    ignore_older_secs: 86400
+
+transforms:
+  tag_auditd:
+    type: remap
+    inputs: [auditd_log]
+    source: |-
+      .source = "auditd"
+      .host = get_hostname() ?? "unknown"
+
+sinks:
+  aggregator:
+    type: vector
+    inputs: [journald, tag_auditd]
+    address: "${VECTOR_AGGREGATOR_ADDR}"
+    compression: true
+    buffer:
+      type: disk
+      max_size: 268435488
+      when_full: block

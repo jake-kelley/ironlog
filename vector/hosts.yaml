@@ -1,0 +1,236 @@
+# Vector aggregator — Phase 3: host + Kubernetes ingestion.
+# Runs as the always-on `vector-hosts` service, independent of the AWS-gated
+# `vector` service (which uses vector.yaml behind the "aws" compose profile).
+#
+# Inputs:
+#   :8088  splunk_hec — Kubernetes clusters push here (token-authenticated).
+#          Contract (docs/host-ingestion.md): JSON events with keys
+#          cluster/namespace/node/container/pod/level/message.
+#   :6000  vector     — Linux agents (vector/agent-linux.yaml) ship journald
+#          + auditd events over Vector's native protocol.
+#
+# Output: siem.linux_syslog and siem.k8s_logs as svc_vector (INSERT-only).
+# Timestamps: unix-epoch integers (same convention as vector.yaml).
+
+data_dir: /var/lib/vector
+
+api:
+  enabled: true                # container healthcheck hits /health
+  address: 127.0.0.1:8686
+
+sources:
+  k8s_hec:
+    type: splunk_hec
+    address: 0.0.0.0:8088
+    valid_tokens:
+      - "${SPLUNK_HEC_TOKEN}"
+
+  # Linux AND Windows agents share this port; events are routed by the
+  # .source marker each agent config sets.
+  linux_agents:
+    type: vector
+    address: 0.0.0.0:6000
+
+transforms:
+  agent_route:
+    type: route
+    inputs: [linux_agents]
+    route:
+      windows: .source == "wineventlog"
+    # everything else (journald / auditd) falls through to _unmatched -> linux_map
+
+  # K8s shippers vary: some put the JSON event object at the root, some leave
+  # it as a JSON string in .message. Handle both, default every column.
+  k8s_map:
+    type: remap
+    inputs: [k8s_hec]
+    source: |-
+      d = .
+      msg_str = string(.message) ?? ""
+      if msg_str != "" {
+        parsed, err = parse_json(msg_str)
+        if err == null && is_object(parsed) {
+          d = parsed
+        }
+      }
+      t = timestamp(.timestamp) ?? now()
+      . = {
+        "event_time": to_unix_timestamp(t),
+        "cluster":    string(d.cluster) ?? "",
+        "namespace":  string(d.namespace) ?? "",
+        "node":       string(d.node) ?? "",
+        "container":  string(d.container) ?? "",
+        "pod":        string(d.pod) ?? "",
+        "level":      string(d.level) ?? "",
+        "message":    string(d.message) ?? msg_str,
+        "raw":        encode_json(d)
+      }
+
+  # Linux agents send two event families, marked by the agent config:
+  #   journald: vector journald source fields (.source_type == "journald"):
+  #             _SYSTEMD_UNIT, SYSLOG_IDENTIFIER, PRIORITY, _PID, _UID,
+  #             _AUDIT_TYPE_NAME (for kernel-audit-via-journal), .message, .host
+  #   auditd:   raw /var/log/audit/audit.log lines (.source = "auditd",
+  #             .host set by the agent): "type=SYSCALL msg=audit(EPOCH.MS:SER): ..."
+  linux_map:
+    type: remap
+    inputs: [agent_route._unmatched]
+    source: |-
+      src = string(.source) ?? ""
+      if src == "auditd" {
+        line = string(.message) ?? ""
+        g, gerr = parse_regex(line, r'^type=(?P<atype>\S+)\s+msg=audit\((?P<ts>\d+)\.\d+:\d+\):\s*(?P<rest>.*)$')
+        if gerr != null {
+          abort
+        }
+        acct = ""
+        a, aerr = parse_regex(string(g.rest) ?? "", r'acct="(?P<acct>[^"]+)"')
+        if aerr == null {
+          acct = string(a.acct) ?? ""
+        }
+        auid = 4294967295
+        u, uerr = parse_regex(string(g.rest) ?? "", r'\bauid=(?P<auid>\d+)')
+        if uerr == null {
+          auid = to_int(string(u.auid) ?? "") ?? 4294967295
+        }
+        if auid == 4294967295 { auid = 0 }   # unset auid sentinel -> 0
+        . = {
+          "event_time": to_int(string(g.ts) ?? "") ?? 0,
+          "host":       string(.host) ?? "",
+          "source":     "auditd",
+          "unit":       "",
+          "identifier": "audit",
+          "priority":   5,
+          "pid":        0,
+          "uid":        auid,
+          "user_name":  acct,
+          "audit_type": string(g.atype) ?? "",
+          "message":    line,
+          "raw":        line
+        }
+      } else {
+        t = timestamp(.timestamp) ?? now()
+        raw = encode_json(.)
+        family = "journald"
+        if exists(._AUDIT_TYPE_NAME) { family = "auditd" }
+        . = {
+          "event_time": to_unix_timestamp(t),
+          "host":       string(.host) ?? "",
+          "source":     family,
+          "unit":       string(._SYSTEMD_UNIT) ?? "",
+          "identifier": string(.SYSLOG_IDENTIFIER) ?? "",
+          "priority":   to_int(string(.PRIORITY) ?? "6") ?? 6,
+          "pid":        to_int(string(._PID) ?? "0") ?? 0,
+          "uid":        to_int(string(._UID) ?? "0") ?? 0,
+          "user_name":  "",
+          "audit_type": string(._AUDIT_TYPE_NAME) ?? "",
+          "message":    string(.message) ?? "",
+          "raw":        raw
+        }
+      }
+
+  # Windows agents (vector/agent-windows.yaml): windows_event_log source
+  # fields observed on a live 0.57.0 agent — channel, computer, provider_name,
+  # event_id, level, task?, user_id (SID), user_name, message (rendered),
+  # event_data (named EventData pairs on Security events), timestamp.
+  windows_map:
+    type: remap
+    inputs: [agent_route.windows]
+    source: |-
+      ed = object(.event_data) ?? {}
+      t = timestamp(.timestamp) ?? now()
+      uname = string(.user_name) ?? string(ed.TargetUserName) ?? ""
+      . = {
+        "event_time":   to_unix_timestamp(t),
+        "computer":     string(.computer) ?? string(.host) ?? "",
+        "channel":      string(.channel) ?? "",
+        "provider":     string(.provider_name) ?? "",
+        "event_id":     to_int(.event_id) ?? 0,
+        "level":        string(.level) ?? "",
+        "task":         to_string(.task) ?? "",
+        "user_sid":     string(.user_id) ?? "",
+        "user_name":    uname,
+        "logon_type":   to_int(ed.LogonType) ?? 0,
+        "src_ip":       string(ed.IpAddress) ?? "",
+        "process_name": string(ed.NewProcessName) ?? string(ed.ProcessName) ?? "",
+        "message":      string(.message) ?? "",
+        "raw":          encode_json(ed)
+      }
+
+sinks:
+  k8s_ch:
+    type: clickhouse
+    inputs: [k8s_map]
+    endpoint: http://clickhouse:8123
+    database: siem
+    table: k8s_logs
+    # Sink healthcheck disabled: Vector probes ClickHouse WITHOUT auth
+    # headers, so the request is evaluated as the loopback-confined 'default'
+    # user and 403s (users.d/00-lockdown.xml). Inserts themselves are
+    # authenticated and unaffected; pipeline health is covered by the
+    # container healthcheck and the AU-5 alerts (Phase 5).
+    healthcheck:
+      enabled: false
+    skip_unknown_fields: true
+    compression: gzip
+    auth:
+      strategy: basic
+      user: svc_vector
+      password: "${CH_VECTOR_PASSWORD}"
+    batch:
+      max_events: 50000
+      timeout_secs: 5
+    buffer:
+      type: disk
+      max_size: 2147483648
+      when_full: block
+
+  windows_ch:
+    type: clickhouse
+    inputs: [windows_map]
+    endpoint: http://clickhouse:8123
+    database: siem
+    table: windows_events
+    # Sink healthcheck disabled — same unauthenticated-probe issue as below.
+    healthcheck:
+      enabled: false
+    skip_unknown_fields: true
+    compression: gzip
+    auth:
+      strategy: basic
+      user: svc_vector
+      password: "${CH_VECTOR_PASSWORD}"
+    batch:
+      max_events: 50000
+      timeout_secs: 5
+    buffer:
+      type: disk
+      max_size: 2147483648
+      when_full: block
+
+  linux_ch:
+    type: clickhouse
+    inputs: [linux_map]
+    endpoint: http://clickhouse:8123
+    database: siem
+    table: linux_syslog
+    # Sink healthcheck disabled: Vector probes ClickHouse WITHOUT auth
+    # headers, so the request is evaluated as the loopback-confined 'default'
+    # user and 403s (users.d/00-lockdown.xml). Inserts themselves are
+    # authenticated and unaffected; pipeline health is covered by the
+    # container healthcheck and the AU-5 alerts (Phase 5).
+    healthcheck:
+      enabled: false
+    skip_unknown_fields: true
+    compression: gzip
+    auth:
+      strategy: basic
+      user: svc_vector
+      password: "${CH_VECTOR_PASSWORD}"
+    batch:
+      max_events: 50000
+      timeout_secs: 5
+    buffer:
+      type: disk
+      max_size: 2147483648
+      when_full: block

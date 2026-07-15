@@ -1,0 +1,45 @@
+# Vector AGENT config for Windows hosts (Phase 4). Installed to
+# C:\ProgramData\vector\vector.yaml by scripts\install-windows-agent.ps1.
+#
+# Ships the AU-2 committed channels (Security, System, PowerShell/Operational)
+# to the SIEM aggregator over Vector's native protocol. Normalization happens
+# ON THE AGGREGATOR (vector/hosts.yaml windows_map); agents tag and forward.
+#
+# PILOT NOTE: the windows_event_log source has a known idle-freeze bug
+# (github.com/vectordotdev/vector/issues/25194) — monitor ingest lag per
+# docs/host-ingestion.md; fallback is Winlogbeat OSS.
+#
+# Required MACHINE env vars (set by the install script):
+#   VECTOR_AGGREGATOR_ADDR                          e.g. localhost:6000
+#   VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION  true
+#     (Vector >=0.57 disables env-var config interpolation by default.
+#      NB: interpolation is pre-parse text substitution, so dollar-brace
+#      references are expanded EVEN INSIDE COMMENTS — never write one here.)
+
+data_dir: "C:\\ProgramData\\vector\\data"
+
+sources:
+  wineventlog:
+    type: windows_event_log
+    channels:
+      - Security
+      - System
+      - Microsoft-Windows-PowerShell/Operational
+
+transforms:
+  tag:
+    type: remap
+    inputs: [wineventlog]
+    source: |-
+      .source = "wineventlog"
+
+sinks:
+  aggregator:
+    type: vector
+    inputs: [tag]
+    address: "${VECTOR_AGGREGATOR_ADDR}"
+    compression: true
+    buffer:
+      type: disk
+      max_size: 268435488
+      when_full: block

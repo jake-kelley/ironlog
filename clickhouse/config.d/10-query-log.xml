@@ -1,0 +1,14 @@
+<clickhouse>
+    <!-- Analyst-activity source of record (AU-9 supporting evidence).
+         Kept 90 days in system tables; the durable copy is audit.query_archive. -->
+    <!-- replace="replace" makes this node authoritative: the base config.xml
+         ships an uncommented <partition_by>, and a full <engine> string cannot
+         coexist with a separate partition_by (BAD_ARGUMENTS). Replacing drops
+         the inherited partition_by so only our engine definition remains. -->
+    <query_log replace="replace">
+        <database>system</database>
+        <table>query_log</table>
+        <engine>ENGINE = MergeTree PARTITION BY toYYYYMM(event_date) ORDER BY (event_date, event_time) TTL event_date + INTERVAL 90 DAY DELETE</engine>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_log>
+</clickhouse>

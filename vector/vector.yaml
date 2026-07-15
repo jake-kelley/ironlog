@@ -1,0 +1,315 @@
+# Vector aggregator — Phase 2: AWS ingestion.
+# Pattern per source: aws_s3 source (SQS bucket-notification driven) -> VRL
+# normalize to the exact siem.* column set -> clickhouse sink as svc_vector
+# (INSERT-only). One SQS queue per data type: the aws_s3 source cannot demux
+# object types, so each log family gets its own queue + notification filter
+# (see docs/aws-ingestion.md for the AWS-side wiring and IAM policy).
+#
+# Timestamps are emitted as unix-epoch integers — ClickHouse DateTime accepts
+# them natively over JSONEachRow, avoiding timezone/format ambiguity.
+# AWS credentials come from the standard SDK env chain (AWS_ACCESS_KEY_ID /
+# AWS_SECRET_ACCESS_KEY injected by compose from .env).
+
+data_dir: /var/lib/vector
+
+api:
+  enabled: false
+
+# ---------------------------------------------------------------------------
+# Sources — one SQS-notified S3 consumer per log family
+# ---------------------------------------------------------------------------
+sources:
+  cloudtrail_s3:
+    type: aws_s3
+    region: "${AWS_REGION}"
+    compression: auto            # CloudTrail objects are .json.gz
+    sqs:
+      queue_url: "${SQS_URL_CLOUDTRAIL}"
+      delete_message: true
+
+  guardduty_s3:
+    type: aws_s3
+    region: "${AWS_REGION}"
+    compression: auto            # findings export is .jsonl.gz
+    sqs:
+      queue_url: "${SQS_URL_GUARDDUTY}"
+      delete_message: true
+
+  vpcflow_s3:
+    type: aws_s3
+    region: "${AWS_REGION}"
+    compression: auto            # flow logs are space-separated text, .log.gz
+    sqs:
+      queue_url: "${SQS_URL_VPCFLOW}"
+      delete_message: true
+
+  s3access_s3:
+    type: aws_s3
+    region: "${AWS_REGION}"
+    compression: auto            # server access logs are uncompressed text
+    sqs:
+      queue_url: "${SQS_URL_S3ACCESS}"
+      delete_message: true
+
+# ---------------------------------------------------------------------------
+# Transforms — normalize to the exact siem.* columns (see clickhouse/ddl/010_aws.sql)
+# ---------------------------------------------------------------------------
+transforms:
+
+  # CloudTrail delivers one JSON object per file: {"Records": [...]}. Setting
+  # `.` to the array fans out one Vector event per record. Digest/sidecar files
+  # without Records[] are dropped via abort.
+  cloudtrail_unwrap:
+    type: remap
+    inputs: [cloudtrail_s3]
+    source: |-
+      parsed, err = parse_json(string!(.message))
+      if err != null {
+        abort
+      }
+      recs = array(parsed.Records) ?? []
+      if length(recs) == 0 {
+        abort
+      }
+      . = recs
+
+  cloudtrail_map:
+    type: remap
+    inputs: [cloudtrail_unwrap]
+    source: |-
+      ev = .
+      t = parse_timestamp(string(ev.eventTime) ?? "", format: "%+") ?? now()
+      ui = object(ev.userIdentity) ?? {}
+      . = {
+        "event_time":     to_unix_timestamp(t),
+        "aws_account":    string(ev.recipientAccountId) ?? "",
+        "aws_region":     string(ev.awsRegion) ?? "",
+        "event_source":   string(ev.eventSource) ?? "",
+        "event_name":     string(ev.eventName) ?? "",
+        "event_category": string(ev.eventCategory) ?? "Management",
+        "read_only":      bool(ev.readOnly) ?? false,
+        "principal_type": string(ui.type) ?? "",
+        "principal_arn":  string(ui.arn) ?? "",
+        "source_ip":      string(ev.sourceIPAddress) ?? "",
+        "user_agent":     string(ev.userAgent) ?? "",
+        "error_code":     string(ev.errorCode) ?? "",
+        "error_message":  string(ev.errorMessage) ?? "",
+        "request_id":     string(ev.requestID) ?? "",
+        "event_id":       string(ev.eventID) ?? "",
+        "raw":            encode_json(ev)
+      }
+
+  # GuardDuty findings export: one JSON finding per line (JSONL).
+  guardduty_map:
+    type: remap
+    inputs: [guardduty_s3]
+    source: |-
+      f, err = parse_json(string!(.message))
+      if err != null {
+        abort
+      }
+      if !exists(f.id) || !exists(f.type) {
+        abort
+      }
+      updated = parse_timestamp(string(f.updatedAt) ?? "", format: "%+") ?? now()
+      svc = object(f.service) ?? {}
+      first = parse_timestamp(string(svc.eventFirstSeen) ?? "", format: "%+") ?? updated
+      last  = parse_timestamp(string(svc.eventLastSeen) ?? "", format: "%+") ?? updated
+      res = object(f.resource) ?? {}
+      rid = string(res.instanceDetails.instanceId) ??
+            string(res.accessKeyDetails.accessKeyId) ??
+            string(res.s3BucketDetails[0].name) ??
+            string(res.eksClusterDetails.name) ??
+            string(res.rdsDbInstanceDetails.dbInstanceIdentifier) ?? ""
+      . = {
+        "event_time":    to_unix_timestamp(updated),
+        "aws_account":   string(f.accountId) ?? "",
+        "aws_region":    string(f.region) ?? "",
+        "finding_id":    string!(f.id),
+        "finding_type":  string!(f.type),
+        "severity":      to_float(f.severity) ?? 0.0,
+        "resource_type": string(res.resourceType) ?? "",
+        "resource_id":   rid,
+        "title":         string(f.title) ?? "",
+        "first_seen":    to_unix_timestamp(first),
+        "last_seen":     to_unix_timestamp(last),
+        "raw":           encode_json(f)
+      }
+
+  # VPC Flow Logs (v2 default format). S3-delivered files start with a header
+  # line ("version account-id ...") which must be dropped. NODATA/SKIPDATA rows
+  # have '-' for most fields -> parser yields null -> safe defaults; action
+  # becomes 'NONE' (enum value added for exactly this case).
+  vpcflow_map:
+    type: remap
+    inputs: [vpcflow_s3]
+    source: |-
+      msg = string!(.message)
+      if starts_with(msg, "version") {
+        abort
+      }
+      p, err = parse_aws_vpc_flow_log(msg)
+      if err != null {
+        abort
+      }
+      . = {
+        "event_time":   to_int(p.start),
+        "end_time":     to_int(p.end),
+        "aws_account":  string(p.account_id) ?? "",
+        "interface_id": string(p.interface_id) ?? "",
+        "src_addr":     string(p.srcaddr) ?? "::",
+        "dst_addr":     string(p.dstaddr) ?? "::",
+        "src_port":     to_int(p.srcport),
+        "dst_port":     to_int(p.dstport),
+        "protocol":     to_int(p.protocol),
+        "action":       string(p.action) ?? "NONE",
+        "log_status":   string(p.log_status) ?? "OK",
+        "packets":      to_int(p.packets),
+        "bytes":        to_int(p.bytes)
+      }
+
+  # S3 server access logs: fixed space-separated format with bracketed
+  # timestamp and quoted request/referrer/user-agent (each may be a bare '-').
+  # Trailing fields (version id, host id, sig, cipher, ...) are ignored.
+  s3access_map:
+    type: remap
+    inputs: [s3access_s3]
+    source: |-
+      g, err = parse_regex(string!(.message), r'^(?P<owner>\S+)\s+(?P<bucket>\S+)\s+\[(?P<ts>[^\]]+)\]\s+(?P<remote_ip>\S+)\s+(?P<requester>\S+)\s+(?P<request_id>\S+)\s+(?P<operation>\S+)\s+(?P<key>\S+)\s+(?:"(?P<request_uri>[^"]*)"|-)\s+(?P<status>\S+)\s+(?P<error_code>\S+)\s+(?P<bytes_sent>\S+)\s+(?P<object_size>\S+)\s+(?P<total_time>\S+)\s+(?P<turnaround>\S+)\s+(?:"(?P<referrer>[^"]*)"|-)\s+(?:"(?P<user_agent>[^"]*)"|-)')
+      if err != null {
+        abort
+      }
+      t = parse_timestamp(string(g.ts) ?? "", format: "%d/%b/%Y:%H:%M:%S %z") ?? now()
+      ip = string(g.remote_ip) ?? "-"
+      if ip == "-" { ip = "::" }
+      key = string(g.key) ?? "-"
+      if key == "-" { key = "" }
+      ec = string(g.error_code) ?? "-"
+      if ec == "-" { ec = "" }
+      . = {
+        "event_time":  to_unix_timestamp(t),
+        "bucket":      string(g.bucket) ?? "",
+        "operation":   string(g.operation) ?? "",
+        "requester":   string(g.requester) ?? "",
+        "object_key":  key,
+        "remote_ip":   ip,
+        "http_status": to_int(g.status) ?? 0,
+        "error_code":  ec,
+        "bytes_sent":  to_int(g.bytes_sent) ?? 0,
+        "object_size": to_int(g.object_size) ?? 0,
+        "user_agent":  string(g.user_agent) ?? "",
+        "request_id":  string(g.request_id) ?? ""
+      }
+
+# ---------------------------------------------------------------------------
+# Sinks — svc_vector is INSERT-only (ddl/040_rbac.sql); disk buffers survive
+# restarts so SQS-acknowledged events are never lost (AU-5 groundwork).
+# ---------------------------------------------------------------------------
+sinks:
+  cloudtrail_ch:
+    type: clickhouse
+    inputs: [cloudtrail_map]
+    endpoint: http://clickhouse:8123
+    database: siem
+    table: cloudtrail
+    # Sink healthcheck disabled: Vector probes ClickHouse WITHOUT auth
+    # headers, so the request is evaluated as the loopback-confined 'default'
+    # user and 403s (users.d/00-lockdown.xml). Inserts themselves are
+    # authenticated and unaffected; pipeline health is covered by the
+    # container healthcheck and the AU-5 alerts (Phase 5).
+    healthcheck:
+      enabled: false
+    skip_unknown_fields: true
+    compression: gzip
+    auth:
+      strategy: basic
+      user: svc_vector
+      password: "${CH_VECTOR_PASSWORD}"
+    batch:
+      max_events: 10000
+      timeout_secs: 5
+    buffer:
+      type: disk
+      max_size: 1073741824
+      when_full: block
+
+  guardduty_ch:
+    type: clickhouse
+    inputs: [guardduty_map]
+    endpoint: http://clickhouse:8123
+    database: siem
+    table: guardduty
+    # Sink healthcheck disabled: Vector probes ClickHouse WITHOUT auth
+    # headers, so the request is evaluated as the loopback-confined 'default'
+    # user and 403s (users.d/00-lockdown.xml). Inserts themselves are
+    # authenticated and unaffected; pipeline health is covered by the
+    # container healthcheck and the AU-5 alerts (Phase 5).
+    healthcheck:
+      enabled: false
+    skip_unknown_fields: true
+    compression: gzip
+    auth:
+      strategy: basic
+      user: svc_vector
+      password: "${CH_VECTOR_PASSWORD}"
+    batch:
+      max_events: 1000
+      timeout_secs: 5
+    buffer:
+      type: disk
+      max_size: 268435488
+      when_full: block
+
+  vpcflow_ch:
+    type: clickhouse
+    inputs: [vpcflow_map]
+    endpoint: http://clickhouse:8123
+    database: siem
+    table: vpc_flow
+    # Sink healthcheck disabled: Vector probes ClickHouse WITHOUT auth
+    # headers, so the request is evaluated as the loopback-confined 'default'
+    # user and 403s (users.d/00-lockdown.xml). Inserts themselves are
+    # authenticated and unaffected; pipeline health is covered by the
+    # container healthcheck and the AU-5 alerts (Phase 5).
+    healthcheck:
+      enabled: false
+    skip_unknown_fields: true
+    compression: gzip
+    auth:
+      strategy: basic
+      user: svc_vector
+      password: "${CH_VECTOR_PASSWORD}"
+    batch:
+      max_events: 100000
+      timeout_secs: 5
+    buffer:
+      type: disk
+      max_size: 2147483648
+      when_full: block
+
+  s3access_ch:
+    type: clickhouse
+    inputs: [s3access_map]
+    endpoint: http://clickhouse:8123
+    database: siem
+    table: s3_access
+    # Sink healthcheck disabled: Vector probes ClickHouse WITHOUT auth
+    # headers, so the request is evaluated as the loopback-confined 'default'
+    # user and 403s (users.d/00-lockdown.xml). Inserts themselves are
+    # authenticated and unaffected; pipeline health is covered by the
+    # container healthcheck and the AU-5 alerts (Phase 5).
+    healthcheck:
+      enabled: false
+    skip_unknown_fields: true
+    compression: gzip
+    auth:
+      strategy: basic
+      user: svc_vector
+      password: "${CH_VECTOR_PASSWORD}"
+    batch:
+      max_events: 10000
+      timeout_secs: 5
+    buffer:
+      type: disk
+      max_size: 1073741824
+      when_full: block

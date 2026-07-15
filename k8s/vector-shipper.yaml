@@ -1,0 +1,132 @@
+# SIEM log shipper for Kubernetes (Phase 3).
+# Vector DaemonSet: tails all pod logs on each node, maps them to the SIEM
+# HEC contract (docs/host-ingestion.md), pushes to the vector-hosts aggregator.
+#
+# Deploy: kubectl apply -f vector-shipper.yaml
+#         kubectl -n siem-logging create secret generic siem-hec \
+#           --from-literal=token=<SPLUNK_HEC_TOKEN from .env>
+#
+# For the local k3s demo cluster this file is auto-applied via the k3s
+# manifests directory (see the k3s service in docker-compose.yml).
+# hostNetwork+dnsPolicy Default let the pod resolve the aggregator through the
+# container runtime's DNS (required for the in-docker k3s demo; harmless on
+# real clusters — swap SIEM_ENDPOINT for your aggregator URL/IP).
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: siem-logging
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vector-shipper
+  namespace: siem-logging
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vector-shipper
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "namespaces", "nodes"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vector-shipper
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vector-shipper
+subjects:
+  - kind: ServiceAccount
+    name: vector-shipper
+    namespace: siem-logging
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vector-shipper-config
+  namespace: siem-logging
+data:
+  # NB: Vector expands dollar-brace env references ANYWHERE in this config,
+  # including comments — never write one in a comment here.
+  vector.yaml: |
+    data_dir: /var/lib/vector
+    sources:
+      k8s:
+        type: kubernetes_logs
+    transforms:
+      contract:
+        type: remap
+        inputs: [k8s]
+        source: |-
+          k = object(.kubernetes) ?? {}
+          . = {
+            "cluster":   "${CLUSTER_NAME}",
+            "namespace": string(k.pod_namespace) ?? "",
+            "node":      string(k.pod_node_name) ?? "",
+            "container": string(k.container_name) ?? "",
+            "pod":       string(k.pod_name) ?? "",
+            "level":     string(.stream) ?? "",
+            "message":   string(.message) ?? ""
+          }
+    sinks:
+      siem:
+        type: splunk_hec_logs
+        inputs: [contract]
+        endpoint: "${SIEM_ENDPOINT}"
+        default_token: "${SIEM_HEC_TOKEN}"
+        encoding:
+          codec: json
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: vector-shipper
+  namespace: siem-logging
+spec:
+  selector:
+    matchLabels: { app: vector-shipper }
+  template:
+    metadata:
+      labels: { app: vector-shipper }
+    spec:
+      serviceAccountName: vector-shipper
+      hostNetwork: true
+      dnsPolicy: Default
+      tolerations:
+        - operator: Exists          # ship from every node, tainted or not
+      containers:
+        - name: vector
+          image: timberio/vector:0.57.0-distroless-libc
+          args: ["--config", "/etc/vector/vector.yaml"]
+          env:
+            - name: VECTOR_SELF_NODE_NAME
+              valueFrom:
+                fieldRef: { fieldPath: spec.nodeName }
+            - name: VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION
+              value: "true"
+            - name: CLUSTER_NAME
+              value: "k3s-local"
+            - name: SIEM_ENDPOINT
+              value: "http://siem-vector-hosts:8088"
+            - name: SIEM_HEC_TOKEN
+              valueFrom:
+                secretKeyRef: { name: siem-hec, key: token }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          volumeMounts:
+            - { name: config, mountPath: /etc/vector, readOnly: true }
+            - { name: pod-logs, mountPath: /var/log/pods, readOnly: true }
+            - { name: data, mountPath: /var/lib/vector }
+      volumes:
+        - name: config
+          configMap: { name: vector-shipper-config }
+        - name: pod-logs
+          hostPath: { path: /var/log/pods }
+        - name: data
+          hostPath: { path: /var/lib/vector-shipper, type: DirectoryOrCreate }

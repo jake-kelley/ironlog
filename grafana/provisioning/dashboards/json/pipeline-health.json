@@ -1,0 +1,74 @@
+{
+  "uid": "pipeline-health",
+  "title": "Pipeline Health (AU-5)",
+  "tags": ["siem", "ops", "AU-5"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-6h", "to": "now" },
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Seconds since last event, per source",
+      "description": "The AU-5 source-silence signal. Live sources should stay green; AWS sources read as ancient until AWS ingestion goes live (their alert rules ship paused).",
+      "gridPos": { "x": 0, "y": 0, "w": 10, "h": 9 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "siem-analyst" },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "lag_seconds" },
+            "properties": [
+              { "id": "unit", "value": "s" },
+              { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 1800 },
+                { "color": "red", "value": 3600 }
+              ] } }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "siem-analyst" },
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT source, last_event, lag_seconds FROM (SELECT 'linux_syslog' AS source, max(event_time) AS last_event, toUInt64(now()) - toUInt64(coalesce(max(event_time), toDateTime(0))) AS lag_seconds FROM siem.linux_syslog UNION ALL SELECT 'windows_events', max(event_time), toUInt64(now()) - toUInt64(coalesce(max(event_time), toDateTime(0))) FROM siem.windows_events UNION ALL SELECT 'k8s_logs', max(event_time), toUInt64(now()) - toUInt64(coalesce(max(event_time), toDateTime(0))) FROM siem.k8s_logs UNION ALL SELECT 'cloudtrail', max(event_time), toUInt64(now()) - toUInt64(coalesce(max(event_time), toDateTime(0))) FROM siem.cloudtrail UNION ALL SELECT 'guardduty', max(event_time), toUInt64(now()) - toUInt64(coalesce(max(event_time), toDateTime(0))) FROM siem.guardduty UNION ALL SELECT 'vpc_flow', max(event_time), toUInt64(now()) - toUInt64(coalesce(max(event_time), toDateTime(0))) FROM siem.vpc_flow UNION ALL SELECT 's3_access', max(event_time), toUInt64(now()) - toUInt64(coalesce(max(event_time), toDateTime(0))) FROM siem.s3_access) ORDER BY lag_seconds ASC"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Events ingested per 10 minutes, by source",
+      "description": "Ingest rate for the live sources. A line dropping to zero while its host is active = investigate.",
+      "gridPos": { "x": 10, "y": 0, "w": 14, "h": 9 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "siem-analyst" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "fillOpacity": 15, "showPoints": "never" },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "siem-analyst" },
+          "editorType": "sql",
+          "queryType": "timeseries",
+          "format": 0,
+          "rawSql": "SELECT t, source, c FROM (SELECT toStartOfInterval(event_time, INTERVAL 10 minute) AS t, 'linux_syslog' AS source, count() AS c FROM siem.linux_syslog WHERE $__timeFilter(event_time) GROUP BY t UNION ALL SELECT toStartOfInterval(event_time, INTERVAL 10 minute), 'windows_events', count() FROM siem.windows_events WHERE $__timeFilter(event_time) GROUP BY 1 UNION ALL SELECT toStartOfInterval(event_time, INTERVAL 10 minute), 'k8s_logs', count() FROM siem.k8s_logs WHERE $__timeFilter(event_time) GROUP BY 1 UNION ALL SELECT toStartOfInterval(event_time, INTERVAL 10 minute), 'cloudtrail', count() FROM siem.cloudtrail WHERE $__timeFilter(event_time) GROUP BY 1) ORDER BY t"
+        }
+      ]
+    }
+  ]
+}

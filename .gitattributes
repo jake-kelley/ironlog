@@ -1,0 +1,5 @@
+# Normalize line endings: store text as LF so shell scripts and configs run
+# correctly on Linux hosts / in containers regardless of the author's OS.
+* text=auto eol=lf
+*.png binary
+*.jpg binary

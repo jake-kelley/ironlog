@@ -1,0 +1,97 @@
+{
+  "realm": "siem",
+  "enabled": true,
+  "displayName": "SIEM",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "bruteForceProtected": true,
+  "failureFactor": 5,
+  "loginTheme": "keycloak",
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyDigits": 6,
+  "otpPolicyPeriod": 30,
+  "requiredActions": [
+    {
+      "alias": "CONFIGURE_TOTP",
+      "name": "Configure OTP",
+      "providerId": "CONFIGURE_TOTP",
+      "enabled": true,
+      "defaultAction": true,
+      "priority": 10
+    },
+    {
+      "alias": "UPDATE_PASSWORD",
+      "name": "Update Password",
+      "providerId": "UPDATE_PASSWORD",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 20
+    }
+  ],
+  "roles": {
+    "realm": [
+      { "name": "siem_admin",   "description": "Full Grafana admin; ClickHouse admin duties via CH admin account" },
+      { "name": "siem_analyst", "description": "Investigations: read all siem.* data, edit dashboards" },
+      { "name": "siem_auditor", "description": "Read-only compliance review incl. analyst activity trail" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "hyperdx",
+      "name": "HyperDX (via oauth2-proxy)",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "CHANGE_ME_HYPERDX_CLIENT_SECRET",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8081/oauth2/callback",
+        "https://YOUR_HYPERDX_DOMAIN/oauth2/callback"
+      ],
+      "webOrigins": ["+"],
+      "defaultClientScopes": ["profile", "email", "web-origins"],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "grafana",
+      "name": "Grafana OSS",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "CHANGE_ME_GRAFANA_CLIENT_SECRET",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:3000/login/generic_oauth",
+        "https://YOUR_GRAFANA_DOMAIN/login/generic_oauth"
+      ],
+      "webOrigins": ["+"],
+      "defaultClientScopes": ["profile", "email", "web-origins"],
+      "optionalClientScopes": [],
+      "protocolMappers": [
+        {
+          "name": "realm-roles-flat",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ]
+}

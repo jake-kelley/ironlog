@@ -1,0 +1,12 @@
+apiVersion: 1
+providers:
+  - name: siem-dashboards
+    orgId: 1
+    folder: SIEM
+    type: file
+    disableDeletion: true      # provisioned dashboards are code; no UI deletes
+    allowUiUpdates: false      # edit in git, not in the UI (AU-evidence stays reviewable)
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards/json
+      foldersFromFilesStructure: false

@@ -1,0 +1,25 @@
+apiVersion: 1
+datasources:
+  - name: SIEM (analyst)
+    type: grafana-clickhouse-datasource
+    uid: siem-analyst
+    isDefault: true
+    jsonData:
+      host: clickhouse
+      port: 9000
+      protocol: native
+      username: svc_grafana_analyst
+      defaultDatabase: siem
+    secureJsonData:
+      password: $CH_GRAFANA_ANALYST_PASSWORD
+  - name: SIEM (audit trail)
+    type: grafana-clickhouse-datasource
+    uid: siem-audit
+    jsonData:
+      host: clickhouse
+      port: 9000
+      protocol: native
+      username: svc_grafana_auditor
+      defaultDatabase: audit
+    secureJsonData:
+      password: $CH_GRAFANA_AUDITOR_PASSWORD
