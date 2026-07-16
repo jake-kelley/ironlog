@@ -1,3 +1,11 @@
+---
+type: Guide
+title: Querying the SIEM
+description: Analyst quick-start for interactive search in HyperDX and SQL/dashboards in Grafana over the siem.* tables.
+tags: [au-6, querying, hyperdx, grafana]
+timestamp: 2026-07-16T00:00:00Z
+---
+
 # Querying the SIEM — analyst quick-start (AU-6)
 
 Two UIs, one database. **HyperDX** (http://localhost:8081) is for interactive

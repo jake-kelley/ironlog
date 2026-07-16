@@ -1,3 +1,11 @@
+---
+type: Runbook
+title: AWS ingestion setup
+description: AWS-side wiring (S3 event notifications to SQS and a least-privilege IAM user) that feeds CloudTrail, GuardDuty, VPC Flow, and S3 access logs into the SIEM.
+tags: [aws, ingestion, cloudtrail, guardduty, runbook]
+timestamp: 2026-07-16T00:00:00Z
+---
+
 # AWS ingestion setup (Phase 2)
 
 How to wire AWS log sources into the Vector aggregator. Everything on the SIEM

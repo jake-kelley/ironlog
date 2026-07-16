@@ -86,7 +86,8 @@ control-mapping.
       fix-windows-agent-addr.ps1 WSL-lab address fix + boot task
     grafana/provisioning/        datasources, dashboards, AU-5 alert rules
     keycloak/realm-export/       "siem" realm: MFA, roles, OIDC clients
-    docs/                        runbooks + auditor-facing policy docs
+    docs/                        OKF v0.1 knowledge bundle (runbooks, policies, catalog)
+    scripts/okf-validate.py      OKF conformance checker for docs/
 
 ## UIs
 
@@ -169,9 +170,16 @@ Phase 2 block in `.env`, uncomment `COMPOSE_PROFILES=aws`, `docker compose up
 
 ## Compliance surface
 
+The `docs/` directory is an [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
+(OKF v0.1) knowledge bundle — every doc carries YAML frontmatter (`type`,
+`title`, `description`, `tags`), `docs/index.md` lists the bundle, and
+`docs/log.md` tracks changes. Conformance is enforced by
+`python3 scripts/okf-validate.py docs` (start at [docs/index.md](docs/index.md)).
+
 - [docs/control-mapping.md](docs/control-mapping.md) — control -> artifact map (auditor-facing)
 - [docs/event-catalog.md](docs/event-catalog.md) — the AU-2 commitment; VRL implements exactly this
 - [docs/retention-policy.md](docs/retention-policy.md) — AU-11 numbers (DRAFT: total-retention needs confirmation)
+- [docs/query-guide.md](docs/query-guide.md) — analyst quick-start for HyperDX + Grafana
 - AU-5: provisioned alert rules fire on source silence (per-table thresholds),
   and on ClickHouse being unreachable (NoData/Error -> alerting). Notifications
   route to the `siem-oncall` contact point — set a real address + SMTP.

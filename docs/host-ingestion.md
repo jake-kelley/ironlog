@@ -1,3 +1,11 @@
+---
+type: Runbook
+title: Host and Kubernetes ingestion
+description: How to onboard Linux agents, Windows agents, and Kubernetes clusters to the always-on Vector aggregator.
+tags: [linux, windows, kubernetes, ingestion, runbook]
+timestamp: 2026-07-16T00:00:00Z
+---
+
 # Host + Kubernetes ingestion (Phase 3)
 
 The always-on `vector-hosts` aggregator accepts two inputs. Everything lands in

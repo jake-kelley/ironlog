@@ -1,3 +1,11 @@
+---
+type: Reference
+title: Auditable event catalog (AU-2)
+description: The organization's committed list of security events captured from Windows, Linux, AWS, and Kubernetes sources.
+tags: [au-2, au-12, events, catalog]
+timestamp: 2026-07-16T00:00:00Z
+---
+
 # Auditable event catalog (AU-2, AU-12)
 
 Status: DRAFT — this is the organization's committed list of captured events.

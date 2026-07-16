@@ -1,3 +1,11 @@
+---
+type: Compliance Mapping
+title: NIST 800-53 control mapping
+description: Maps each in-scope NIST 800-53 control to the concrete repository artifact that implements it, for auditor review.
+tags: [compliance, nist-800-53, audit, controls]
+timestamp: 2026-07-16T00:00:00Z
+---
+
 # NIST 800-53 control mapping
 
 Each control maps to a concrete artifact in this repo. Auditor-facing.

@@ -1,3 +1,11 @@
+---
+type: Policy
+title: Log retention policy (AU-11)
+description: Hot, warm, and archive retention tiers plus the write-once immutability model for audit records.
+tags: [au-11, au-4, retention, policy]
+timestamp: 2026-07-16T00:00:00Z
+---
+
 # Log retention policy (AU-11, AU-4)
 
 Status: DRAFT — confirm the two driving numbers, then keep this file and the
