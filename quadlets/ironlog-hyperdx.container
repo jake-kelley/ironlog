@@ -15,7 +15,7 @@ NetworkAlias=hyperdx
 
 # The oauth2-proxy URL the browser sees. Derived from APPLIANCE_FQDN by first
 # boot; compose's localhost literal is wrong for a real appliance.
-Environment=FRONTEND_URL=$HYPERDX_PUBLIC_URL
+Environment=FRONTEND_URL=${HYPERDX_PUBLIC_URL}
 Environment=HYPERDX_APP_PORT=8080
 Environment=HYPERDX_API_PORT=8000
 Environment=HYPERDX_LOG_LEVEL=info
@@ -26,14 +26,14 @@ Environment=USAGE_STATS_ENABLED=false
 # otherwise-static URI. No spaces/quotes in a URI, so no unit-file quoting
 # is needed — plain systemd $VAR substitution from ironlog.env is safe here.
 # hyperdx-db is the NetworkAlias other units resolve; do not change.
-Environment=MONGO_URI=mongodb://hyperdx:$HYPERDX_DB_PASSWORD@hyperdx-db:27017/hyperdx?authSource=admin
+Environment=MONGO_URI=mongodb://hyperdx:${HYPERDX_DB_PASSWORD}@hyperdx-db:27017/hyperdx?authSource=admin
 
 # DEFAULT_CONNECTIONS has one secret ($CH_HYPERDX_PASSWORD) embedded inside
 # JSON containing a space ("SIEM ClickHouse") and nested double quotes, so it
 # DOES need unit-file quoting (outer "..." with internal " escaped as \").
 # See quadlets/README.md "Secret handling" for why this, unlike
 # DEFAULT_SOURCES, could not simply be baked as a static file.
-Environment="DEFAULT_CONNECTIONS=[{\"name\":\"SIEM ClickHouse\",\"host\":\"http://clickhouse:8123\",\"username\":\"svc_hyperdx\",\"password\":\"$CH_HYPERDX_PASSWORD\"}]"
+Environment="DEFAULT_CONNECTIONS=[{\"name\":\"SIEM ClickHouse\",\"host\":\"http://clickhouse:8123\",\"username\":\"svc_hyperdx\",\"password\":\"${CH_HYPERDX_PASSWORD}\"}]"
 
 # DEFAULT_SOURCES carries no secrets; baked as a static file (see
 # quadlets/hyperdx/default-sources.env) and loaded verbatim — safer than

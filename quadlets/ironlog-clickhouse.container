@@ -24,12 +24,12 @@ Environment=CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
 # `podman run --env ...` command line before exec. See quadlets/README.md
 # "Secret handling" section for the full explanation and the caveat that this
 # is unverified without a live podman/systemd to dry-run against.
-Environment=CLICKHOUSE_USER=$CH_ADMIN_USER
-Environment=CLICKHOUSE_PASSWORD=$CH_ADMIN_PASSWORD
-Environment=CH_VECTOR_PASSWORD=$CH_VECTOR_PASSWORD
-Environment=CH_GRAFANA_ANALYST_PASSWORD=$CH_GRAFANA_ANALYST_PASSWORD
-Environment=CH_GRAFANA_AUDITOR_PASSWORD=$CH_GRAFANA_AUDITOR_PASSWORD
-Environment=CH_HYPERDX_PASSWORD=$CH_HYPERDX_PASSWORD
+Environment=CLICKHOUSE_USER=${CH_ADMIN_USER}
+Environment=CLICKHOUSE_PASSWORD=${CH_ADMIN_PASSWORD}
+Environment=CH_VECTOR_PASSWORD=${CH_VECTOR_PASSWORD}
+Environment=CH_GRAFANA_ANALYST_PASSWORD=${CH_GRAFANA_ANALYST_PASSWORD}
+Environment=CH_GRAFANA_AUDITOR_PASSWORD=${CH_GRAFANA_AUDITOR_PASSWORD}
+Environment=CH_HYPERDX_PASSWORD=${CH_HYPERDX_PASSWORD}
 
 # --- data (bind mount, writable -> :Z) ---
 Volume=/var/lib/ironlog/clickhouse:/var/lib/clickhouse:Z

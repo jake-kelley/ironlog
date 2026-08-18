@@ -18,8 +18,8 @@ NetworkAlias=vector-hosts
 # configs deliberately pull secrets from the environment (CLAUDE.md gotcha).
 Environment=VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true
 # Same names in compose and ironlog.env — no rename needed.
-Environment=CH_VECTOR_PASSWORD=$CH_VECTOR_PASSWORD
-Environment=SPLUNK_HEC_TOKEN=$SPLUNK_HEC_TOKEN
+Environment=CH_VECTOR_PASSWORD=${CH_VECTOR_PASSWORD}
+Environment=SPLUNK_HEC_TOKEN=${SPLUNK_HEC_TOKEN}
 
 Volume=/opt/ironlog/vector/hosts.yaml:/etc/vector/vector.yaml:ro,Z
 Volume=/var/lib/ironlog/vector-hosts-buffer:/var/lib/vector:Z

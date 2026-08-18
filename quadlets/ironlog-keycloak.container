@@ -19,14 +19,14 @@ Environment=KC_DB=postgres
 # keycloak-db is the NetworkAlias other units must resolve; do not change.
 Environment=KC_DB_URL=jdbc:postgresql://keycloak-db:5432/keycloak
 Environment=KC_DB_USERNAME=keycloak
-Environment=KC_DB_PASSWORD=$KC_DB_PASSWORD
-Environment=KC_HOSTNAME=$KC_HOSTNAME
+Environment=KC_DB_PASSWORD=${KC_DB_PASSWORD}
+Environment=KC_HOSTNAME=${KC_HOSTNAME}
 # Renames: ironlog.env keeps the .env.example names (KC_ADMIN_USER,
 # KC_ADMIN_PASSWORD, GRAFANA_OAUTH_SECRET); Keycloak's bootstrap-admin env
 # vars and the realm import's client-secret placeholder need different names.
-Environment=KC_BOOTSTRAP_ADMIN_USERNAME=$KC_ADMIN_USER
-Environment=KC_BOOTSTRAP_ADMIN_PASSWORD=$KC_ADMIN_PASSWORD
-Environment=GRAFANA_CLIENT_SECRET=$GRAFANA_OAUTH_SECRET
+Environment=KC_BOOTSTRAP_ADMIN_USERNAME=${KC_ADMIN_USER}
+Environment=KC_BOOTSTRAP_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD}
+Environment=GRAFANA_CLIENT_SECRET=${GRAFANA_OAUTH_SECRET}
 
 Volume=/opt/ironlog/keycloak/realm-export:/opt/keycloak/data/import:ro,Z
 

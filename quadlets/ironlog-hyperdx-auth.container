@@ -24,16 +24,16 @@ Environment=OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
 # developer's own machine. On a real appliance the browser reaches this box by
 # FQDN, so first boot derives HYPERDX_PUBLIC_URL from APPLIANCE_FQDN into
 # ironlog.env; a localhost literal would make OIDC login fail for every user.
-Environment=OAUTH2_PROXY_REDIRECT_URL=$HYPERDX_PUBLIC_URL/oauth2/callback
+Environment=OAUTH2_PROXY_REDIRECT_URL=${HYPERDX_PUBLIC_URL}/oauth2/callback
 # Derived from APPLIANCE_TLS by first boot: true behind TLS, false on plain HTTP.
-Environment=OAUTH2_PROXY_COOKIE_SECURE=$OAUTH2_PROXY_COOKIE_SECURE
+Environment=OAUTH2_PROXY_COOKIE_SECURE=${OAUTH2_PROXY_COOKIE_SECURE}
 Environment=OAUTH2_PROXY_SKIP_PROVIDER_BUTTON=true
 
-Environment=OAUTH2_PROXY_OIDC_ISSUER_URL=$KC_PUBLIC_URL/realms/siem
+Environment=OAUTH2_PROXY_OIDC_ISSUER_URL=${KC_PUBLIC_URL}/realms/siem
 # Rename: ironlog.env carries HYPERDX_OAUTH_SECRET (.env.example name).
-Environment=OAUTH2_PROXY_CLIENT_SECRET=$HYPERDX_OAUTH_SECRET
+Environment=OAUTH2_PROXY_CLIENT_SECRET=${HYPERDX_OAUTH_SECRET}
 # Same name in compose and ironlog.env — no rename needed.
-Environment=OAUTH2_PROXY_COOKIE_SECRET=$OAUTH2_PROXY_COOKIE_SECRET
+Environment=OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_PROXY_COOKIE_SECRET}
 
 PublishPort=8081:4180
 

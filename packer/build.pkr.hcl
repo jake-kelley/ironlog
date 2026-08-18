@@ -103,6 +103,20 @@ build {
       "sudo find /tmp/ironlog-stage/quadlets -maxdepth 1 -type f \\( -name '*.container' -o -name '*.network' \\) -exec cp {} /etc/containers/systemd/ \\;",
       "sudo chown -R root:root /etc/containers/systemd",
       "sudo chmod 0644 /etc/containers/systemd/*.container /etc/containers/systemd/*.network",
+      # quadlets/hyperdx/default-sources.env is NOT a unit file, so the copy
+      # above skips it -- and nothing else installed it either, so
+      # /opt/ironlog/hyperdx/default-sources.env never existed on the AMI.
+      # ironlog-hyperdx.container hard-references that path as an
+      # [Container] EnvironmentFile=, so podman refused to start HyperDX at
+      # all: "Error: parsing file /opt/ironlog/hyperdx/default-sources.env:
+      # no such file or directory" (exit 125, restart-looped to failure).
+      # The file itself was written correctly and carries its own deploy
+      # instruction in its header; only this install step was missing.
+      "sudo mkdir -p /opt/ironlog/hyperdx",
+      "sudo cp /tmp/ironlog-stage/quadlets/hyperdx/default-sources.env /opt/ironlog/hyperdx/default-sources.env",
+      "sudo chown -R root:root /opt/ironlog/hyperdx",
+      "sudo chmod 0755 /opt/ironlog/hyperdx",
+      "sudo chmod 0644 /opt/ironlog/hyperdx/default-sources.env",
       "sudo rm -rf /tmp/ironlog-stage/quadlets",
     ]
   }
@@ -120,6 +134,17 @@ build {
       "sudo cp -r /tmp/ironlog-stage/firstboot/. /usr/local/lib/ironlog/",
       "sudo chown -R root:root /usr/local/lib/ironlog",
       "sudo find /usr/local/lib/ironlog -type f -name '*.sh' -exec chmod 0755 {} \\;",
+      # Install and enable the first-boot unit. Copying scripts/firstboot/ into
+      # /usr/local/lib/ironlog is NOT enough: the .service file lands there as
+      # an inert data file, and ironlog-firstboot.service is then referenced by
+      # nothing. A launched appliance booted with correct disks, FIPS and
+      # quadlets but never configured itself -- no /var/lib/ironlog/* data dirs,
+      # no resolved secrets, no services started. ironlog-firstboot.service's own
+      # header states this install step "is scripts/ami's job"; it was documented
+      # and never implemented.
+      "sudo install -m 0644 /usr/local/lib/ironlog/ironlog-firstboot.service /etc/systemd/system/ironlog-firstboot.service",
+      "sudo systemctl daemon-reload",
+      "sudo systemctl enable ironlog-firstboot.service",
       "sudo rm -rf /tmp/ironlog-stage",
     ]
   }

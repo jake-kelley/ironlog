@@ -10,7 +10,7 @@ NetworkAlias=hyperdx-db
 
 Environment=MONGO_INITDB_ROOT_USERNAME=hyperdx
 # Same name in compose and ironlog.env — no rename needed.
-Environment=MONGO_INITDB_ROOT_PASSWORD=$HYPERDX_DB_PASSWORD
+Environment=MONGO_INITDB_ROOT_PASSWORD=${HYPERDX_DB_PASSWORD}
 
 Volume=/var/lib/ironlog/hyperdx-db:/data/db:Z
 

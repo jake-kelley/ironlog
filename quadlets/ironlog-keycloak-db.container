@@ -13,7 +13,7 @@ Environment=POSTGRES_USER=keycloak
 # Rename: ironlog.env carries KC_DB_PASSWORD (matches .env.example); postgres
 # image expects POSTGRES_PASSWORD. See ironlog-clickhouse.container's comment
 # and quadlets/README.md for how the $VAR substitution works.
-Environment=POSTGRES_PASSWORD=$KC_DB_PASSWORD
+Environment=POSTGRES_PASSWORD=${KC_DB_PASSWORD}
 
 Volume=/var/lib/ironlog/keycloak-db:/var/lib/postgresql/data:Z
 
