@@ -39,12 +39,12 @@ source "amazon-ebs" "rhel9" {
     }
   }
 
-  ami_name        = "${var.ami_name_prefix}-rhel9-${local.timestamp}"
-  ami_description = "${var.ami_description} (RHEL 9, aarch64) sha=${var.build_git_sha}"
-  ami_regions     = var.ami_regions
+  ami_name                = "${var.ami_name_prefix}-rhel9-${local.timestamp}"
+  ami_description         = "${var.ami_description} (RHEL 9, aarch64) sha=${var.build_git_sha}"
+  ami_regions             = var.ami_regions
   ami_virtualization_type = "hvm"
-  encrypt_boot    = var.encrypt_volumes
-  kms_key_id      = var.kms_key_id != "" ? var.kms_key_id : null
+  encrypt_boot            = var.encrypt_volumes
+  kms_key_id              = var.kms_key_id != "" ? var.kms_key_id : null
 
   launch_block_device_mappings {
     device_name           = "/dev/sda1"
@@ -52,8 +52,8 @@ source "amazon-ebs" "rhel9" {
     volume_size           = var.root_volume_size
     throughput            = var.root_volume_throughput
     delete_on_termination = true
-    encrypted              = var.encrypt_volumes
-    kms_key_id             = var.kms_key_id != "" ? var.kms_key_id : null
+    encrypted             = var.encrypt_volumes
+    kms_key_id            = var.kms_key_id != "" ? var.kms_key_id : null
   }
 
   # Second, independently-manageable volume for /var/lib/ironlog. NOT baked
@@ -69,8 +69,8 @@ source "amazon-ebs" "rhel9" {
     iops                  = var.data_volume_iops
     throughput            = var.data_volume_throughput
     delete_on_termination = false
-    encrypted              = var.encrypt_volumes
-    kms_key_id             = var.kms_key_id != "" ? var.kms_key_id : null
+    encrypted             = var.encrypt_volumes
+    kms_key_id            = var.kms_key_id != "" ? var.kms_key_id : null
   }
 
   tags = merge(local.common_tags, {
@@ -128,12 +128,12 @@ source "amazon-ebs" "rocky9" {
     }
   }
 
-  ami_name        = "${var.ami_name_prefix}-rocky9-dev-${local.timestamp}"
-  ami_description = "${var.ami_description} (Rocky 9 dev build, aarch64) sha=${var.build_git_sha}"
-  ami_regions     = var.ami_regions
+  ami_name                = "${var.ami_name_prefix}-rocky9-dev-${local.timestamp}"
+  ami_description         = "${var.ami_description} (Rocky 9 dev build, aarch64) sha=${var.build_git_sha}"
+  ami_regions             = var.ami_regions
   ami_virtualization_type = "hvm"
-  encrypt_boot    = var.encrypt_volumes
-  kms_key_id      = var.kms_key_id != "" ? var.kms_key_id : null
+  encrypt_boot            = var.encrypt_volumes
+  kms_key_id              = var.kms_key_id != "" ? var.kms_key_id : null
 
   launch_block_device_mappings {
     device_name           = "/dev/sda1"
@@ -141,8 +141,8 @@ source "amazon-ebs" "rocky9" {
     volume_size           = var.root_volume_size
     throughput            = var.root_volume_throughput
     delete_on_termination = true
-    encrypted              = var.encrypt_volumes
-    kms_key_id             = var.kms_key_id != "" ? var.kms_key_id : null
+    encrypted             = var.encrypt_volumes
+    kms_key_id            = var.kms_key_id != "" ? var.kms_key_id : null
   }
 
   launch_block_device_mappings {
@@ -152,8 +152,8 @@ source "amazon-ebs" "rocky9" {
     iops                  = var.data_volume_iops
     throughput            = var.data_volume_throughput
     delete_on_termination = false
-    encrypted              = var.encrypt_volumes
-    kms_key_id             = var.kms_key_id != "" ? var.kms_key_id : null
+    encrypted             = var.encrypt_volumes
+    kms_key_id            = var.kms_key_id != "" ? var.kms_key_id : null
   }
 
   tags = merge(local.common_tags, {

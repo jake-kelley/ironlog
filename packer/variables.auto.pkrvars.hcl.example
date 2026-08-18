@@ -16,8 +16,8 @@
 # --- source AMI filters ---
 # rhel_ami_owner        = "309956199498"
 # rhel_ami_name_filter  = "RHEL-9*_HVM-*-arm64-*"
-# rocky_ami_owner       = "792107900819"  # CONFIRM before real use — see variables.pkr.hcl comment
-# rocky_ami_name_filter = "Rocky-9-*-aarch64-*"
+# rocky_ami_owner       = "792107900819"  # verified 2026-08-17 in us-east-1 / us-west-1
+# rocky_ami_name_filter = "Rocky-9-EC2-LVM-9.*.aarch64"   # LVM variant, NOT Base — see README.md
 
 # --- volumes ---
 # root_volume_size = 60   # GiB, gp3 — do not lower; STIG LV layout needs ~26 alone

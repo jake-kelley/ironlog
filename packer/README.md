@@ -94,26 +94,35 @@ this session:
   variable that far, deliberately, rather than guessing at endpoints it has
   no way to verify.
 
-## Source AMI owner IDs — what's verified and what isn't
+## Source AMI owner IDs — VERIFIED 2026-08-17
 
-- **RHEL 9 aarch64**: owner `309956199498`. Given directly by the task spec
-  as "the Red Hat account" — not independently re-verified in this session,
-  but it's the widely-documented Red Hat cloud-access AMI owner ID.
-- **Rocky Linux 9 aarch64**: owner `792107900819`. VERIFIED VIA WEB SEARCH in
-  this session (Rocky Linux community/forum threads, cross-checked across
-  two independent searches), not by loading rockylinux.org's own "Cloud
-  Images" page directly in this session, and not by an actual
-  `aws ec2 describe-images` call (no AWS credentials in this environment). A
-  second AWS account, `679593333241`, distributes Rocky 9 via AWS
-  Marketplace (subscription-gated) — do not swap it in without also adding
-  Marketplace-subscription handling; it is a different distribution
+Both resolved with a live `aws ec2 describe-images` call (profile `il`,
+account 196280209837) in **us-east-1 and us-west-1**.
+
+- **RHEL 9 aarch64**: owner `309956199498`, filter `RHEL-9*_HVM-*-arm64-*`.
+  Resolves; most recent at time of check was
+  `RHEL-9.8.0_HVM-20260728-arm64-0-Hourly2-GP3`.
+- **Rocky Linux 9 aarch64**: owner `792107900819` is correct, but the name
+  filter was **wrong and has been fixed**. It was `Rocky-9-*-aarch64-*`,
+  which matched **zero** images and would have failed the build at source-AMI
+  resolution. Real names are `Rocky-9-EC2-LVM-9.8-20260525.0.aarch64` — the
+  architecture is dot-separated and terminal, not `-aarch64-<suffix>`. The
+  default is now `Rocky-9-EC2-LVM-9.*.aarch64`.
+- **LVM, not Base.** Rocky publishes both `Rocky-9-EC2-Base-*` and
+  `Rocky-9-EC2-LVM-*`. Only the LVM variant is LVM-on-partition, which is
+  what `scripts/ami/00-partition.sh` expects (its loop-device fallback is
+  there for when it is not). Do not switch to Base without revisiting that
+  script.
+- A second AWS account, `679593333241`, distributes the same Rocky 9 images
+  via AWS Marketplace (subscription-gated) — do not swap it in without also
+  adding Marketplace-subscription handling; it is a different distribution
   mechanism, not just a different owner ID for the same AMIs.
-  **Before the first real dev build**, confirm with:
-  ```sh
-  aws ec2 describe-images --owners 792107900819 \
-    --filters "Name=name,Values=Rocky-9-*-aarch64-*" \
-    --query 'Images[*].[ImageId,Name,CreationDate]' --output table
-  ```
+
+Re-check in any new region or partition before a first build there:
+
+```sh
+aws ec2 describe-images --owners 792107900819   --filters "Name=name,Values=Rocky-9-EC2-LVM-9.*.aarch64"   --query 'reverse(sort_by(Images,&CreationDate))[:5].[ImageId,Name]' --output table
+```
 
 ## Disk layout (contract — do not change without updating `scripts/ami/00-partition.sh`)
 

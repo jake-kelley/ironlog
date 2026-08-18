@@ -60,35 +60,40 @@ variable "rocky_ami_owner" {
   default     = "792107900819"
   description = <<-EOT
     Rocky Linux's own AWS account ID for publicly-shared (non-Marketplace)
-    AMIs. VERIFY BEFORE FIRST BUILD: this value comes from Rocky Linux
-    community/forum sources cross-checked in this session (rockylinux.org
-    itself lists "Cloud Images" but this session did not load that page
-    directly), not a primary rockylinux.org document read end-to-end. A
-    second AWS account, 679593333241, distributes Rocky 9 through AWS
-    Marketplace (subscription-gated, not a pure public AMI) — do not
-    substitute it here without adding Marketplace subscription handling.
-    Confirm with:
-      aws ec2 describe-images --owners 792107900819 \
-        --filters "Name=name,Values=Rocky-9-*-aarch64-*" \
-        --query 'Images[*].[ImageId,Name,CreationDate]' --output table
-    before relying on this for real dev builds.
+    AMIs. VERIFIED 2026-08-17 against a live describe-images call in both
+    us-east-1 and us-west-1: this owner publishes Rocky 8 and Rocky 9,
+    x86_64 and aarch64, as plain public AMIs.
+    A second AWS account, 679593333241, distributes the same Rocky 9 images
+    through AWS Marketplace (subscription-gated, not a pure public AMI) - do
+    not substitute it here without adding Marketplace subscription handling.
   EOT
 }
 
 variable "rocky_ami_name_filter" {
   type        = string
-  default     = "Rocky-9-*-aarch64-*"
-  description = "Name filter for official Rocky Linux 9 aarch64 AMIs, most-recent selected by creation date."
+  default     = "Rocky-9-EC2-LVM-9.*.aarch64"
+  description = <<-EOT
+    Name filter for official Rocky Linux 9 aarch64 AMIs, most-recent selected
+    by creation date. CORRECTED 2026-08-17: the previous default
+    "Rocky-9-*-aarch64-*" matched ZERO images. Real names look like
+    "Rocky-9-EC2-LVM-9.8-20260525.0.aarch64" - the architecture is
+    dot-separated and terminal, so a filter expecting "-aarch64-<something>"
+    never matches and the build would have failed at source-AMI resolution.
+    LVM, not Base: Rocky publishes both variants, and only the LVM image is
+    LVM-on-partition, which is what scripts/ami/00-partition.sh expects (its
+    loop-device fallback exists for when it is not). Base is a plain
+    partition layout - do not switch to it without revisiting that script.
+  EOT
 }
 
 variable "rhel_ssh_username" {
-  type        = string
-  default     = "ec2-user"
+  type    = string
+  default = "ec2-user"
 }
 
 variable "rocky_ssh_username" {
-  type        = string
-  default     = "rocky"
+  type    = string
+  default = "rocky"
 }
 
 # --- volumes -----------------------------------------------------------------
@@ -164,13 +169,13 @@ variable "associate_public_ip_address" {
 # --- AMI metadata ---------------------------------------------------------------
 
 variable "ami_name_prefix" {
-  type        = string
-  default     = "ironlog"
+  type    = string
+  default = "ironlog"
 }
 
 variable "ami_description" {
-  type        = string
-  default     = "ironlog SIEM all-in-one appliance"
+  type    = string
+  default = "ironlog SIEM all-in-one appliance"
 }
 
 variable "build_git_sha" {
