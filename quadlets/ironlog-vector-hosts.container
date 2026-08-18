@@ -43,6 +43,14 @@ HealthCmd=bash -c "exec 3<>/dev/tcp/127.0.0.1/8686 && printf 'GET /health HTTP/1
 HealthInterval=15s
 HealthTimeout=5s
 HealthRetries=5
+# Vector's :8686 API is not listening for the first few seconds, so without
+# a start period the very first probe fails, podman's per-probe transient
+# unit is left in `failed`, and `systemctl is-system-running` reports
+# `degraded` for the rest of the boot even though the container went
+# healthy immediately after (observed on real hardware 2026-08-18). A
+# permanently degraded system trains operators to ignore `systemctl
+# --failed`, which is exactly where a real ironlog failure would show up.
+HealthStartPeriod=30s
 
 [Service]
 EnvironmentFile=/etc/ironlog/ironlog.env
