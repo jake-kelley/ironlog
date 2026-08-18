@@ -38,8 +38,19 @@ OS_ID="$ID"
 
 command -v fips-mode-setup >/dev/null || { echo "[$LOG_TAG] FATAL: fips-mode-setup not found (crypto-policies-scripts package missing?)" >&2; exit 1; }
 
-if fips-mode-setup --check >/dev/null 2>&1; then
-  log "FIPS mode already enabled (fips-mode-setup --check passed) — idempotent no-op"
+# Do NOT use `fips-mode-setup --check`'s EXIT STATUS as the idempotency test.
+# On a stock Rocky 9.8 image it exits 0 even when FIPS is disabled, so this
+# guard reported "already enabled" on a virgin instance, skipped the --enable
+# entirely, and the build reached the post-reboot verify with
+# crypto.fips_enabled = 0. Test the kernel state directly, and fall back to the
+# tool's OUTPUT TEXT (not its status) to detect the staged-but-not-yet-rebooted
+# case so a re-run does not pointlessly re-enable.
+fips_live="$(cat /proc/sys/crypto/fips_enabled 2>/dev/null || echo 0)"
+fips_check_out="$(fips-mode-setup --check 2>&1 || true)"
+if [ "$fips_live" = "1" ]; then
+  log "FIPS mode already live in the running kernel (crypto.fips_enabled=1) — idempotent no-op"
+elif printf '%s' "$fips_check_out" | grep -qi 'is enabled'; then
+  log "FIPS mode already staged (fips-mode-setup reports enabled, kernel not yet rebooted) — idempotent no-op"
 else
   log "enabling FIPS mode (fips-mode-setup --enable) — takes effect on next boot, see header comment"
   fips-mode-setup --enable

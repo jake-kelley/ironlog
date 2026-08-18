@@ -16,7 +16,14 @@ die() { echo "[$LOG_TAG] FATAL: $*" >&2; exit 1; }
 # use it (keeps a single source of truth honored either direction); if not
 # (e.g. running this script by hand for a rebuild), the hardcoded list below
 # is authoritative.
-DEFAULT_IMAGES="clickhouse/clickhouse-server:24.8 postgres:16-alpine quay.io/keycloak/keycloak:26.0 grafana/grafana-oss:11.4.0 docker.hyperdx.io/hyperdx/hyperdx:2.19.0 mongo:7.0 quay.io/oauth2-proxy/oauth2-proxy:v7.15.3 timberio/vector:0.57.0-debian"
+# FULLY QUALIFIED, always. RHEL/Rocky ship podman with
+# short-name-mode = "enforcing" in /etc/containers/registries.conf, so a
+# Docker Hub short name cannot be resolved without a TTY to prompt at:
+#   "Error: short-name resolution enforced but cannot prompt without a TTY"
+# The quay.io/ and docker.hyperdx.io/ entries always worked precisely
+# because they were already qualified. These strings must also match the
+# Image= lines in quadlets/ verbatim -- see the cross-check below.
+DEFAULT_IMAGES="docker.io/clickhouse/clickhouse-server:24.8 docker.io/library/postgres:16-alpine quay.io/keycloak/keycloak:26.0 docker.io/grafana/grafana-oss:11.4.0 docker.hyperdx.io/hyperdx/hyperdx:2.19.0 docker.io/library/mongo:7.0 quay.io/oauth2-proxy/oauth2-proxy:v7.15.3 docker.io/timberio/vector:0.57.0-debian"
 IMAGES="${IRONLOG_CONTAINER_IMAGES:-$DEFAULT_IMAGES}"
 ARCH="${IRONLOG_PULL_ARCH:-arm64}"
 
@@ -53,6 +60,26 @@ for img in $IMAGES; do
 done
 
 [ "$fail" -eq 0 ] || die "one or more images failed to pull or verify as $ARCH — see FATAL lines above"
+
+# Cross-check against what the appliance will ACTUALLY ask for at boot. The
+# pull list and the quadlets are separate files that must agree; when they
+# drift, nothing fails here -- it fails later, on a disconnected network, with
+# podman unable to resolve an image it was never given. Assert the invariant
+# while a registry is still reachable to fix it.
+QUADLET_DIR="/etc/containers/systemd"
+if [ -d "$QUADLET_DIR" ]; then
+  missing=0
+  for want in $(grep -h '^Image=' "$QUADLET_DIR"/*.container 2>/dev/null | cut -d= -f2- | sort -u || true); do
+    if ! podman image exists "$want"; then
+      echo "[$LOG_TAG] FATAL: quadlet references $want but it is not in the local image store — the appliance would fail to start it with no registry reachable" >&2
+      missing=1
+    fi
+  done
+  [ "$missing" -eq 0 ] || die "quadlet Image= references not satisfied by the pre-pull list (see FATAL lines above)"
+  log "cross-check OK: every Image= in $QUADLET_DIR/*.container is present in the local image store"
+else
+  log "WARNING: $QUADLET_DIR does not exist — skipping quadlet/pull-list cross-check (quadlets should have been installed by build.pkr.hcl step 5)"
+fi
 
 log "all $(echo "$IMAGES" | wc -w) images pulled and verified as $ARCH"
 podman images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}'

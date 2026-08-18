@@ -4,5 +4,6 @@
 
 # Packer build artifacts (see packer/README.md)
 packer/manifest.json
+packer/manifest.json.lock
 packer/*.log
 packer/variables.auto.pkrvars.hcl

@@ -11,14 +11,14 @@ locals {
   # through as an env var in case that script wants a single source of
   # truth to read from instead of hardcoding the list twice.
   container_images = join(" ", [
-    "clickhouse/clickhouse-server:24.8",
-    "postgres:16-alpine",
+    "docker.io/clickhouse/clickhouse-server:24.8",
+    "docker.io/library/postgres:16-alpine",
     "quay.io/keycloak/keycloak:26.0",
-    "grafana/grafana-oss:11.4.0",
+    "docker.io/grafana/grafana-oss:11.4.0",
     "docker.hyperdx.io/hyperdx/hyperdx:2.19.0",
-    "mongo:7.0",
+    "docker.io/library/mongo:7.0",
     "quay.io/oauth2-proxy/oauth2-proxy:v7.15.3",
-    "timberio/vector:0.57.0-debian",
+    "docker.io/timberio/vector:0.57.0-debian",
   ])
 }
 
@@ -33,19 +33,21 @@ build {
   # --- 1. disk layout / partitioning ---
   provisioner "shell" {
     script          = "${path.root}/../scripts/ami/00-partition.sh"
-    execute_command = "sudo -E sh -c '{{ .Path }}'"
+    execute_command = "sudo bash '{{ .Path }}'"
   }
 
   # --- 2. baseline packages, podman, dnf update ---
   provisioner "shell" {
+    remote_folder   = "/opt/ironlog-build"
     script          = "${path.root}/../scripts/ami/10-baseline.sh"
-    execute_command = "sudo -E sh -c '{{ .Path }}'"
+    execute_command = "sudo bash '{{ .Path }}'"
   }
 
   # --- 3. repo config -> /opt/ironlog/{clickhouse,grafana,keycloak,vector} ---
   # Stage as the SSH user under /tmp (file provisioner has no sudo of its
   # own), then move into place as root in one follow-up shell provisioner.
   provisioner "shell" {
+    remote_folder = "/opt/ironlog-build"
     inline = [
       "sudo mkdir -p /tmp/ironlog-stage",
       "sudo chown $(whoami) /tmp/ironlog-stage",
@@ -70,6 +72,7 @@ build {
   }
 
   provisioner "shell" {
+    remote_folder = "/opt/ironlog-build"
     inline = [
       "sudo mkdir -p /opt/ironlog",
       "sudo cp -r /tmp/ironlog-stage/clickhouse /opt/ironlog/clickhouse",
@@ -94,6 +97,7 @@ build {
   }
 
   provisioner "shell" {
+    remote_folder = "/opt/ironlog-build"
     inline = [
       "sudo mkdir -p /etc/containers/systemd",
       "sudo find /tmp/ironlog-stage/quadlets -maxdepth 1 -type f \\( -name '*.container' -o -name '*.network' \\) -exec cp {} /etc/containers/systemd/ \\;",
@@ -110,6 +114,7 @@ build {
   }
 
   provisioner "shell" {
+    remote_folder = "/opt/ironlog-build"
     inline = [
       "sudo mkdir -p /usr/local/lib/ironlog",
       "sudo cp -r /tmp/ironlog-stage/firstboot/. /usr/local/lib/ironlog/",
@@ -121,18 +126,27 @@ build {
 
   # --- 6. pre-pull all container images for air-gapped first boot ---
   provisioner "shell" {
+    remote_folder = "/opt/ironlog-build"
     environment_vars = [
       "IRONLOG_CONTAINER_IMAGES=${local.container_images}",
       "IRONLOG_PULL_ARCH=arm64",
     ]
-    script          = "${path.root}/../scripts/ami/20-container-images.sh"
-    execute_command = "sudo -E sh -c '{{ .Vars }} {{ .Path }}'"
+    script = "${path.root}/../scripts/ami/20-container-images.sh"
+    # `sudo env {{ .Vars }} ...`, NOT `sudo sh -c '{{ .Vars }} {{ .Path }}'`.
+    # Packer renders .Vars as KEY='value' pairs with literal single quotes, so
+    # nesting them inside sh -c '...' closed the outer quote at the first one:
+    # sh then got a bare `PACKER_BUILD_NAME=` assignment, ran nothing, and EXITED
+    # 0. The image pre-pull silently did not happen and the build went green --
+    # an appliance with no baked images and no registry to reach on first boot.
+    # `env` takes the assignments as ordinary argv, so no quoting is nested.
+    execute_command = "sudo env {{ .Vars }} bash '{{ .Path }}'"
   }
 
   # --- 7. STIG hardening ---
   provisioner "shell" {
+    remote_folder   = "/opt/ironlog-build"
     script          = "${path.root}/../scripts/ami/30-stig.sh"
-    execute_command = "sudo -E sh -c '{{ .Path }}'"
+    execute_command = "sudo bash '{{ .Path }}'"
   }
 
   # --- 8. FIPS mode ---
@@ -140,8 +154,9 @@ build {
   # succeed at the OS level; whether Vector then starts cleanly with FIPS on
   # and no TLS configured is REASONED BUT UNTESTED, and only on real RHEL 9.
   provisioner "shell" {
+    remote_folder   = "/opt/ironlog-build"
     script          = "${path.root}/../scripts/ami/40-fips.sh"
-    execute_command = "sudo -E sh -c '{{ .Path }}'"
+    execute_command = "sudo bash '{{ .Path }}'"
   }
 
   # --- 8b. Reboot so FIPS mode actually takes effect ---
@@ -151,6 +166,7 @@ build {
   # staged-but-inactive state, and `fips-mode-setup --check` on a launched
   # instance would report FIPS enabled while the build never verified it.
   provisioner "shell" {
+    remote_folder     = "/opt/ironlog-build"
     inline            = ["sudo systemctl reboot"]
     expect_disconnect = true
   }
@@ -158,10 +174,13 @@ build {
   # --- 8c. Confirm FIPS is live in the running kernel, post-reboot ---
   # Fail the build here rather than shipping an image that only looks hardened.
   provisioner "shell" {
-    pause_before = "30s"
+    remote_folder = "/opt/ironlog-build"
+    pause_before  = "30s"
     inline = [
       "set -eu",
       "echo '[fips-verify] crypto.fips_enabled =' $(cat /proc/sys/crypto/fips_enabled)",
+      "echo '[fips-verify] /proc/cmdline =' $(cat /proc/cmdline)",
+      "grep -q 'fips=1' /proc/cmdline || { echo '[fips-verify] FAIL: running kernel was not booted with fips=1 — the reboot did not take effect (packer may have reconnected to the pre-reboot sshd)'; exit 1; }",
       "test \"$(cat /proc/sys/crypto/fips_enabled)\" = '1' || { echo '[fips-verify] FAIL: kernel is not in FIPS mode after reboot'; exit 1; }",
       "sudo fips-mode-setup --check",
     ]
@@ -169,8 +188,9 @@ build {
 
   # --- 9. log/ssh-key/cloud-init cleanup before snapshot ---
   provisioner "shell" {
+    remote_folder   = "/opt/ironlog-build"
     script          = "${path.root}/../scripts/ami/90-cleanup.sh"
-    execute_command = "sudo -E sh -c '{{ .Path }}'"
+    execute_command = "sudo bash '{{ .Path }}'"
   }
 
   post-processor "manifest" {

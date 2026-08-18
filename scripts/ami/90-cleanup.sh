@@ -57,6 +57,9 @@ log "cleared dnf caches"
 # provisioners in build.pkr.hcl — those provisioners already clean up their
 # own /tmp/ironlog-stage dirs, this is belt-and-braces).
 rm -rf /tmp/ironlog-stage
+# packer's remote_folder for every provisioner after 00-partition.sh; see
+# the BUILD_SCRATCH block there for why it is not /tmp.
+rm -rf /opt/ironlog-build
 rm -f /root/.ssh/authorized_keys
 find /home -maxdepth 2 -name authorized_keys -exec rm -f {} \; 2>/dev/null || true
 rm -rf /root/.aws /home/*/.aws 2>/dev/null || true

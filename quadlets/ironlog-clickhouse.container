@@ -4,7 +4,7 @@ Description=ironlog SIEM — ClickHouse storage/query engine
 # No dependencies of its own; everything else waits on this one.
 
 [Container]
-Image=clickhouse/clickhouse-server:24.8
+Image=docker.io/clickhouse/clickhouse-server:24.8
 ContainerName=ironlog-clickhouse
 Network=ironlog.network
 NetworkAlias=clickhouse

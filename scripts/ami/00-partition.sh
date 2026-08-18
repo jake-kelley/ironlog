@@ -35,6 +35,38 @@ log() { echo "[$LOG_TAG] $*"; }
 warn() { echo "[$LOG_TAG] WARNING: $*" >&2; }
 die() { echo "[$LOG_TAG] FATAL: $*" >&2; exit 1; }
 
+# Resolve a mount source (which may itself be an LVM dm device) down to the
+# underlying whole-disk name, e.g. "nvme0n1". Echoes empty if unresolvable.
+#
+# Every command substitution below is guarded with `|| true`. Under
+# `set -euo pipefail` an assignment inherits the exit status of its command
+# substitution, so one failing lookup aborts the whole script -- and because
+# stderr is redirected to /dev/null it aborts with NO output at all. That is
+# exactly how the original version failed: it used `lsblk -no VG_NAME`, but
+# VG_NAME is not an lsblk column, so lsblk exited non-zero on every LVM root.
+resolve_disk_of() {
+  local src="$1" disk vg pv
+  disk="$(lsblk -ndo PKNAME "$src" 2>/dev/null | head -n1 || true)"
+  if [ -n "$disk" ]; then
+    echo "$disk"
+    return 0
+  fi
+  # dm devices have no PKNAME -- walk LV -> VG -> PV -> parent disk instead.
+  command -v lvs >/dev/null 2>&1 || { echo ""; return 0; }
+  vg="$(lvs --noheadings -o vg_name "$src" 2>/dev/null | head -n1 | tr -d '[:space:]' || true)"
+  [ -n "$vg" ] || { echo ""; return 0; }
+  command -v pvs >/dev/null 2>&1 || { echo ""; return 0; }
+  pv="$(pvs --noheadings -o pv_name -S "vg_name=$vg" 2>/dev/null | awk '{print $1}' | head -n1 || true)"
+  [ -n "$pv" ] || { echo ""; return 0; }
+  # -d is essential: without it lsblk walks the whole tree and the LVM
+  # children report the PV PARTITION as their parent, so this returned
+  # "nvme0n1p3" instead of "nvme0n1" -- which then matched no disk, and the
+  # data-volume search below selected the root disk and tried to mkfs it.
+  disk="$(lsblk -ndo PKNAME "$pv" 2>/dev/null | head -n1 || true)"
+  [ -n "$disk" ] || disk="$(basename "$pv")"
+  echo "$disk"
+}
+
 command -v findmnt >/dev/null || die "findmnt not found (util-linux missing?)"
 
 # --- LV / backing-file sizes (MiB). Override via env if the defaults don't
@@ -78,27 +110,20 @@ if findmnt -no TARGET /var/lib/ironlog >/dev/null 2>&1; then
   log "/var/lib/ironlog already mounted, skipping data-volume setup"
 else
   root_src="$(findmnt -no SOURCE / )"
-  # Resolve the root SOURCE (may itself be an LVM dm-device) down to its
-  # underlying whole disk(s).
-  root_disk="$(lsblk -no PKNAME "$root_src" 2>/dev/null | head -n1)"
-  if [ -z "$root_disk" ]; then
-    # root_src is already a whole disk/partition with no further parent
-    root_disk="$(basename "$root_src")"
-  fi
-  # If root is on LVM, PKNAME of the dm device is empty; walk PVs instead.
-  if [ -z "$root_disk" ] || [ "$root_disk" = "$(basename "$root_src")" ] && [[ "$root_src" == /dev/mapper/* || "$root_src" == /dev/dm-* ]]; then
-    root_vg="$(lsblk -no VG_NAME "$root_src" 2>/dev/null | head -n1)"
-    if [ -n "$root_vg" ] && command -v pvs >/dev/null; then
-      root_pv_part="$(pvs --noheadings -o pv_name -S "vg_name=$root_vg" 2>/dev/null | awk '{print $1}' | head -n1)"
-      [ -n "$root_pv_part" ] && root_disk="$(lsblk -no PKNAME "$root_pv_part" 2>/dev/null | head -n1)"
-    fi
-  fi
+  root_disk="$(resolve_disk_of "$root_src")"
   [ -n "$root_disk" ] || die "could not resolve root disk from source '$root_src'"
   log "root disk resolved to /dev/$root_disk"
 
   data_disk=""
   for d in $(lsblk -dno NAME,TYPE | awk '$2=="disk"{print $1}'); do
-    [ "$d" = "$root_disk" ] && continue
+    if [ "$d" = "$root_disk" ]; then continue; fi
+    # Belt-and-braces: name comparison alone is not enough to bet an
+    # unrecoverable `mkfs -f` on. Skip any disk with a mounted filesystem
+    # anywhere in its tree, whichever name resolution produced.
+    if lsblk -no MOUNTPOINT "/dev/$d" 2>/dev/null | grep -q '[^[:space:]]'; then
+      log "skipping /dev/$d: already has mounted filesystem(s), not the data volume"
+      continue
+    fi
     # skip anything that already has partitions or a filesystem signature
     # other than what we're about to lay down ourselves (idempotency guard
     # against re-running on an already-provisioned data disk).
@@ -108,6 +133,10 @@ else
   [ -n "$data_disk" ] || die "no second disk found besides root (/dev/$root_disk) — expected the appliance data volume declared in packer/sources.pkr.hcl (launch_block_device_mappings device_name=/dev/sdb)"
   log "data volume resolved to /dev/$data_disk"
 
+  if lsblk -no MOUNTPOINT "/dev/$data_disk" 2>/dev/null | grep -qx '/'; then
+    die "refusing to format /dev/$data_disk: it carries the running root filesystem (root disk resolved to /dev/$root_disk -- resolution bug)"
+  fi
+
   existing_fstype="$(blkid -s TYPE -o value "/dev/$data_disk" 2>/dev/null || true)"
   if [ -z "$existing_fstype" ]; then
     log "formatting /dev/$data_disk as xfs (appliance data volume)"
@@ -116,7 +145,7 @@ else
     log "/dev/$data_disk already has a $existing_fstype filesystem, not reformatting"
   fi
 
-  data_uuid="$(blkid -s UUID -o value "/dev/$data_disk")"
+  data_uuid="$(blkid -s UUID -o value "/dev/$data_disk" || true)"
   [ -n "$data_uuid" ] || die "could not read UUID of /dev/$data_disk after mkfs"
 
   if ! grep -q "$data_uuid" /etc/fstab; then
@@ -131,15 +160,30 @@ fi
 # ------------------------------------------------------------------------
 # Cloud images (RHEL/Rocky 9) ship cloud-init with the growpart + resizefs
 # modules enabled by default, which run in cloud-init's early "init" stage —
-# BEFORE SSH is available, i.e. before this script can ever run. By the time
-# we connect, the root partition (and, on RHEL/Rocky cloud images, the LVM PV
-# beneath it) has already been grown to consume the ENTIRE root EBS volume.
-# There is no free space left to carve new partitions/LVs out of.
+# BEFORE SSH is available, i.e. before this script can ever run.
+#
+# MEASURED 2026-08-18 on Rocky-9-EC2-LVM-9.8 aarch64 with root_volume_size=60:
+# growpart did NOT consume the volume. cloud-init grew the root PARTITION and
+# filesystem within the source image's original ~10GiB GPT, and this script
+# found 51200MiB genuinely free — so the real-LVM path below is what actually
+# runs on the shipping configuration, and the loop-device fallback did not
+# trigger. An earlier revision of this comment asserted the opposite ("no free
+# space left", fallback is "the expected/common case"); that was reasoned, not
+# observed, and the build data contradicts it. Do not re-derive the old claim.
+#
+# Two consequences worth keeping in mind:
+#   - The stale GPT is the real obstacle, not missing space: the backup header
+#     still describes the small source disk, so mkpart must fix it first (see
+#     the parted --fix call below).
+#   - The fallback path below is therefore NOT exercised by the normal Rocky
+#     build. It remains correct-by-construction but is now UNTESTED in CI
+#     terms; treat any change to it as unverified until a build actually takes
+#     that branch.
 #
 # Real LVM (new PV on free disk space) is used when free space genuinely
-# exists (e.g. a future base image that doesn't auto-grow, or a
-# root_volume_size increase that outpaces growpart for some reason). When it
-# doesn't — the expected/common case — we fall back to LVM built on
+# exists — the measured case above. When it does not (a base image that really
+# does auto-grow to the full volume, or a root_volume_size that growpart fully
+# consumes), we fall back to LVM built on
 # LOOP-DEVICE-BACKED files living on the already-grown root filesystem
 # itself. This still satisfies "LVM on the root volume, growable later"
 # (grow = truncate the backing file + losetup --set-capacity + pvresize +
@@ -182,7 +226,15 @@ setup_lv_or_loop() {
     fi
     log "creating LV $lv (${size_mb}MiB) for $mnt"
     lvcreate -y -L "${size_mb}M" -n "$lv" "$VG_NAME" >/dev/null
-    mkfs.xfs -f -L "ironlog-$lv" "$dev" >/dev/null
+    # XFS labels are capped at 12 characters and mkfs.xfs treats an over-long
+    # one as a usage error, not a warning: "Invalid value ironlog-varlog for -L
+    # option". The old "ironlog-$lv" scheme silently fit for home (12) and var
+    # (11) and then failed on the first longer name. "il-" keeps the labels
+    # namespaced without eating the budget; only varlogaudit needs truncating,
+    # and it stays distinct from every other label in the set.
+    local label="il-$lv"
+    label="${label:0:12}"
+    mkfs.xfs -f -L "$label" "$dev" >/dev/null
   fi
 
   mkdir -p /mnt/ironlog-migrate
@@ -208,10 +260,10 @@ setup_lv_or_loop() {
   # top of an existing (possibly non-empty) directory; content already
   # copied above, old content is simply shadowed underneath, not deleted.
   mount -t xfs -o "$opts" "$dev" "$mnt"
-  [ -n "$fsmode" ] && chmod "$fsmode" "$mnt"
+  if [ -n "$fsmode" ]; then chmod "$fsmode" "$mnt"; fi
 
   local uuid
-  uuid="$(blkid -s UUID -o value "$dev")"
+  uuid="$(blkid -s UUID -o value "$dev" || true)"
   [ -n "$uuid" ] || die "could not read UUID for $dev ($mnt)"
   if ! grep -q "$uuid" /etc/fstab; then
     echo "UUID=$uuid $mnt xfs $opts 0 2" >> /etc/fstab
@@ -223,26 +275,76 @@ setup_lv_or_loop() {
 if ! vgs "$VG_NAME" >/dev/null 2>&1; then
   root_src="$(findmnt -no SOURCE / )"
   root_part="$root_src"
-  root_disk="$(lsblk -no PKNAME "$root_src" 2>/dev/null | head -n1)"
+  root_disk="$(resolve_disk_of "$root_src")"
   free_mb=0
   if [ -n "$root_disk" ]; then
-    free_mb="$(root_disk_free_mb "$root_disk")"
+    free_mb="$(root_disk_free_mb "$root_disk" || true)"
   fi
 
   if [ "$free_mb" -ge "$TOTAL_MB" ] 2>/dev/null; then
     log "found ${free_mb}MiB free on root disk /dev/$root_disk — using real LVM partition, no fallback needed"
-    part_num="$(parted -s -m "/dev/$root_disk" print | tail -n1 | cut -d: -f1)"
-    next_part=$((part_num + 1))
-    parted -s "/dev/$root_disk" mkpart primary "100%FREE" -- "-${TOTAL_MB}MiB" 100% \
-      || parted -s "/dev/$root_disk" mkpart primary ext2 "-${TOTAL_MB}MiB" 100%
+    # The root EBS volume is launched larger than the source AMI's snapshot, so
+    # the GPT backup header still sits at the OLD end-of-disk and the header's
+    # LastUsableLBA is stale. `parted print free` reports the real free space
+    # regardless -- that is why free_mb above is correct -- but writing into
+    # that space needs the header relocated first. parted --fix answers the
+    # "fix the GPT" prompt that -s otherwise declines silently.
+    if ! parted -s -f "/dev/$root_disk" print >/dev/null 2>&1; then
+      # parted < 3.3 has no --fix; sgdisk -e does the same job where present.
+      if command -v sgdisk >/dev/null 2>&1; then
+        sgdisk -e "/dev/$root_disk" >/dev/null 2>&1 || true
+      fi
+    fi
+
+    # Absolute start/end taken from parted's own free-space table -- NOT a
+    # negative offset like "-${TOTAL_MB}MiB". Two separate parted-argument bugs
+    # lived here and both are worth naming so they do not come back:
+    #   1. `mkpart primary "100%FREE" -- "-${TOTAL_MB}MiB" 100%` -- 100%FREE is
+    #      not parted syntax, and with `--` mid-command parted read the three
+    #      remaining words as name/start/end, making start=100% (end of disk)
+    #      and end=-26624MiB: "Can't have the end before the start!
+    #      (start sector=125829119 length=-54525951)".
+    #   2. the `|| parted ... "-${TOTAL_MB}MiB" 100%` fallback put a
+    #      leading-dash value in option position with no preceding `--`, so
+    #      getopt shredded it one character at a time:
+    #      "parted: invalid option -- '2'" ... "invalid option -- 'B'".
+    # parted -m free-space lines are `num:start:end:size:free;`, hence $2/$3.
+    # The end is rounded DOWN and then backed off a further 1MiB: `print free`
+    # reports the trailing region as ending at the device size (61440MiB on a
+    # 60GiB volume) because `unit MiB` rounds the last usable sector up, but
+    # mkpart rejects that exact value -- "Error: The location 61440MiB is
+    # outside of the device /dev/nvme1n1." The secondary GPT header needs the
+    # last 33 sectors anyway, so 1MiB of slack costs nothing and is correct for
+    # a mid-disk region too.
+    free_region="$(parted -s -m "/dev/$root_disk" unit MiB print free 2>/dev/null \
+      | awk -F: '/:free;/{ s=$2; e=$3; gsub("MiB","",s); gsub("MiB","",e);
+                           if (e - s > best) { best = e - s; bs = s; be = e } }
+                 END { if (best > 0) printf "%d %d", int(bs) + 1, int(be) - 1 }' || true)"
+    start_mb=""; end_mb=""
+    read -r start_mb end_mb <<<"$free_region" || true
+    if [ -z "$start_mb" ] || [ -z "$end_mb" ] || [ "$((end_mb - start_mb))" -lt "$TOTAL_MB" ]; then
+      die "no single free region on /dev/$root_disk large enough for ${TOTAL_MB}MiB (parted reported ${free_mb}MiB free in total, largest contiguous region: '${free_region:-none}')"
+    fi
+
+    # Identify the new partition by diffing the device list, rather than by
+    # guessing "<disk><n+1>" vs "<disk>p<n+1>": the suffix differs between nvme
+    # and xvd naming, and the highest existing partition NUMBER is not
+    # necessarily n when the table has gaps.
+    parts_before="$(lsblk -nro NAME "/dev/$root_disk" | tail -n +2 | sort)"
+    parted -s -a optimal "/dev/$root_disk" mkpart ironlogpv "${start_mb}MiB" "${end_mb}MiB"
     udevadm settle
-    new_part="/dev/${root_disk}${next_part}"
-    [ -e "$new_part" ] || new_part="/dev/${root_disk}p${next_part}"
+    partprobe "/dev/$root_disk" >/dev/null 2>&1 || true
+    udevadm settle
+    parts_after="$(lsblk -nro NAME "/dev/$root_disk" | tail -n +2 | sort)"
+    new_name="$(comm -13 <(echo "$parts_before") <(echo "$parts_after") | head -n1 || true)"
+    [ -n "$new_name" ] || die "parted reported success but no new partition appeared on /dev/$root_disk"
+    new_part="/dev/$new_name"
+    log "created $new_part (${start_mb}MiB-${end_mb}MiB) as the ironlog LVM PV"
     pvcreate -y "$new_part" >/dev/null
     vgcreate -y "$VG_NAME" "$new_part" >/dev/null
   else
-    warn "root disk has only ${free_mb}MiB free, need ${TOTAL_MB}MiB — cloud-init's growpart has almost certainly already consumed the whole root volume (this is the expected/common case, not a bug). Falling back to loop-device-backed LVM on the root filesystem itself."
-    avail_root_mb="$(df -Pm / | tail -1 | awk '{print $4}')"
+    warn "root disk has only ${free_mb}MiB free, need ${TOTAL_MB}MiB — cloud-init's growpart appears to have consumed the whole root volume. NOTE: on the measured Rocky 9.8 LVM build this branch does NOT normally trigger (51200MiB was free), so reaching it means either a different base image or a root_volume_size too close to the source image size. Falling back to loop-device-backed LVM on the root filesystem itself."
+    avail_root_mb="$(df -Pm / | tail -1 | awk '{print $4}' || true)"
     [ "$avail_root_mb" -ge $(( TOTAL_MB + 1024 )) ] || die "root filesystem has only ${avail_root_mb}MiB free, need ${TOTAL_MB}MiB for STIG mount backing files plus 1GiB headroom. Increase root_volume_size in packer/variables.auto.pkrvars.hcl (default is 30 GiB, likely too small for this layout) and rebuild."
     mkdir -p "$LOOP_BACKING_DIR"
     chmod 0700 "$LOOP_BACKING_DIR"
@@ -253,7 +355,7 @@ if ! vgs "$VG_NAME" >/dev/null 2>&1; then
       if [ ! -e "$img" ]; then
         truncate -s "${sz}M" "$img"
       fi
-      loopdev="$(losetup -j "$img" | cut -d: -f1 | head -n1)"
+      loopdev="$(losetup -j "$img" 2>/dev/null | cut -d: -f1 | head -n1 || true)"
       if [ -z "$loopdev" ]; then
         loopdev="$(losetup -f --show "$img")"
       fi
@@ -297,6 +399,27 @@ setup_lv_or_loop varlog "$VARLOG_SIZE_MB" /var/log     "nodev,nosuid,noexec"    
 setup_lv_or_loop varlogaudit "$VARLOGAUDIT_SIZE_MB" /var/log/audit "nodev,nosuid,noexec" "0700"
 setup_lv_or_loop vartmp "$VARTMP_SIZE_MB" /var/tmp     "nodev,nosuid,noexec"            "1777"
 setup_lv_or_loop tmp   "$TMP_SIZE_MB"    /tmp           "nodev,nosuid,noexec"            "1777"
+
+# Packer uploads every subsequent shell provisioner as a file and then EXECUTES
+# it, using remote_folder (default /tmp). The STIG mount options applied above
+# make /tmp noexec, so from this point on every later provisioner would die with
+# "sh: line 1: /tmp/script_NNNN.sh: Permission denied" (exit 126). That is not a
+# packer bug and not something to fix by relaxing /tmp: the live mounts must
+# stay STIG-correct for the whole build so the openscap scan in 30-stig.sh
+# measures the real thing. Instead give packer an exec-capable, SSH-user-owned
+# scratch directory on the root filesystem, and point remote_folder at it in
+# packer/build.pkr.hcl. 90-cleanup.sh removes it before the snapshot.
+#
+# SUDO_USER, not a hardcoded name: the SSH user is `rocky` on Rocky and
+# `ec2-user` on RHEL, and sudo sets this itself (it is not inherited, so the
+# absence of `sudo -E` in execute_command does not matter here).
+BUILD_SCRATCH="/opt/ironlog-build"
+mkdir -p "$BUILD_SCRATCH"
+if [ -n "${SUDO_USER:-}" ]; then
+  chown "$SUDO_USER" "$BUILD_SCRATCH"
+fi
+chmod 0700 "$BUILD_SCRATCH"
+log "build scratch dir $BUILD_SCRATCH created (owner ${SUDO_USER:-root}) — packer remote_folder, exec-capable unlike the now-noexec /tmp"
 
 log "partitioning complete. fstab:"
 grep -E '/(home|tmp|var|var/log|var/log/audit|var/tmp|lib/ironlog) ' /etc/fstab || true
