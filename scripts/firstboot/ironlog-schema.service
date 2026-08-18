@@ -1,0 +1,37 @@
+# ironlog-schema.service — reconciles the ClickHouse SIEM schema and service
+# accounts on every boot, and fails the boot chain if they are not right.
+# Deployed by packer to /usr/local/lib/ironlog/ alongside the first-boot
+# scripts; packer also installs THIS file to
+# /etc/systemd/system/ironlog-schema.service and enables it (see
+# packer/build.pkr.hcl provisioner step 5).
+#
+# Despite living in scripts/firstboot/, this unit is NOT first-boot-only: it
+# has no ConditionPathExists guard and runs on every boot, because the failure
+# it guards against (the clickhouse image skipping its one-shot initdb against
+# a data dir left behind by an earlier failed boot) is invisible on exactly the
+# boots where nobody is watching. See ironlog-apply-schema.sh for the full
+# measured history.
+#
+# Ordering is safe against deadlock: ironlog-clickhouse.service sets
+# Notify=healthy and its HealthCmd is `SELECT 1`, which does NOT depend on the
+# schema existing. So waiting for clickhouse to be healthy before applying the
+# schema terminates. Do not "improve" that healthcheck into a schema check --
+# that would make clickhouse wait on this unit and this unit wait on
+# clickhouse.
+
+[Unit]
+Description=ironlog SIEM — ClickHouse schema and service-account reconciliation
+After=ironlog-clickhouse.service
+Requires=ironlog-clickhouse.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/ironlog/ironlog-apply-schema.sh
+# Applying seven CREATE TABLE statements against a healthy server is fast; the
+# headroom is for a cold ClickHouse still replaying/loading at boot.
+TimeoutStartSec=300
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

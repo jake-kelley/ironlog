@@ -4,8 +4,14 @@
 Description=ironlog SIEM — HyperDX (ClickStack search/investigation UI over siem.*)
 # compose: depends_on clickhouse healthy, hyperdx-db healthy. Both those
 # units set Notify=healthy, so After+Requires genuinely waits for both.
-After=ironlog-clickhouse.service ironlog-hyperdx-db.service
-Requires=ironlog-clickhouse.service ironlog-hyperdx-db.service
+# Gated on ironlog-schema.service, NOT on ironlog-clickhouse.service directly.
+# ClickHouse reports healthy on `SELECT 1`, which succeeds against a server
+# with an EMPTY database, so depending on it alone let this service start
+# happily against a schema-less ClickHouse and silently do nothing (measured
+# on real hardware 2026-08-18). ironlog-schema.service Requires= clickhouse
+# itself, so ordering is otherwise unchanged.
+After=ironlog-schema.service ironlog-hyperdx-db.service
+Requires=ironlog-schema.service ironlog-hyperdx-db.service
 
 [Container]
 Image=docker.hyperdx.io/hyperdx/hyperdx:2.19.0

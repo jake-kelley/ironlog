@@ -145,6 +145,18 @@ build {
       "sudo install -m 0644 /usr/local/lib/ironlog/ironlog-firstboot.service /etc/systemd/system/ironlog-firstboot.service",
       "sudo systemctl daemon-reload",
       "sudo systemctl enable ironlog-firstboot.service",
+      # ironlog-schema.service reconciles the ClickHouse SIEM schema on EVERY
+      # boot and fails if it is incomplete. It is not first-boot-only and it is
+      # not a quadlet, so it needs the same explicit install+enable as the unit
+      # above. Without it the appliance can boot green, report every container
+      # healthy, and hold no schema at all: the clickhouse image runs its
+      # /docker-entrypoint-initdb.d scripts exactly once, only against an empty
+      # data dir, so a single failed first boot poisons the persistent data
+      # volume permanently and the container healthcheck (SELECT 1) still
+      # passes. Measured on a real c7g.large 2026-08-18.
+      "sudo install -m 0644 /usr/local/lib/ironlog/ironlog-schema.service /etc/systemd/system/ironlog-schema.service",
+      "sudo systemctl daemon-reload",
+      "sudo systemctl enable ironlog-schema.service",
       "sudo rm -rf /tmp/ironlog-stage",
     ]
   }

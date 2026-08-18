@@ -22,6 +22,7 @@ After=network-online.target
 Before=ironlog-clickhouse.service ironlog-keycloak-db.service ironlog-keycloak.service
 Before=ironlog-grafana.service ironlog-hyperdx-db.service ironlog-hyperdx.service
 Before=ironlog-hyperdx-auth.service ironlog-vector-hosts.service ironlog-vector.service
+Before=ironlog-schema.service
 Before=multi-user.target
 ConditionPathExists=!/etc/ironlog/.firstboot-complete
 

@@ -16,7 +16,48 @@ placing it and enabling it at build time).
 | `secret-resolver.sh` | URI → plaintext resolver (`ssm://`, `asm://`, `file://`, `generate:`, literal); separately testable |
 | `ironlog-firstboot.service` | systemd oneshot unit, ordered before every `ironlog-*.service` |
 | `appliance.conf.example` | Fully commented config — every scheme, all three modes |
+| `ironlog-apply-schema.sh` | Reconciles the ClickHouse SIEM schema/service accounts and **verifies** the result — runs on EVERY boot, not just the first |
+| `ironlog-schema.service` | systemd oneshot unit for the above, ordered after `ironlog-clickhouse.service` |
 | `README.md` | This file |
+
+## Why a schema unit lives in a directory called `firstboot`
+
+`ironlog-apply-schema.sh` and `ironlog-schema.service` are **not**
+first-boot-only. They ship here because this is the directory packer installs
+to `/usr/local/lib/ironlog/`, but the unit has no `ConditionPathExists` guard
+and runs on every boot deliberately.
+
+The reason, measured on a real `c7g.large` on 2026-08-18: the
+`clickhouse-server` image executes `/docker-entrypoint-initdb.d/*` **exactly
+once**, and only when `/var/lib/clickhouse/metadata` is empty. On the appliance
+that path is a bind mount on the persistent data volume, so a first boot that
+fails *part way* leaves a non-empty metadata dir — and every later start then
+sets `DATABASE_ALREADY_EXISTS` and skips initdb permanently. The observed
+result was an appliance with **no `siem` database, no `audit` database and no
+service accounts**, in which every container reported `healthy` and every
+dependent unit started successfully, because the ClickHouse healthcheck is
+`SELECT 1` and `SELECT 1` answers fine against a server with no schema at all.
+
+So the schema is now *reconciled* rather than *initialised*. Every statement in
+`clickhouse/ddl/*.sql` is `CREATE ... IF NOT EXISTS` and ClickHouse `GRANT` is a
+no-op when already granted, so re-applying on each boot is safe. The script
+then asserts 7 `siem` tables, `audit.query_archive`, and 4 service accounts, and
+exits non-zero otherwise. Every unit that queries ClickHouse (`vector-hosts`,
+`vector`, `grafana`, `hyperdx`) has been repointed from
+`Requires=ironlog-clickhouse.service` to `Requires=ironlog-schema.service`, so
+an incomplete schema now blocks them instead of letting them start against
+nothing.
+
+Two design points worth not undoing:
+
+- The script `podman exec`s the container's own
+  `/docker-entrypoint-initdb.d/99-init.sh` instead of reimplementing it. That
+  keeps one copy of the user-creation SQL, and the container already holds the
+  `CH_*_PASSWORD` values in its environment — **no secret is read, copied or
+  logged by the host-side script**.
+- The schema check is **not** in the ClickHouse `HealthCmd`. Making the
+  healthcheck schema-aware would make ClickHouse wait on this unit while this
+  unit waits on ClickHouse to be healthy — a deadlock.
 
 ## Launch procedure
 

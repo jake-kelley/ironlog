@@ -4,8 +4,14 @@ Description=ironlog SIEM — Grafana OSS (dashboards/alerts, OIDC login)
 # compose: depends_on clickhouse condition service_healthy, keycloak
 # condition service_started. clickhouse gates on health (Notify=healthy);
 # keycloak only needs to have started, so plain After (no Requires) for it.
-After=ironlog-clickhouse.service ironlog-keycloak.service
-Requires=ironlog-clickhouse.service
+# Gated on ironlog-schema.service, NOT on ironlog-clickhouse.service directly.
+# ClickHouse reports healthy on `SELECT 1`, which succeeds against a server
+# with an EMPTY database, so depending on it alone let this service start
+# happily against a schema-less ClickHouse and silently do nothing (measured
+# on real hardware 2026-08-18). ironlog-schema.service Requires= clickhouse
+# itself, so ordering is otherwise unchanged.
+After=ironlog-schema.service ironlog-keycloak.service
+Requires=ironlog-schema.service
 
 [Container]
 Image=docker.io/grafana/grafana-oss:11.4.0

@@ -8,8 +8,14 @@
 # exact first-boot-to-AWS-go-live steps.
 [Unit]
 Description=ironlog SIEM — Vector aggregator (AWS ingestion: CloudTrail/GuardDuty/VPC Flow/S3 Access via SQS+S3)
-After=ironlog-clickhouse.service
-Requires=ironlog-clickhouse.service
+# Gated on ironlog-schema.service, NOT on ironlog-clickhouse.service directly.
+# ClickHouse reports healthy on `SELECT 1`, which succeeds against a server
+# with an EMPTY database, so depending on it alone let this service start
+# happily against a schema-less ClickHouse and silently do nothing (measured
+# on real hardware 2026-08-18). ironlog-schema.service Requires= clickhouse
+# itself, so ordering is otherwise unchanged.
+After=ironlog-schema.service
+Requires=ironlog-schema.service
 
 [Container]
 Image=docker.io/timberio/vector:0.57.0-debian

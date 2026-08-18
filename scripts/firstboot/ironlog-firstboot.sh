@@ -291,6 +291,11 @@ KNOWN_UNITS=(
 	ironlog-clickhouse.service ironlog-keycloak-db.service ironlog-keycloak.service
 	ironlog-grafana.service ironlog-hyperdx-db.service ironlog-hyperdx.service
 	ironlog-hyperdx-auth.service ironlog-vector-hosts.service ironlog-vector.service
+	# Not a quadlet -- a real /etc/systemd/system unit (see
+	# scripts/firstboot/ironlog-schema.service). It would inherit the ordering
+	# transitively through ironlog-clickhouse.service anyway; listed explicitly
+	# so the guarantee survives someone later changing that dependency.
+	ironlog-schema.service
 )
 
 for unit in "${KNOWN_UNITS[@]}"; do
@@ -341,7 +346,11 @@ start_unit() {
 
 start_failures=0
 
-CORE_SERVICES=(ironlog-clickhouse.service ironlog-vector-hosts.service)
+# ironlog-schema.service sits between ClickHouse and everything that queries
+# it: it reconciles the SIEM schema and fails if the result is incomplete.
+# vector-hosts already pulls it in via Requires=, but it is queued explicitly
+# so that a failure to even queue it is counted as a start failure here.
+CORE_SERVICES=(ironlog-clickhouse.service ironlog-schema.service ironlog-vector-hosts.service)
 OIDC_SERVICES=(
 	ironlog-keycloak-db.service ironlog-keycloak.service ironlog-grafana.service
 	ironlog-hyperdx-db.service ironlog-hyperdx.service ironlog-hyperdx-auth.service
