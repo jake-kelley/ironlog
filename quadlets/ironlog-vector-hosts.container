@@ -1,0 +1,46 @@
+# Translated from docker-compose.yml: services.vector-hosts (Phase 3 —
+# always-on Vector aggregator for hosts + Kubernetes).
+# :8088 splunk_hec (K8s clusters push, token in ironlog.env)
+# :6000 vector native protocol (Linux agents)
+[Unit]
+Description=ironlog SIEM — Vector aggregator (Linux hosts + Kubernetes)
+# compose: depends_on clickhouse condition service_healthy.
+After=ironlog-clickhouse.service
+Requires=ironlog-clickhouse.service
+
+[Container]
+Image=docker.io/timberio/vector:0.57.0-debian
+ContainerName=ironlog-vector-hosts
+Network=ironlog.network
+NetworkAlias=vector-hosts
+
+# Vector >=0.57 disables ${VAR} interpolation in configs by default; our
+# configs deliberately pull secrets from the environment (CLAUDE.md gotcha).
+Environment=VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true
+# Same names in compose and ironlog.env — no rename needed.
+Environment=CH_VECTOR_PASSWORD=$CH_VECTOR_PASSWORD
+Environment=SPLUNK_HEC_TOKEN=$SPLUNK_HEC_TOKEN
+
+Volume=/opt/ironlog/vector/hosts.yaml:/etc/vector/vector.yaml:ro,Z
+Volume=/var/lib/ironlog/vector-hosts-buffer:/var/lib/vector:Z
+
+PublishPort=8088:8088
+PublishPort=6000:6000
+
+# compose's healthcheck used a bash /dev/tcp probe against Vector's internal
+# :8686 API, and nothing in compose's depends_on graph actually waits on it
+# (only clickhouse's health gates other services). Not in this task's
+# required Notify=healthy scope (clickhouse/keycloak-db/hyperdx-db only), so
+# translated as a plain HealthCmd for `podman ps`/monitoring visibility, with
+# no Notify=healthy and nothing After= it.
+HealthCmd=bash -c "exec 3<>/dev/tcp/127.0.0.1/8686 && printf 'GET /health HTTP/1.0\r\n\r\n' >&3 && grep -q 200 <&3"
+HealthInterval=15s
+HealthTimeout=5s
+HealthRetries=5
+
+[Service]
+EnvironmentFile=/etc/ironlog/ironlog.env
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target default.target

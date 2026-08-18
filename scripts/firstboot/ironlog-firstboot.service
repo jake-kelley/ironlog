@@ -1,0 +1,39 @@
+# ironlog-firstboot.service — resolves secrets, writes /etc/ironlog/ironlog.env,
+# prepares /var/lib/ironlog/*, and enables the right ironlog-*.service units
+# for the configured appliance mode. Deployed by packer to
+# /usr/local/lib/ironlog/ (see packer/README.md, provisioner step 5); install
+# this .service file itself to /etc/systemd/system/ironlog-firstboot.service
+# (that install step is scripts/ami's job, not this script's — see README.md).
+#
+# Ordering: every ironlog-*.container quadlet is deliberately left unedited
+# (out of scope for this worker — see quadlets/README.md), so none of them
+# declare After=/Requires=ironlog-firstboot.service themselves. Systemd
+# ordering is symmetric, so the Before= list below is sufficient to order
+# this unit ahead of them; ironlog-firstboot.sh itself additionally writes a
+# runtime-only (not repo-tracked) drop-in onto each of those units adding a
+# real Requires=, so a failed first boot actually blocks them from starting
+# instead of merely running after a failure (see ironlog-firstboot.sh step 6
+# for the full reasoning).
+
+[Unit]
+Description=ironlog appliance first-boot configuration
+Wants=network-online.target
+After=network-online.target
+Before=ironlog-clickhouse.service ironlog-keycloak-db.service ironlog-keycloak.service
+Before=ironlog-grafana.service ironlog-hyperdx-db.service ironlog-hyperdx.service
+Before=ironlog-hyperdx-auth.service ironlog-vector-hosts.service ironlog-vector.service
+Before=multi-user.target
+ConditionPathExists=!/etc/ironlog/.firstboot-complete
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/ironlog/ironlog-firstboot.sh
+# Secret resolution can involve several AWS API round trips (SSM/Secrets
+# Manager) at boot before network/DNS/route tables are fully settled;
+# give it real headroom rather than racing early boot.
+TimeoutStartSec=300
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

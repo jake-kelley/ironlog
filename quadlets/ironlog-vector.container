@@ -1,0 +1,45 @@
+# Translated from docker-compose.yml: services.vector (Phase 2 — AWS
+# ingestion). compose gates this behind the "aws" profile so the core stack
+# stays green before AWS creds/queue URLs exist; SHIPS DISABLED here for the
+# same reason — deliberately has NO [Install] section, so `systemctl enable`
+# has nothing to symlink and this unit will not start at boot even if
+# `systemctl enable --now multi-user.target`-style bring-up runs across the
+# rest of quadlets/. See quadlets/README.md "Enabling ironlog-vector" for the
+# exact first-boot-to-AWS-go-live steps.
+[Unit]
+Description=ironlog SIEM — Vector aggregator (AWS ingestion: CloudTrail/GuardDuty/VPC Flow/S3 Access via SQS+S3)
+After=ironlog-clickhouse.service
+Requires=ironlog-clickhouse.service
+
+[Container]
+Image=docker.io/timberio/vector:0.57.0-debian
+ContainerName=ironlog-vector
+Network=ironlog.network
+NetworkAlias=vector
+
+Environment=VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true
+Environment=CH_VECTOR_PASSWORD=$CH_VECTOR_PASSWORD
+# compose defaults AWS_REGION to us-east-1 via ${AWS_REGION:-us-east-1};
+# systemd/quadlet has no ${VAR:-default} fallback syntax. ASSUMPTION: the
+# secret resolver that generates ironlog.env always writes a concrete
+# AWS_REGION value (defaulting to us-east-1 itself if unset), so this is a
+# straight substitution, not a default. Flagged in quadlets/README.md.
+Environment=AWS_REGION=$AWS_REGION
+Environment=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+Environment=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+Environment=SQS_URL_CLOUDTRAIL=$SQS_URL_CLOUDTRAIL
+Environment=SQS_URL_GUARDDUTY=$SQS_URL_GUARDDUTY
+Environment=SQS_URL_VPCFLOW=$SQS_URL_VPCFLOW
+Environment=SQS_URL_S3ACCESS=$SQS_URL_S3ACCESS
+
+Volume=/opt/ironlog/vector/vector.yaml:/etc/vector/vector.yaml:ro,Z
+Volume=/var/lib/ironlog/vector-buffer:/var/lib/vector:Z
+
+# compose leaves the :8088 splunk_hec port commented out for this service
+# (that port belongs to vector-hosts) — no PublishPort here, matching compose.
+
+[Service]
+EnvironmentFile=/etc/ironlog/ironlog.env
+Restart=on-failure
+
+# Deliberately no [Install] section — see [Unit] Description above.

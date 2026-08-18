@@ -1,0 +1,40 @@
+# Translated from docker-compose.yml: services.keycloak
+[Unit]
+Description=ironlog SIEM — Keycloak (OIDC SSO + mandatory TOTP MFA)
+# compose: depends_on keycloak-db condition service_healthy.
+# ironlog-keycloak-db.container sets Notify=healthy, so systemd's "active"
+# for that unit already means "podman reports healthy" — plain After+Requires
+# is enough to reproduce the compose condition (no extra wait logic needed).
+After=ironlog-keycloak-db.service
+Requires=ironlog-keycloak-db.service
+
+[Container]
+Image=quay.io/keycloak/keycloak:26.0
+ContainerName=ironlog-keycloak
+Network=ironlog.network
+NetworkAlias=keycloak
+Exec=start --import-realm --http-enabled=true --proxy-headers=xforwarded
+
+Environment=KC_DB=postgres
+# keycloak-db is the NetworkAlias other units must resolve; do not change.
+Environment=KC_DB_URL=jdbc:postgresql://keycloak-db:5432/keycloak
+Environment=KC_DB_USERNAME=keycloak
+Environment=KC_DB_PASSWORD=$KC_DB_PASSWORD
+Environment=KC_HOSTNAME=$KC_HOSTNAME
+# Renames: ironlog.env keeps the .env.example names (KC_ADMIN_USER,
+# KC_ADMIN_PASSWORD, GRAFANA_OAUTH_SECRET); Keycloak's bootstrap-admin env
+# vars and the realm import's client-secret placeholder need different names.
+Environment=KC_BOOTSTRAP_ADMIN_USERNAME=$KC_ADMIN_USER
+Environment=KC_BOOTSTRAP_ADMIN_PASSWORD=$KC_ADMIN_PASSWORD
+Environment=GRAFANA_CLIENT_SECRET=$GRAFANA_OAUTH_SECRET
+
+Volume=/opt/ironlog/keycloak/realm-export:/opt/keycloak/data/import:ro,Z
+
+PublishPort=8080:8080
+
+[Service]
+EnvironmentFile=/etc/ironlog/ironlog.env
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target default.target

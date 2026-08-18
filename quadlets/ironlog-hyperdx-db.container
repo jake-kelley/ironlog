@@ -1,0 +1,28 @@
+# Translated from docker-compose.yml: services.hyperdx-db
+[Unit]
+Description=ironlog SIEM — MongoDB (HyperDX app state: users/dashboards/searches only, no audit data)
+
+[Container]
+Image=docker.io/library/mongo:7.0
+ContainerName=ironlog-hyperdx-db
+Network=ironlog.network
+NetworkAlias=hyperdx-db
+
+Environment=MONGO_INITDB_ROOT_USERNAME=hyperdx
+# Same name in compose and ironlog.env — no rename needed.
+Environment=MONGO_INITDB_ROOT_PASSWORD=$HYPERDX_DB_PASSWORD
+
+Volume=/var/lib/ironlog/hyperdx-db:/data/db:Z
+
+HealthCmd=mongosh --quiet --eval "db.adminCommand('ping').ok"
+HealthInterval=10s
+HealthTimeout=5s
+HealthRetries=10
+Notify=healthy
+
+[Service]
+EnvironmentFile=/etc/ironlog/ironlog.env
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target default.target

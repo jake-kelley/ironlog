@@ -1,0 +1,45 @@
+# Translated from docker-compose.yml: services.hyperdx-auth
+# SSO gate for HyperDX: browser -> :8081 -> Keycloak OIDC (+TOTP) -> proxy to
+# the unpublished hyperdx container. Only siem_* realm roles pass.
+[Unit]
+Description=ironlog SIEM — oauth2-proxy (Keycloak OIDC gate in front of HyperDX)
+# compose: depends_on keycloak started, hyperdx started (no health condition
+# on either) — plain After, no Requires.
+After=ironlog-keycloak.service ironlog-hyperdx.service
+
+[Container]
+Image=quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
+ContainerName=ironlog-hyperdx-auth
+Network=ironlog.network
+NetworkAlias=hyperdx-auth
+
+Environment=OAUTH2_PROXY_PROVIDER=keycloak-oidc
+Environment=OAUTH2_PROXY_CLIENT_ID=hyperdx
+Environment=OAUTH2_PROXY_EMAIL_DOMAINS=*
+Environment=OAUTH2_PROXY_ALLOWED_ROLES=siem_admin,siem_analyst,siem_auditor
+# hyperdx is the NetworkAlias of the unpublished HyperDX container.
+Environment=OAUTH2_PROXY_UPSTREAMS=http://hyperdx:8080
+Environment=OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
+# compose hardcoded http://localhost:8081 here because it only ever ran on the
+# developer's own machine. On a real appliance the browser reaches this box by
+# FQDN, so first boot derives HYPERDX_PUBLIC_URL from APPLIANCE_FQDN into
+# ironlog.env; a localhost literal would make OIDC login fail for every user.
+Environment=OAUTH2_PROXY_REDIRECT_URL=$HYPERDX_PUBLIC_URL/oauth2/callback
+# Derived from APPLIANCE_TLS by first boot: true behind TLS, false on plain HTTP.
+Environment=OAUTH2_PROXY_COOKIE_SECURE=$OAUTH2_PROXY_COOKIE_SECURE
+Environment=OAUTH2_PROXY_SKIP_PROVIDER_BUTTON=true
+
+Environment=OAUTH2_PROXY_OIDC_ISSUER_URL=$KC_PUBLIC_URL/realms/siem
+# Rename: ironlog.env carries HYPERDX_OAUTH_SECRET (.env.example name).
+Environment=OAUTH2_PROXY_CLIENT_SECRET=$HYPERDX_OAUTH_SECRET
+# Same name in compose and ironlog.env — no rename needed.
+Environment=OAUTH2_PROXY_COOKIE_SECRET=$OAUTH2_PROXY_COOKIE_SECRET
+
+PublishPort=8081:4180
+
+[Service]
+EnvironmentFile=/etc/ironlog/ironlog.env
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target default.target

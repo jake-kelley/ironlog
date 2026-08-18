@@ -1,0 +1,112 @@
+# appliance.conf.example — ironlog first-boot configuration.
+#
+# Copy of what ironlog-firstboot.sh expects, either as the literal content
+# of EC2 user-data (preferred — set at instance launch, per-account/
+# per-enclave, nothing baked into the AMI) or, if user-data is empty/
+# unreachable (e.g. IMDS blocked by policy), as the file
+# /etc/ironlog/appliance.conf on the instance itself.
+#
+# Format: one KEY=VALUE per line. '#' starts a comment. Order doesn't
+# matter. Not shell syntax — no quoting, no $VAR expansion, no command
+# substitution; values are read as literal text (see ironlog-firstboot.sh
+# parse_conf — this is deliberate, so a malformed value can't execute code).
+#
+# Every VALUE is either:
+#   - a literal (used as-is — hostnames, usernames, plain URLs)
+#   - ssm://<parameter-path>        AWS SSM Parameter Store (WithDecryption)
+#   - asm://<secret-id>[#json-key]  AWS Secrets Manager (whole secret, or one
+#                                   key of a JSON-object secret)
+#   - file:///absolute/path         read from local disk (air-gapped
+#                                   enclaves with no AWS secrets service —
+#                                   operator pre-stages the file, e.g. via
+#                                   cloud-init write_files, before first boot)
+#   - generate:<bytes>              generate + persist a random value on
+#                                   first boot (currently only meaningful
+#                                   for OAUTH2_PROXY_COOKIE_SECRET below)
+#
+# See scripts/firstboot/secret-resolver.sh for the resolver implementation
+# and scripts/firstboot/README.md for the full operator runbook.
+
+# --- Appliance identity (not secrets; required) ---------------------------
+
+# This instance's own hostname, as reachable by the browsers/agents that
+# will use it. Used to derive KC_HOSTNAME, KC_PUBLIC_URL, and
+# GRAFANA_ROOT_URL below (only if you don't override those explicitly).
+APPLIANCE_FQDN=siem.example.com
+
+# oidc  = on-box Keycloak, the full stack as documented in the top-level
+#         README/CLAUDE.md. Grafana + HyperDX both work.
+# ldap  = ClickHouse LDAP external directory + Grafana against LDAP.
+#         *** NOT CURRENTLY SUPPORTED BY THE QUADLET UNITS *** — see
+#         scripts/firstboot/README.md "The HyperDX auth conflict" and "ldap
+#         / local mode limitations". First boot will disable Keycloak,
+#         Grafana, HyperDX, and the HyperDX auth gate in this mode; only
+#         ClickHouse + log ingestion (vector-hosts) will be running.
+# local = no external IdP at all. Same limitation as ldap above.
+APPLIANCE_MODE=oidc
+
+# true = derive https:// URLs for Keycloak/Grafana (assumes a TLS
+#        terminator in front, or that the container itself is doing TLS —
+#        neither is configured by this script; see README.md).
+# false = derive http:// URLs (plain HTTP, e.g. a closed lab network).
+APPLIANCE_TLS=true
+
+# --- ClickHouse (required in every mode) -----------------------------------
+
+CH_ADMIN_USER=siem_admin
+CH_ADMIN_PASSWORD=ssm:///ironlog/prod/ch_admin_password
+CH_VECTOR_PASSWORD=ssm:///ironlog/prod/ch_vector_password
+CH_GRAFANA_ANALYST_PASSWORD=ssm:///ironlog/prod/ch_grafana_analyst_password
+CH_GRAFANA_AUDITOR_PASSWORD=ssm:///ironlog/prod/ch_grafana_auditor_password
+CH_HYPERDX_PASSWORD=ssm:///ironlog/prod/ch_hyperdx_password
+
+# --- Vector (host/K8s ingestion; always on regardless of mode) ------------
+
+SPLUNK_HEC_TOKEN=ssm:///ironlog/prod/splunk_hec_token
+
+# --- Keycloak / Grafana / HyperDX (only actually used in oidc mode; still
+#     resolved best-effort in ldap/local mode but not required there) ------
+
+KC_DB_PASSWORD=ssm:///ironlog/prod/kc_db_password
+KC_ADMIN_USER=kcadmin
+KC_ADMIN_PASSWORD=ssm:///ironlog/prod/kc_admin_password
+# Usually leave these two unset — derived from APPLIANCE_FQDN/APPLIANCE_TLS.
+# Uncomment only for an unusual topology (e.g. Keycloak reachable through a
+# load balancer on a different host/port than this appliance itself):
+#KC_HOSTNAME=https://sso.example.com
+#KC_PUBLIC_URL=https://sso.example.com
+
+# Usually leave unset — derived from APPLIANCE_FQDN/APPLIANCE_TLS. Uncomment
+# to override:
+#GRAFANA_ROOT_URL=https://siem.example.com:3000
+GRAFANA_ADMIN_USER=breakglass_admin
+GRAFANA_ADMIN_PASSWORD=ssm:///ironlog/prod/grafana_admin_password
+# Must match the "grafana" Keycloak client secret (realm-export imports a
+# placeholder; rotate it in the Keycloak admin console, then update this).
+GRAFANA_OAUTH_SECRET=asm://ironlog/prod/keycloak#grafana_client_secret
+
+HYPERDX_OAUTH_SECRET=asm://ironlog/prod/keycloak#hyperdx_client_secret
+HYPERDX_DB_PASSWORD=ssm:///ironlog/prod/hyperdx_db_password
+# 32 raw bytes — oauth2-proxy's cookie secret requirement (16/24/32 bytes).
+# generate: persists the value under /etc/ironlog/generated/ on first boot,
+# so it survives reboots and does not invalidate sessions on every restart.
+# Prefer a real ssm:// or asm:// entry instead if you need the SAME secret
+# shared across a fleet of appliances (generate: is per-instance).
+OAUTH2_PROXY_COOKIE_SECRET=generate:32
+
+# --- AWS ingestion (Phase 2) — optional. Leave blank/unset to keep
+#     ironlog-vector.service disabled; set any SQS_URL_* to enable it. -----
+
+#AWS_REGION=us-east-1
+#AWS_ACCESS_KEY_ID=ssm:///ironlog/prod/aws_access_key_id
+#AWS_SECRET_ACCESS_KEY=ssm:///ironlog/prod/aws_secret_access_key
+#SQS_URL_CLOUDTRAIL=https://sqs.us-east-1.amazonaws.com/123456789012/ironlog-cloudtrail
+#SQS_URL_GUARDDUTY=https://sqs.us-east-1.amazonaws.com/123456789012/ironlog-guardduty
+#SQS_URL_VPCFLOW=https://sqs.us-east-1.amazonaws.com/123456789012/ironlog-vpcflow
+#SQS_URL_S3ACCESS=https://sqs.us-east-1.amazonaws.com/123456789012/ironlog-s3access
+
+# --- Air-gapped / no AWS secrets service example ---------------------------
+# In an enclave with no SSM/Secrets Manager reachable, pre-stage material on
+# disk (e.g. via cloud-init write_files at launch) and point at it with
+# file://. Example, not active by default:
+#CH_ADMIN_PASSWORD=file:///etc/ironlog/seed/ch_admin_password

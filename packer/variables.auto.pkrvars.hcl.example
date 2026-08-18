@@ -1,0 +1,42 @@
+# Copy to variables.auto.pkrvars.hcl (git-ignored — do NOT commit real
+# region/account overrides here if they're environment-specific) and edit.
+# Anything left commented out uses the default from variables.pkr.hcl.
+
+# --- region / partition ---
+# aws_region = "us-east-1"
+
+# GovCloud example — also requires AWS credentials/profile scoped to a
+# GovCloud account; a commercial-partition profile cannot see GovCloud
+# resources. See README.md "GovCloud" section.
+# aws_region = "us-gov-west-1"
+
+# --- build instance ---
+# instance_type = "c7g.xlarge"
+
+# --- source AMI filters ---
+# rhel_ami_owner        = "309956199498"
+# rhel_ami_name_filter  = "RHEL-9*_HVM-*-arm64-*"
+# rocky_ami_owner       = "792107900819"  # CONFIRM before real use — see variables.pkr.hcl comment
+# rocky_ami_name_filter = "Rocky-9-*-aarch64-*"
+
+# --- volumes ---
+# root_volume_size = 60   # GiB, gp3 — do not lower; STIG LV layout needs ~26 alone
+# data_volume_size = 100  # GiB, gp3 — /var/lib/ironlog, second EBS volume
+# encrypt_volumes  = true
+# kms_key_id       = ""   # CMK ARN, empty = account default aws/ebs key
+
+# --- networking ---
+# vpc_id    = ""
+# subnet_id = ""
+
+# --- AMI metadata ---
+# ami_name_prefix = "ironlog"
+# ami_description = "ironlog SIEM all-in-one appliance"
+# build_git_sha   = "unknown"   # override at invoke time, see README.md
+# extra_tags = {
+#   Environment = "dev"
+#   Owner       = "your-name"
+# }
+
+# Copy the finished AMI to additional regions in the same build run.
+# ami_regions = []

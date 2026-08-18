@@ -1,0 +1,31 @@
+# Translated from docker-compose.yml: services.keycloak-db
+[Unit]
+Description=ironlog SIEM — Postgres (Keycloak state)
+
+[Container]
+Image=docker.io/library/postgres:16-alpine
+ContainerName=ironlog-keycloak-db
+Network=ironlog.network
+NetworkAlias=keycloak-db
+
+Environment=POSTGRES_DB=keycloak
+Environment=POSTGRES_USER=keycloak
+# Rename: ironlog.env carries KC_DB_PASSWORD (matches .env.example); postgres
+# image expects POSTGRES_PASSWORD. See ironlog-clickhouse.container's comment
+# and quadlets/README.md for how the $VAR substitution works.
+Environment=POSTGRES_PASSWORD=$KC_DB_PASSWORD
+
+Volume=/var/lib/ironlog/keycloak-db:/var/lib/postgresql/data:Z
+
+HealthCmd=pg_isready -U keycloak
+HealthInterval=10s
+HealthTimeout=5s
+HealthRetries=10
+Notify=healthy
+
+[Service]
+EnvironmentFile=/etc/ironlog/ironlog.env
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target default.target

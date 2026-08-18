@@ -1,0 +1,53 @@
+# Translated from docker-compose.yml: services.grafana
+[Unit]
+Description=ironlog SIEM — Grafana OSS (dashboards/alerts, OIDC login)
+# compose: depends_on clickhouse condition service_healthy, keycloak
+# condition service_started. clickhouse gates on health (Notify=healthy);
+# keycloak only needs to have started, so plain After (no Requires) for it.
+After=ironlog-clickhouse.service ironlog-keycloak.service
+Requires=ironlog-clickhouse.service
+
+[Container]
+Image=docker.io/grafana/grafana-oss:11.4.0
+ContainerName=ironlog-grafana
+Network=ironlog.network
+NetworkAlias=grafana
+
+# AIR-GAP BLOCKER (see quadlets/README.md): this pulls grafana-clickhouse-
+# datasource from grafana.com at container start and needs network egress.
+# Carried over unchanged from compose; NOT solved here.
+Environment=GF_INSTALL_PLUGINS=grafana-clickhouse-datasource
+Environment=GF_AUTH_DISABLE_LOGIN_FORM=true
+Environment=GF_AUTH_BASIC_ENABLED=false
+Environment=GF_USERS_ALLOW_SIGN_UP=false
+Environment=GF_AUTH_GENERIC_OAUTH_ENABLED=true
+Environment=GF_AUTH_GENERIC_OAUTH_NAME=Keycloak
+Environment=GF_AUTH_GENERIC_OAUTH_CLIENT_ID=grafana
+Environment=GF_AUTH_GENERIC_OAUTH_SCOPES=openid profile email
+Environment=GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP=true
+Environment=GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN=true
+Environment=GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_STRICT=true
+Environment="GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH=contains(roles[*], 'siem_admin') && 'Admin' || contains(roles[*], 'siem_analyst') && 'Editor' || contains(roles[*], 'siem_auditor') && 'Viewer'"
+
+# Renames / URL-composition from ironlog.env's .env.example names:
+Environment=GF_SERVER_ROOT_URL=$GRAFANA_ROOT_URL
+Environment=GF_SECURITY_ADMIN_USER=$GRAFANA_ADMIN_USER
+Environment=GF_SECURITY_ADMIN_PASSWORD=$GRAFANA_ADMIN_PASSWORD
+Environment=GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET=$GRAFANA_OAUTH_SECRET
+Environment=GF_AUTH_GENERIC_OAUTH_AUTH_URL=$KC_PUBLIC_URL/realms/siem/protocol/openid-connect/auth
+Environment=GF_AUTH_GENERIC_OAUTH_TOKEN_URL=$KC_PUBLIC_URL/realms/siem/protocol/openid-connect/token
+Environment=GF_AUTH_GENERIC_OAUTH_API_URL=$KC_PUBLIC_URL/realms/siem/protocol/openid-connect/userinfo
+Environment=CH_GRAFANA_ANALYST_PASSWORD=$CH_GRAFANA_ANALYST_PASSWORD
+Environment=CH_GRAFANA_AUDITOR_PASSWORD=$CH_GRAFANA_AUDITOR_PASSWORD
+
+Volume=/var/lib/ironlog/grafana:/var/lib/grafana:Z
+Volume=/opt/ironlog/grafana/provisioning:/etc/grafana/provisioning:ro,Z
+
+PublishPort=3000:3000
+
+[Service]
+EnvironmentFile=/etc/ironlog/ironlog.env
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target default.target

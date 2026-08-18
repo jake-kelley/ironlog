@@ -1,0 +1,5 @@
+[Unit]
+Description=ironlog SIEM internal network (replaces the default docker-compose bridge)
+
+[Network]
+NetworkName=ironlog-siem
