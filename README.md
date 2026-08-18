@@ -23,23 +23,55 @@ each panel tagged with its control ID. Querying: [docs/query-guide.md](docs/quer
 
 ## Architecture
 
-    Windows hosts ── vector agent (Security/System/PowerShell) ──┐
-    Linux hosts ──── vector agent (journald + auditd) ───────────┤ :6000 (native)
-    K8s clusters ─── vector DaemonSet ───────────────────────────┤ :8088 (HEC)
-                                                                 v
-                                             [ vector-hosts aggregator ]
-    AWS CloudTrail/GuardDuty/VPCFlow/S3 ── S3 -> SQS ── [ vector (aws) ]
-                                                                 |
-                                     normalize (VRL) -> INSERT as svc_vector
-                                                                 v
-                              [ ClickHouse ]  siem.* tables + audit.query_archive
-                                   ^     ^
-                     SQL, dashboards,    | search/investigate (svc_hyperdx)
-                     alerts (svc_grafana_*)                    |
-                              [ Grafana ]              [ HyperDX ]
-                                   ^                        ^
-                                   |                 [ oauth2-proxy ]
-                                   +── OIDC ──[ Keycloak + TOTP MFA ]── OIDC ──+
+```mermaid
+flowchart TB
+    subgraph sources["Log sources"]
+        win["Windows hosts<br/>vector agent<br/><i>Security / System / PowerShell</i>"]
+        lin["Linux hosts<br/>vector agent<br/><i>journald + auditd</i>"]
+        k8s["Kubernetes clusters<br/>vector DaemonSet"]
+        aws["AWS<br/><i>CloudTrail / GuardDuty<br/>VPC Flow / S3 Access</i>"]
+    end
+
+    subgraph ingest["Ingest tier — writes as svc_vector (INSERT-only)"]
+        agg["vector-hosts aggregator<br/><b>:6000</b> native · <b>:8088</b> HEC"]
+        vaws["vector (aws profile)<br/><i>S3 → SQS</i>"]
+    end
+
+    ch[("<b>ClickHouse</b><br/>siem.* tables<br/>audit.query_archive")]
+
+    subgraph ui["Browser tier — read-only service accounts"]
+        graf["Grafana<br/><i>dashboards · SQL · alerts</i>"]
+        prox["oauth2-proxy<br/><i>requires a siem_* realm role</i>"]
+        hdx["HyperDX<br/><i>log search · investigations</i>"]
+    end
+
+    kc{{"Keycloak<br/>mandatory TOTP MFA"}}
+    analyst(["Analysts · Auditors · Admins"])
+
+    win  --> agg
+    lin  --> agg
+    k8s  --> agg
+    aws  --> vaws
+
+    agg  -- "normalize (VRL)" --> ch
+    vaws -- "normalize (VRL)" --> ch
+
+    ch -- "svc_grafana_analyst<br/>svc_grafana_auditor" --> graf
+    ch -- "svc_hyperdx" --> hdx
+    prox --> hdx
+
+    analyst --> graf
+    analyst --> prox
+    graf -. OIDC .-> kc
+    prox -. OIDC .-> kc
+
+    ch -. "every query, incl. on a user's behalf" .-> audit["audit.query_archive<br/><i>append-only · AU-9</i>"]
+
+    classDef store fill:#1f2937,stroke:#60a5fa,stroke-width:2px,color:#f9fafb
+    classDef auth fill:#3f2937,stroke:#f59e0b,stroke-width:2px,color:#f9fafb
+    class ch,audit store
+    class kc,prox auth
+```
 
 Every human enters through Keycloak. Every query any UI runs is captured in
 `audit.query_archive` (AU-9). Ingest happens only through the write-only
@@ -89,6 +121,12 @@ control-mapping.
     docs/                        OKF v0.1 knowledge bundle (runbooks, policies, catalog)
     scripts/okf-validate.py      OKF conformance checker for docs/
 
+    --- appliance build (Phase 8) ---
+    packer/                      HCL2 build: RHEL 9 (shipping) / Rocky 9 (dev)
+    quadlets/                    podman systemd units — the compose stack, without compose
+    scripts/ami/                 build-time: partitioning, baseline, STIG, FIPS, cleanup
+    scripts/firstboot/           launch-time: config resolution, schema reconciliation
+
 ## UIs
 
 | URL | What | Auth |
@@ -100,6 +138,11 @@ control-mapping.
 Browser prerequisite: `127.0.0.1 keycloak` in the hosts file so the browser
 and containers agree on the Keycloak hostname (admin PowerShell:
 `Add-Content $env:SystemRoot\System32\drivers\etc\hosts "127.0.0.1 keycloak"`).
+
+On the **appliance** the same three UIs are published on the same ports, but at
+`APPLIANCE_FQDN` instead of localhost — no hosts-file entry, because Keycloak is
+reached by the appliance's own FQDN. ClickHouse (`:8123`/`:9000`) stays bound to
+loopback in both deployments and is never published.
 
 Dashboards (Grafana -> SIEM folder):
 - **800-53 Logging Evidence — Weekly ISSO Review**: the weekly audit pass —
@@ -127,6 +170,42 @@ New to querying? Start with [docs/query-guide.md](docs/query-guide.md).
 
 `bootstrap.sh` refuses to overwrite an existing `.env`. Fully wipe with
 `docker compose down -v` (destroys data).
+
+## Deploy as an EC2 AMI appliance
+
+The same stack also ships as a single self-contained EC2 image that runs in any
+AWS partition (commercial, GovCloud, C2S/SC2S). No compose, no internet at
+launch: every container image is baked in, and podman systemd units
+(`quadlets/`) replace `docker-compose.yml` one-for-one.
+
+1. Build: `cd packer && packer build -var "build_git_sha=$(git rev-parse --short HEAD)" .`
+   Use `-only=ironlog.amazon-ebs.rhel9` for anything shipping or
+   compliance-touching; the `rocky9` source is for development only and its
+   STIG/FIPS output is functional evidence, not audit evidence.
+2. Launch with the appliance config as **EC2 user-data** (see
+   [scripts/firstboot/appliance.conf.example](scripts/firstboot/appliance.conf.example)).
+   First boot **hard-fails by design** if no config is found — an unconfigured
+   appliance refuses to start rather than come up with default credentials.
+3. Every value is a literal, or `ssm://`, `asm://`, `file:///` (air-gapped
+   enclaves), or `generate:<bytes>`. Nothing secret is baked into the AMI.
+4. Register the HyperDX local account as in step 4 above.
+
+What first boot does: resolves secrets, derives the Keycloak/Grafana URLs from
+`APPLIANCE_FQDN` + `APPLIANCE_TLS`, mounts the data volume at
+`/var/lib/ironlog`, then reconciles the ClickHouse schema and service accounts
+**on every boot** (`ironlog-schema.service`) — all DDL is
+`CREATE ... IF NOT EXISTS`, and the unit fails loudly with recovery
+instructions if the 7 `siem.*` tables, `audit.query_archive` and 4 service
+accounts aren't all present afterwards.
+
+Disk layout is STIG-shaped: separate LVs for `/home`, `/var`, `/var/log`,
+`/var/log/audit`, `/var/tmp`, `/tmp`, with SIEM data on its own EBS volume at
+`/var/lib/ironlog`. FIPS mode is enabled at build time and the build fails if
+`fips=1` isn't live on the rebooted kernel.
+
+Details: [packer/README.md](packer/README.md),
+[scripts/firstboot/README.md](scripts/firstboot/README.md),
+[quadlets/README.md](quadlets/README.md).
 
 ## Data source onboarding
 
@@ -240,6 +319,24 @@ Hard-won lessons encoded in this repo — check here before debugging:
   shipper endpoint to the aggregator IP.
 - **HyperDX DEFAULT_CONNECTIONS/DEFAULT_SOURCES seed only when the first user
   registers**, and malformed JSON is skipped silently.
+- **oauth2-proxy 403 "You do not have permission to access this resource"
+  with the user's email resolved in the log** means *authorization* failed, not
+  authentication — don't go looking at the issuer, client secret or redirect
+  URI. `OAUTH2_PROXY_ALLOWED_ROLES` is matched against `realm_access.roles`,
+  which Keycloak only emits if the client has the **`roles` client scope**.
+- **Keycloak realms default to `sslRequired=external`**, which answers any
+  browser arriving over plain HTTP from a non-private address with
+  `403 {"error_description":"HTTPS required"}`. Put TLS in front, or relax it
+  per-realm for a closed lab.
+- **Keycloak cold start is ~50 s** (Postgres schema init, 148 changesets, realm
+  import). Anything doing OIDC discovery against it at boot needs a restart
+  budget larger than that or it will exhaust its retries first.
+- **ClickHouse's docker entrypoint runs `/docker-entrypoint-initdb.d` only when
+  the data directory is empty.** A container that dies partway through init
+  leaves a non-empty `metadata/` and the DDL is then skipped *forever* on every
+  subsequent start — a healthy-looking server with no schema. `SELECT 1`
+  healthchecks pass against an empty database, so nothing downstream notices;
+  this is why the appliance reconciles the schema as a separate gated unit.
 - **ClickHouse 24.8 rejects `REFRESH ... APPEND` MVs** (newer + experimental);
   the audit trail uses a standard incremental MV instead. `system.query_log`
   doesn't exist until first flush — DDL runs `SYSTEM FLUSH LOGS` first.
@@ -255,3 +352,37 @@ Hard-won lessons encoded in this repo — check here before debugging:
 - **Phase 6**: detection SQL + alert rules per control family (`detections/`).
 - **Phase 7**: operational cadence — review checklists, evidence exports,
   annual catalog review.
+- **Phase 8 (in progress)**: EC2 AMI appliance. Build pipeline, quadlets,
+  first-boot config resolution and schema reconciliation are done and verified
+  on real hardware (cold boot, FIPS, end-to-end ingest, RBAC). Outstanding:
+  first RHEL 9 build for real compliance evidence, TLS termination, and the
+  OIDC provisioning gaps under *Known issues*.
+
+## Known issues
+
+Verified on real hardware, not yet fixed in this repo:
+
+- **HyperDX login is refused for every user** (`403` from oauth2-proxy) because
+  `keycloak/realm-export/siem-realm.json` omits `roles` from the hyperdx
+  client's `defaultClientScopes`, so `realm_access.roles` is never emitted and
+  `OAUTH2_PROXY_ALLOWED_ROLES` can never match. Affects the compose path *and*
+  the appliance. Workaround until fixed — add the scope and re-login:
+
+      docker exec siem-keycloak /opt/keycloak/bin/kcadm.sh \
+        update clients/<hyperdx-id>/default-client-scopes/<roles-scope-id> -r siem
+
+  Grafana is unaffected: its client carries a `realm-roles-flat` protocol
+  mapper that emits roles independently of the scope.
+- **The appliance never provisions OIDC the way `bootstrap.sh` does.** For the
+  compose path, `bootstrap.sh` rotates the placeholder client secrets and
+  creates the first admin user. First boot does neither, and does not rewrite
+  the realm's `YOUR_GRAFANA_DOMAIN` / `YOUR_HYPERDX_DOMAIN` redirect URIs from
+  `APPLIANCE_FQDN`. A freshly launched appliance therefore has no working
+  browser login until those three are done by hand.
+- **`ironlog-hyperdx-auth` fails on first boot** by losing the startup race
+  with Keycloak (see the ~50 s note under field notes); `systemctl restart
+  ironlog-hyperdx-auth` clears it.
+- **Packer leaks one 100 GiB volume per build** — the builder's `/dev/sdb`
+  carries `delete_on_termination = false` in `packer/sources.pkr.hcl`. Fixing
+  it needs an explicit `ami_block_device_mappings`, because `CreateImage`
+  otherwise copies the flag onto every launched appliance's data volume.
