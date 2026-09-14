@@ -12,12 +12,9 @@ locals {
   # truth to read from instead of hardcoding the list twice.
   container_images = join(" ", [
     "docker.io/clickhouse/clickhouse-server:24.8",
-    "docker.io/library/postgres:16-alpine",
-    "quay.io/keycloak/keycloak:26.0",
     "docker.io/grafana/grafana-oss:11.4.0",
     "docker.hyperdx.io/hyperdx/hyperdx:2.19.0",
     "docker.io/library/mongo:7.0",
-    "quay.io/oauth2-proxy/oauth2-proxy:v7.15.3",
     "docker.io/timberio/vector:0.57.0-debian",
   ])
 }
@@ -43,7 +40,7 @@ build {
     execute_command = "sudo bash '{{ .Path }}'"
   }
 
-  # --- 3. repo config -> /opt/ironlog/{clickhouse,grafana,keycloak,vector} ---
+  # --- 3. repo config -> /opt/ironlog/{clickhouse,grafana,vector} ---
   # Stage as the SSH user under /tmp (file provisioner has no sudo of its
   # own), then move into place as root in one follow-up shell provisioner.
   provisioner "shell" {
@@ -63,10 +60,6 @@ build {
     destination = "/tmp/ironlog-stage/grafana"
   }
   provisioner "file" {
-    source      = "${path.root}/../keycloak"
-    destination = "/tmp/ironlog-stage/keycloak"
-  }
-  provisioner "file" {
     source      = "${path.root}/../vector"
     destination = "/tmp/ironlog-stage/vector"
   }
@@ -77,12 +70,12 @@ build {
       "sudo mkdir -p /opt/ironlog",
       "sudo cp -r /tmp/ironlog-stage/clickhouse /opt/ironlog/clickhouse",
       "sudo cp -r /tmp/ironlog-stage/grafana /opt/ironlog/grafana",
-      "sudo cp -r /tmp/ironlog-stage/keycloak /opt/ironlog/keycloak",
       "sudo cp -r /tmp/ironlog-stage/vector /opt/ironlog/vector",
+      "sudo rm -rf /opt/ironlog/keycloak",
       "sudo chown -R root:root /opt/ironlog",
       "sudo find /opt/ironlog -type d -exec chmod 0755 {} \\;",
       "sudo find /opt/ironlog -type f -exec chmod 0644 {} \\;",
-      "sudo rm -rf /tmp/ironlog-stage/clickhouse /tmp/ironlog-stage/grafana /tmp/ironlog-stage/keycloak /tmp/ironlog-stage/vector",
+      "sudo rm -rf /tmp/ironlog-stage/clickhouse /tmp/ironlog-stage/grafana /tmp/ironlog-stage/vector",
     ]
   }
 
@@ -100,6 +93,10 @@ build {
     remote_folder = "/opt/ironlog-build"
     inline = [
       "sudo mkdir -p /etc/containers/systemd",
+      # Rebuilds can begin from a staged tree carrying prior appliance units.
+      # Remove retired on-box IdP/proxy definitions only; never touch data
+      # under /var/lib/ironlog, where existing app accounts live.
+      "sudo rm -f /etc/containers/systemd/ironlog-keycloak.container /etc/containers/systemd/ironlog-keycloak-db.container /etc/containers/systemd/ironlog-hyperdx-auth.container",
       "sudo find /tmp/ironlog-stage/quadlets -maxdepth 1 -type f \\( -name '*.container' -o -name '*.network' \\) -exec cp {} /etc/containers/systemd/ \\;",
       "sudo chown -R root:root /etc/containers/systemd",
       "sudo chmod 0644 /etc/containers/systemd/*.container /etc/containers/systemd/*.network",
@@ -127,11 +124,19 @@ build {
     destination = "/tmp/ironlog-stage/firstboot"
   }
 
+  # Shared helper is owned outside this appliance surface. It creates the
+  # native HyperDX account after the app is up; no IdP is bundled on-box.
+  provisioner "file" {
+    source      = "${path.root}/../scripts/bootstrap-hyperdx-local.sh"
+    destination = "/tmp/ironlog-stage/bootstrap-hyperdx-local.sh"
+  }
+
   provisioner "shell" {
     remote_folder = "/opt/ironlog-build"
     inline = [
       "sudo mkdir -p /usr/local/lib/ironlog",
       "sudo cp -r /tmp/ironlog-stage/firstboot/. /usr/local/lib/ironlog/",
+      "sudo install -m 0755 /tmp/ironlog-stage/bootstrap-hyperdx-local.sh /usr/local/lib/ironlog/bootstrap-hyperdx-local.sh",
       "sudo chown -R root:root /usr/local/lib/ironlog",
       "sudo find /usr/local/lib/ironlog -type f -name '*.sh' -exec chmod 0755 {} \\;",
       # Install and enable the first-boot unit. Copying scripts/firstboot/ into
@@ -155,8 +160,11 @@ build {
       # volume permanently and the container healthcheck (SELECT 1) still
       # passes. Measured on a real c7g.large 2026-08-18.
       "sudo install -m 0644 /usr/local/lib/ironlog/ironlog-schema.service /etc/systemd/system/ironlog-schema.service",
+      "sudo install -m 0644 /usr/local/lib/ironlog/ironlog-bootstrap-hyperdx-local.service /etc/systemd/system/ironlog-bootstrap-hyperdx-local.service",
+      "sudo rm -f /etc/systemd/system/ironlog-keycloak.service /etc/systemd/system/ironlog-keycloak-db.service /etc/systemd/system/ironlog-hyperdx-auth.service",
       "sudo systemctl daemon-reload",
       "sudo systemctl enable ironlog-schema.service",
+      "sudo systemctl enable ironlog-bootstrap-hyperdx-local.service",
       "sudo rm -rf /tmp/ironlog-stage",
     ]
   }

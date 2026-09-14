@@ -87,14 +87,15 @@ else
 	die "no appliance config found: EC2 user-data was empty/unreachable and $CONF_FALLBACK does not exist. See appliance.conf.example."
 fi
 
-MODE="${CONF[APPLIANCE_MODE]:-oidc}"
+MODE="${CONF[APPLIANCE_MODE]:-local}"
 case "$MODE" in
-	oidc|ldap|local) ;;
-	*) die "APPLIANCE_MODE must be one of oidc, ldap, local (got '$MODE')" ;;
+	local) ;;
+	oidc|ldap) die "APPLIANCE_MODE=$MODE is deferred: this AMI ships local app authentication only; external IdP integration is not implemented" ;;
+	*) die "APPLIANCE_MODE must be local (oidc and ldap are deferred; got '$MODE')" ;;
 esac
 
 FQDN="${CONF[APPLIANCE_FQDN]:-}"
-[[ -n "$FQDN" ]] || die "APPLIANCE_FQDN is required (the appliance's own public/internal hostname; used to derive KC_HOSTNAME/KC_PUBLIC_URL/GRAFANA_ROOT_URL)"
+[[ -n "$FQDN" ]] || die "APPLIANCE_FQDN is required (the appliance's public/internal hostname; used to derive Grafana and HyperDX URLs)"
 
 TLS="${CONF[APPLIANCE_TLS]:-true}"
 case "$TLS" in
@@ -111,17 +112,9 @@ log "mode=$MODE fqdn=$FQDN tls=$TLS"
 #    a TLS-terminating load balancer in front with a different public port).
 # ---------------------------------------------------------------------------
 
-: "${CONF[KC_HOSTNAME]:=${SCHEME}://${FQDN}:8080}"
-: "${CONF[KC_PUBLIC_URL]:=${CONF[KC_HOSTNAME]}}"
 : "${CONF[GRAFANA_ROOT_URL]:=${SCHEME}://${FQDN}:3000}"
-# HyperDX is reached only through oauth2-proxy on :8081. Both the proxy's OIDC
-# redirect URL and HyperDX's own FRONTEND_URL must be this externally-reachable
-# address, not localhost — compose hardcoded localhost because it only ever ran
-# on the developer's own machine.
+# HyperDX native auth is served directly on host port 8081.
 : "${CONF[HYPERDX_PUBLIC_URL]:=${SCHEME}://${FQDN}:8081}"
-# oauth2-proxy must only mark its session cookie Secure when the appliance is
-# actually served over TLS; setting it true on plain HTTP silently breaks login.
-: "${CONF[OAUTH2_PROXY_COOKIE_SECURE]:=${TLS}}"
 : "${CONF[AWS_REGION]:=$(sr_region)}"
 
 # ---------------------------------------------------------------------------
@@ -129,7 +122,7 @@ log "mode=$MODE fqdn=$FQDN tls=$TLS"
 #
 # Names are exactly .env.example's, verbatim (this is the quadlets'
 # EnvironmentFile= contract — see quadlets/README.md "Secret handling").
-# Each entry: NAME  DEFAULT_CONF_KEY(usually same)  REQUIRED_IN_OIDC  REQUIRED_ALWAYS
+# Each entry is NAME and an optional literal/config default.
 # ---------------------------------------------------------------------------
 
 # Vars needed regardless of auth mode (ClickHouse core + always-on vector-hosts).
@@ -139,13 +132,11 @@ CORE_VARS=(
 	SPLUNK_HEC_TOKEN
 )
 
-# Vars only meaningful when the OIDC stack (Keycloak/Grafana/HyperDX+proxy)
-# is actually going to run.
-OIDC_VARS=(
-	KC_DB_PASSWORD KC_ADMIN_USER KC_ADMIN_PASSWORD KC_HOSTNAME KC_PUBLIC_URL
-	GRAFANA_ROOT_URL GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD GRAFANA_OAUTH_SECRET
-	HYPERDX_OAUTH_SECRET HYPERDX_DB_PASSWORD OAUTH2_PROXY_COOKIE_SECRET
-	HYPERDX_PUBLIC_URL OAUTH2_PROXY_COOKIE_SECURE
+# Local application authentication. External OIDC/LDAP remains deferred; no
+# IdP credential is resolved or emitted by this AMI.
+APP_VARS=(
+	GRAFANA_ROOT_URL GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD
+	HYPERDX_DB_PASSWORD HYPERDX_LOCAL_EMAIL HYPERDX_LOCAL_PASSWORD HYPERDX_PUBLIC_URL
 )
 
 # Optional: AWS ingestion (ironlog-vector.service). Empty is valid — that
@@ -156,8 +147,10 @@ AWS_VARS=(AWS_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY SQS_URL_CLOUDTRAIL 
 # secrets, so a minimal appliance.conf doesn't have to spell every one out.
 declare -A VAR_DEFAULT=(
 	[CH_ADMIN_USER]=siem_admin
-	[KC_ADMIN_USER]=kcadmin
-	[GRAFANA_ADMIN_USER]=breakglass_admin
+	[GRAFANA_ADMIN_USER]=admin
+	[GRAFANA_ADMIN_PASSWORD]=IronlogDev123!
+	[HYPERDX_LOCAL_EMAIL]=admin@ironlog.local
+	[HYPERDX_LOCAL_PASSWORD]=IronlogDev123!
 )
 
 declare -A RESOLVED
@@ -180,6 +173,9 @@ resolve_var() {
 		RESOLVED["$name"]=""
 		return 0
 	fi
+	if [[ "$required" == "yes" && -z "$val" ]]; then
+		die "required value '$name' resolved empty from '$uri' — refusing to start with a blank credential"
+	fi
 	RESOLVED["$name"]="$val"
 }
 
@@ -187,15 +183,9 @@ for v in "${CORE_VARS[@]}"; do
 	resolve_var "$v" yes
 done
 
-if [[ "$MODE" == oidc ]]; then
-	for v in "${OIDC_VARS[@]}"; do
-		resolve_var "$v" yes
-	done
-else
-	for v in "${OIDC_VARS[@]}"; do
-		resolve_var "$v" no
-	done
-fi
+for v in "${APP_VARS[@]}"; do
+	resolve_var "$v" yes
+done
 
 for v in "${AWS_VARS[@]}"; do
 	resolve_var "$v" no
@@ -210,7 +200,7 @@ done
 	echo "# re-runs (IRONLOG_FIRSTBOOT_FORCE=1) will overwrite this file."
 	echo "# Variable names match .env.example verbatim; see quadlets/README.md"
 	echo "# \"Secret handling\" for how each quadlet renames/consumes them."
-	for v in "${CORE_VARS[@]}" "${OIDC_VARS[@]}" "${AWS_VARS[@]}"; do
+	for v in "${CORE_VARS[@]}" "${APP_VARS[@]}" "${AWS_VARS[@]}"; do
 		# printf %q-style single-quote escaping so values with spaces/$/quotes
 		# survive systemd's EnvironmentFile parser (which does its own
 		# minimal quoting — a bare double-quoted value is the safe common
@@ -250,7 +240,6 @@ fi
 # issue, so it fails loud rather than fails open.
 declare -A SVC_OWNER=(
 	[clickhouse]="101:101"          # clickhouse/clickhouse-server: user "clickhouse"
-	[keycloak-db]="70:70"           # postgres:16-alpine: user "postgres" (alpine numbering)
 	[grafana]="472:472"             # grafana/grafana-oss: well-known "grafana" uid/gid
 	[hyperdx-db]="999:999"          # mongo:7.0 (debian-based): user "mongodb"
 	[vector-hosts-buffer]="0:0"     # timberio/vector debian image: runs as root by default
@@ -288,9 +277,9 @@ done
 # ---------------------------------------------------------------------------
 
 KNOWN_UNITS=(
-	ironlog-clickhouse.service ironlog-keycloak-db.service ironlog-keycloak.service
-	ironlog-grafana.service ironlog-hyperdx-db.service ironlog-hyperdx.service
-	ironlog-hyperdx-auth.service ironlog-vector-hosts.service ironlog-vector.service
+	ironlog-clickhouse.service ironlog-grafana.service ironlog-hyperdx-db.service
+	ironlog-hyperdx.service ironlog-bootstrap-hyperdx-local.service
+	ironlog-vector-hosts.service ironlog-vector.service
 	# Not a quadlet -- a real /etc/systemd/system unit (see
 	# scripts/firstboot/ironlog-schema.service). It would inherit the ordering
 	# transitively through ironlog-clickhouse.service anyway; listed explicitly
@@ -351,69 +340,16 @@ start_failures=0
 # vector-hosts already pulls it in via Requires=, but it is queued explicitly
 # so that a failure to even queue it is counted as a start failure here.
 CORE_SERVICES=(ironlog-clickhouse.service ironlog-schema.service ironlog-vector-hosts.service)
-OIDC_SERVICES=(
-	ironlog-keycloak-db.service ironlog-keycloak.service ironlog-grafana.service
-	ironlog-hyperdx-db.service ironlog-hyperdx.service ironlog-hyperdx-auth.service
-)
+APP_SERVICES=(ironlog-grafana.service ironlog-hyperdx-db.service ironlog-hyperdx.service)
 
 for unit in "${CORE_SERVICES[@]}"; do
 	start_unit "$unit" || start_failures=$((start_failures + 1))
 done
 
-if [[ "$MODE" == oidc ]]; then
-	for unit in "${OIDC_SERVICES[@]}"; do
-		start_unit "$unit" || start_failures=$((start_failures + 1))
-	done
-	rm -f "$MODE_WARNING_FILE"
-else
-	# --- THE HYPERDX/GRAFANA AUTH CONFLICT ---
-	# OSS HyperDX has no native SSO; its only auth is oauth2-proxy enforcing
-	# Keycloak OIDC+TOTP in front of it (ironlog-hyperdx-auth.container). In
-	# ldap/local mode there is no Keycloak, so an enabled HyperDX would be an
-	# UNAUTHENTICATED UI with SELECT over the entire SIEM. We do not ship
-	# that: ironlog-hyperdx(.service) and ironlog-hyperdx-auth(.service) are
-	# left disabled in ldap/local mode, full stop (see README.md "The HyperDX
-	# auth conflict" for why "bind to loopback instead" was considered and
-	# rejected: PublishPort=8081:4180 is a literal in the checked-in quadlet,
-	# not something first boot can override without editing quadlets/).
-	#
-	# Separately, and more broadly: ironlog-grafana.container hardcodes
-	# GF_AUTH_GENERIC_OAUTH_ENABLED=true / GF_AUTH_DISABLE_LOGIN_FORM=true /
-	# GF_AUTH_BASIC_ENABLED=false as literal Environment= values (not sourced
-	# from ironlog.env), and ironlog-keycloak.container has no LDAP-anything.
-	# There is currently NO quadlet-level support for ldap or local auth at
-	# all — Grafana as packaged only knows how to talk to Keycloak. This
-	# script cannot fix that without editing quadlets/, which is out of
-	# scope for this worker. See README.md for the full explanation; this is
-	# reported as a conflict, not silently patched over.
-	for unit in "${OIDC_SERVICES[@]}"; do
-		systemctl disable --now "$unit" 2>/dev/null || true
-	done
-	cat >"$MODE_WARNING_FILE" <<-EOF
-	ironlog appliance mode = $MODE
-
-	Keycloak, Grafana, HyperDX, and the HyperDX oauth2-proxy gate are all
-	DISABLED on this instance. Reason: ironlog-grafana.container and
-	ironlog-hyperdx.container hardcode Keycloak OIDC as their only auth path
-	(literal Environment= values in the checked-in quadlet units, not sourced
-	from ironlog.env), and OSS HyperDX has no auth of its own at all. Running
-	them in $MODE mode with no Keycloak would mean either a broken login loop
-	(Grafana) or a completely unauthenticated UI with read access to every
-	SIEM table (HyperDX). Neither is acceptable, so first boot leaves them
-	off rather than ship either failure mode.
-
-	ClickHouse and the always-on Vector aggregator (ironlog-vector-hosts,
-	Linux/K8s ingestion) ARE running — log collection and storage work fine
-	in this mode; only the web UIs are affected.
-
-	To get a working UI today: switch APPLIANCE_MODE to oidc and re-run first
-	boot (IRONLOG_FIRSTBOOT_FORCE=1). True LDAP/local-auth support for
-	Grafana/HyperDX needs changes to quadlets/ironlog-grafana.container (and
-	possibly ClickHouse's users.d) that are out of scope for this script —
-	flag this file's existence to whoever owns that work next.
-	EOF
-	log "WARNING: mode=$MODE — Keycloak/Grafana/HyperDX/oauth2-proxy disabled; see $MODE_WARNING_FILE"
-fi
+for unit in "${APP_SERVICES[@]}"; do
+	start_unit "$unit" || start_failures=$((start_failures + 1))
+done
+rm -f "$MODE_WARNING_FILE"
 
 # ---------------------------------------------------------------------------
 # 7. ironlog-vector.service (AWS ingestion) — ships with no [Install]
@@ -445,11 +381,11 @@ fi
 # 8. Done.
 # ---------------------------------------------------------------------------
 
-date -u +%FT%TZ >"$SENTINEL"
-chmod 600 "$SENTINEL"
 if [[ "$start_failures" -gt 0 ]]; then
 	die "$start_failures ironlog service(s) could not even be QUEUED to start — refusing to mark first boot complete. Fix the cause and re-run with IRONLOG_FIRSTBOOT_FORCE=1."
 fi
+date -u +%FT%TZ >"$SENTINEL"
+chmod 600 "$SENTINEL"
 
 # This script CANNOT confirm the appliance is serving: every ironlog unit
 # Requires= this one, so it must exit before any of them can start (see

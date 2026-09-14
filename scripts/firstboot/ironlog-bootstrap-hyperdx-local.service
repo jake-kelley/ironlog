@@ -1,0 +1,13 @@
+[Unit]
+Description=ironlog SIEM — bootstrap HyperDX native local account
+After=ironlog-firstboot.service ironlog-hyperdx.service
+Requires=ironlog-firstboot.service ironlog-hyperdx.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/ironlog/bootstrap-hyperdx-local.sh podman ironlog-hyperdx
+TimeoutStartSec=300
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

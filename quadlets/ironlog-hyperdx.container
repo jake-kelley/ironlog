@@ -1,5 +1,4 @@
 # Translated from docker-compose.yml: services.hyperdx
-# NOT published to the host — reached only through ironlog-hyperdx-auth.
 [Unit]
 Description=ironlog SIEM — HyperDX (ClickStack search/investigation UI over siem.*)
 # compose: depends_on clickhouse healthy, hyperdx-db healthy. Both those
@@ -19,12 +18,14 @@ ContainerName=ironlog-hyperdx
 Network=ironlog.network
 NetworkAlias=hyperdx
 
-# The oauth2-proxy URL the browser sees. Derived from APPLIANCE_FQDN by first
-# boot; compose's localhost literal is wrong for a real appliance.
+# Native HyperDX local authentication is exposed directly. First boot derives
+# this browser-facing URL from APPLIANCE_FQDN; no bundled IdP/proxy is used.
 Environment=FRONTEND_URL=${HYPERDX_PUBLIC_URL}
 Environment=HYPERDX_APP_PORT=8080
 Environment=HYPERDX_API_PORT=8000
 Environment=HYPERDX_LOG_LEVEL=info
+Environment=HYPERDX_LOCAL_EMAIL=${HYPERDX_LOCAL_EMAIL}
+Environment=HYPERDX_LOCAL_PASSWORD=${HYPERDX_LOCAL_PASSWORD}
 # Suppresses the 4-hourly phone-home to in-otel.hyperdx.io — do not drop.
 Environment=USAGE_STATS_ENABLED=false
 
@@ -45,6 +46,8 @@ Environment="DEFAULT_CONNECTIONS=[{\"name\":\"SIEM ClickHouse\",\"host\":\"http:
 # quadlets/hyperdx/default-sources.env) and loaded verbatim — safer than
 # fighting unit-file quoting for a value this large.
 EnvironmentFile=/opt/ironlog/hyperdx/default-sources.env
+
+PublishPort=8081:8080
 
 [Service]
 EnvironmentFile=/etc/ironlog/ironlog.env

@@ -21,8 +21,7 @@
 #                                   operator pre-stages the file, e.g. via
 #                                   cloud-init write_files, before first boot)
 #   - generate:<bytes>              generate + persist a random value on
-#                                   first boot (currently only meaningful
-#                                   for OAUTH2_PROXY_COOKIE_SECRET below)
+#                                   first boot
 #
 # See scripts/firstboot/secret-resolver.sh for the resolver implementation
 # and scripts/firstboot/README.md for the full operator runbook.
@@ -30,22 +29,16 @@
 # --- Appliance identity (not secrets; required) ---------------------------
 
 # This instance's own hostname, as reachable by the browsers/agents that
-# will use it. Used to derive KC_HOSTNAME, KC_PUBLIC_URL, and
-# GRAFANA_ROOT_URL below (only if you don't override those explicitly).
+# will use it. Used to derive Grafana and HyperDX public URLs below (only if
+# you don't override those explicitly).
 APPLIANCE_FQDN=siem.example.com
 
-# oidc  = on-box Keycloak, the full stack as documented in the top-level
-#         README/CLAUDE.md. Grafana + HyperDX both work.
-# ldap  = ClickHouse LDAP external directory + Grafana against LDAP.
-#         *** NOT CURRENTLY SUPPORTED BY THE QUADLET UNITS *** — see
-#         scripts/firstboot/README.md "The HyperDX auth conflict" and "ldap
-#         / local mode limitations". First boot will disable Keycloak,
-#         Grafana, HyperDX, and the HyperDX auth gate in this mode; only
-#         ClickHouse + log ingestion (vector-hosts) will be running.
-# local = no external IdP at all. Same limitation as ldap above.
-APPLIANCE_MODE=oidc
+# local = Grafana basic login plus HyperDX native local authentication.
+# oidc and ldap are intentionally rejected as deferred: this AMI does not
+# bundle Keycloak or claim an external OIDC integration works today.
+APPLIANCE_MODE=local
 
-# true = derive https:// URLs for Keycloak/Grafana (assumes a TLS
+# true = derive https:// URLs for Grafana/HyperDX (assumes a TLS
 #        terminator in front, or that the container itself is doing TLS —
 #        neither is configured by this script; see README.md).
 # false = derive http:// URLs (plain HTTP, e.g. a closed lab network).
@@ -64,35 +57,21 @@ CH_HYPERDX_PASSWORD=ssm:///ironlog/prod/ch_hyperdx_password
 
 SPLUNK_HEC_TOKEN=ssm:///ironlog/prod/splunk_hec_token
 
-# --- Keycloak / Grafana / HyperDX (only actually used in oidc mode; still
-#     resolved best-effort in ldap/local mode but not required there) ------
-
-KC_DB_PASSWORD=ssm:///ironlog/prod/kc_db_password
-KC_ADMIN_USER=kcadmin
-KC_ADMIN_PASSWORD=ssm:///ironlog/prod/kc_admin_password
-# Usually leave these two unset — derived from APPLIANCE_FQDN/APPLIANCE_TLS.
-# Uncomment only for an unusual topology (e.g. Keycloak reachable through a
-# load balancer on a different host/port than this appliance itself):
-#KC_HOSTNAME=https://sso.example.com
-#KC_PUBLIC_URL=https://sso.example.com
+# --- Grafana / HyperDX native local auth ---------------------------------
 
 # Usually leave unset — derived from APPLIANCE_FQDN/APPLIANCE_TLS. Uncomment
-# to override:
+# to override Grafana's browser-facing URL:
 #GRAFANA_ROOT_URL=https://siem.example.com:3000
-GRAFANA_ADMIN_USER=breakglass_admin
-GRAFANA_ADMIN_PASSWORD=ssm:///ironlog/prod/grafana_admin_password
-# Must match the "grafana" Keycloak client secret (realm-export imports a
-# placeholder; rotate it in the Keycloak admin console, then update this).
-GRAFANA_OAUTH_SECRET=asm://ironlog/prod/keycloak#grafana_client_secret
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=IronlogDev123!
 
-HYPERDX_OAUTH_SECRET=asm://ironlog/prod/keycloak#hyperdx_client_secret
 HYPERDX_DB_PASSWORD=ssm:///ironlog/prod/hyperdx_db_password
-# 32 raw bytes — oauth2-proxy's cookie secret requirement (16/24/32 bytes).
-# generate: persists the value under /etc/ironlog/generated/ on first boot,
-# so it survives reboots and does not invalidate sessions on every restart.
-# Prefer a real ssm:// or asm:// entry instead if you need the SAME secret
-# shared across a fleet of appliances (generate: is per-instance).
-OAUTH2_PROXY_COOKIE_SECRET=generate:32
+# Defaults create the initial HyperDX account only. Existing database volumes
+# retain their account; bootstrap is idempotent and never silently resets it.
+HYPERDX_LOCAL_EMAIL=admin@ironlog.local
+HYPERDX_LOCAL_PASSWORD=IronlogDev123!
+# Usually leave unset — derived from APPLIANCE_FQDN/APPLIANCE_TLS:
+#HYPERDX_PUBLIC_URL=https://siem.example.com:8081
 
 # --- AWS ingestion (Phase 2) — optional. Leave blank/unset to keep
 #     ironlog-vector.service disabled; set any SQS_URL_* to enable it. -----
