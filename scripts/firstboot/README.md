@@ -15,8 +15,9 @@ placing it and enabling it at build time).
 | `ironlog-firstboot.sh` | Main first-boot logic (idempotent, oneshot) |
 | `secret-resolver.sh` | URI → plaintext resolver (`ssm://`, `asm://`, `file://`, `generate:`, literal); separately testable |
 | `ironlog-firstboot.service` | systemd oneshot unit, ordered before every `ironlog-*.service` |
-| `appliance.conf.example` | Fully commented config — every scheme, all three modes |
+| `appliance.conf.example` | Local-mode config and credential overrides |
 | `ironlog-apply-schema.sh` | Reconciles the ClickHouse SIEM schema/service accounts and **verifies** the result — runs on EVERY boot, not just the first |
+| `ironlog-bootstrap-hyperdx-local.service` | Runs the shared native-account helper after HyperDX starts |
 | `ironlog-schema.service` | systemd oneshot unit for the above, ordered after `ironlog-clickhouse.service` |
 | `README.md` | This file |
 
@@ -89,68 +90,27 @@ can't execute code on the appliance.
 
 Every value is a URI (`ssm://`, `asm://`, `file://`, `generate:<bytes>`) or
 a literal used as-is. Scheme matching is by exact prefix, not a generic
-`scheme://` regex — so a literal like `KC_HOSTNAME=http://keycloak:8080`
+`scheme://` regex — so a literal like `GRAFANA_ROOT_URL=http://localhost:3000`
 (a normal, valid value) is never misparsed as an unsupported scheme.
 
-## The three modes
+## Authentication mode
 
-- **`oidc`** — on-box Keycloak, the full stack as documented in the
-  top-level `README.md`/`CLAUDE.md`. Everything works: Grafana OIDC login,
-  HyperDX behind the oauth2-proxy SSO gate. This is the only mode the
-  current `quadlets/` units actually implement end-to-end.
-- **`ldap`** — intended to mean ClickHouse LDAP external directory +
-  Grafana against LDAP. **Not implementable by this worker without editing
-  `quadlets/`, which was out of scope.** See "ldap / local mode
-  limitations" below.
-- **`local`** — intended to mean no external IdP at all. **Same limitation
-  as `ldap`.**
+`APPLIANCE_MODE=local` is the default and currently supported mode. Grafana
+and HyperDX run with native local authentication. No Keycloak, Postgres, or
+oauth2-proxy is deployed. `oidc` and `ldap` are deferred and rejected; future
+OIDC integration will use an existing external Keycloak.
 
-In `ldap`/`local` mode, first boot still brings up ClickHouse and the
-always-on Vector aggregator (`ironlog-vector-hosts`, Linux/K8s log
-ingestion) — those don't depend on the auth mode — but leaves Keycloak,
-Grafana, HyperDX, and the HyperDX oauth2-proxy gate **disabled**, and writes
-`/etc/ironlog/MODE_WARNING.txt` explaining why. Log collection and storage
-work; there is no web UI until you either switch to `oidc` mode or someone
-extends the quadlets to support LDAP/local auth.
+Fresh app defaults are Grafana `admin` and HyperDX `admin@ironlog.local`,
+both with password `IronlogDev123!`. Override `GRAFANA_ADMIN_USER`,
+`GRAFANA_ADMIN_PASSWORD`, `HYPERDX_LOCAL_EMAIL`, and
+`HYPERDX_LOCAL_PASSWORD` in appliance config. Backend secrets remain
+required and are resolved independently. Existing app databases retain their
+accounts; these settings do not reset existing passwords.
 
-## The HyperDX auth conflict — decision and reasoning
-
-OSS HyperDX has no native SSO. Its only auth is
-`ironlog-hyperdx-auth.container` (oauth2-proxy) enforcing Keycloak OIDC +
-TOTP in front of the unpublished `ironlog-hyperdx.container`. In `ldap`/
-`local` mode there is no Keycloak — running HyperDX anyway would mean an
-**unauthenticated UI with SELECT access to the entire SIEM** (it reads
-`siem.*` as `svc_hyperdx`).
-
-Two options were on the table: leave HyperDX+oauth2-proxy stopped/disabled,
-or bind HyperDX to loopback so it's reachable only via an SSH tunnel. **This
-script leaves them disabled**, for a reason beyond preference: this worker
-was explicitly told not to edit `quadlets/`, and
-`ironlog-hyperdx-auth.container` hardcodes `PublishPort=8081:4180` as a
-literal in the checked-in unit file — there is no environment-variable hook
-first boot can use to change that to a loopback-only bind without editing
-the quadlet itself. Disabling the unit entirely was the only option
-actually available from `scripts/firstboot/`. **This is a decision the
-operator should confirm** — if loopback-only HyperDX access is preferred
-over full disablement, `ironlog-hyperdx-auth.container`'s `PublishPort=`
-needs to change to `127.0.0.1:8081:4180`, which is a `quadlets/` edit
-outside this worker's scope.
-
-## `ldap` / `local` mode limitations (conflict found, not fixed)
-
-Beyond the HyperDX issue above, the conflict runs deeper:
-`ironlog-grafana.container` hardcodes `GF_AUTH_GENERIC_OAUTH_ENABLED=true`,
-`GF_AUTH_DISABLE_LOGIN_FORM=true`, and `GF_AUTH_BASIC_ENABLED=false` as
-literal `Environment=` values (not sourced from `ironlog.env`), and
-`ironlog-keycloak.container`/ClickHouse's baked `users.d/00-lockdown.xml`
-have no LDAP directive surfaced anywhere first boot can reach. Concretely:
-**Grafana as currently packaged only knows how to authenticate against
-Keycloak.** There is no quadlet-level LDAP or local-auth support to enable
-at all right now — `ldap` and `local` are only placeholders in this
-script's mode switch until someone adds that support to `quadlets/` (and
-possibly a ClickHouse LDAP config file baked at `/opt/ironlog/clickhouse/
-config.d/`, which isn't part of the current file list either). Flagging
-this here rather than attempting a partial fix that would only mask the gap.
+HyperDX native account initialization is `ironlog-bootstrap-hyperdx-local.service` after the app
+starts, using `/usr/local/lib/ironlog/bootstrap-hyperdx-local.sh`. Firstboot
+completion means configuration and jobs were queued, not that browser login
+was verified. See [local authentication](../../docs/local-auth.md).
 
 ## Container uid/gid values used, and their verification status
 
@@ -164,7 +124,6 @@ directory) rather than a silent security gap, but it will block first boot.
 | Directory | Image | uid:gid used | Basis |
 |---|---|---|---|
 | `/var/lib/ironlog/clickhouse` | `clickhouse/clickhouse-server:24.8` | `101:101` | official image's "clickhouse" system user |
-| `/var/lib/ironlog/keycloak-db` | `postgres:16-alpine` | `70:70` | Alpine's "postgres" user numbering |
 | `/var/lib/ironlog/grafana` | `grafana/grafana-oss:11.4.0` | `472:472` | Grafana's well-known conventional uid/gid |
 | `/var/lib/ironlog/hyperdx-db` | `mongo:7.0` (debian-based) | `999:999` | official image's "mongodb" user |
 | `/var/lib/ironlog/vector-hosts-buffer`, `/var/lib/ironlog/vector-buffer` | `timberio/vector:0.57.0-debian` | `0:0` | Vector's debian image runs as root by default (least confidence of the five — please verify first) |
@@ -185,10 +144,8 @@ writing container state onto the root volume.
 `ironlog-vector.container` ships with no `[Install]` section (see
 `quadlets/README.md`), so a plain `systemctl enable` has nothing to
 symlink. First boot enables it only when at least one `SQS_URL_*` value
-resolves to something non-empty, by writing a **runtime-only** drop-in
-(`/etc/systemd/system/ironlog-vector.service.d/20-firstboot-install.conf`,
-generated on the instance — not part of the repo) that adds an `[Install]`
-section, then `systemctl enable --now`s it. If no `SQS_URL_*` is
+resolves to something non-empty, by linking the generated unit into
+`multi-user.target.wants` and queuing its start. If no `SQS_URL_*` is
 configured, the unit is left exactly as shipped: present, but not started
 and not enabled.
 
@@ -222,7 +179,7 @@ sudo rm -f /etc/ironlog/.firstboot-complete
 sudo IRONLOG_FIRSTBOOT_FORCE=1 systemctl restart ironlog-firstboot.service
 ```
 
-`OAUTH2_PROXY_COOKIE_SECRET` (and any other `generate:` value) is
+A generated backend password (and any other `generate:` value) is
 **persisted** under `/etc/ironlog/generated/<VARNAME>.secret` and reused on
 every re-run — it does not regenerate on a forced re-run or reboot, which
 matters because a changed cookie secret invalidates every live session. To
@@ -251,13 +208,12 @@ the `Requires=` drop-ins described above.
 
 ## What was reasoned vs. tested
 
-Nothing in this directory was run against real EC2/IMDS/SSM/Secrets
-Manager, and no podman/systemd was available to exercise the quadlet
-ordering or the drop-in mechanism — none of that is claimed as tested.
-What was actually done:
+Earlier schema reconciliation has recorded EC2 cold-boot evidence in the
+top-level README. The local-auth revision has not been live-booted on EC2
+or exercised with Podman/systemd here. Static validation includes:
 - `bash -n` on every `.sh` file (see below for results).
 - Cross-referenced every variable name against `.env.example` and every
-  `Environment=`/`Volume=` line in all nine `quadlets/*.container` files
+  `Environment=`/`Volume=` line in the deployed `quadlets/*.container` files
   plus `quadlets/ironlog.network`, by reading them directly (not from
   memory) — see the tables above.
 - The uid/gid table is reasoned from each image's documented default user,
@@ -267,39 +223,20 @@ What was actually done:
   drop-ins may add `[Install]` sections), not something specific to
   quadlets, but was not exercised on a live system.
 
-## Known conflicts with `quadlets/`/`packer/` (reported, not fixed)
+## Deployment limits
 
-1. **`OAUTH2_PROXY_REDIRECT_URL`, `FRONTEND_URL`, `OAUTH2_PROXY_COOKIE_SECURE`
-   are hardcoded `localhost`/`false` literals** in `ironlog-hyperdx.container`
-   and `ironlog-hyperdx-auth.container` — not sourced from `ironlog.env` at
-   all. This script derives `KC_HOSTNAME`/`KC_PUBLIC_URL`/`GRAFANA_ROOT_URL`
-   from the operator's FQDN as instructed (those three ARE wired via `$VAR`
-   substitution in the quadlets), but has **no way** to do the same for
-   HyperDX's redirect URL or cookie security flag, because the quadlet units
-   don't reference a variable for them. Practical effect: even in `oidc`
-   mode, HyperDX's OIDC callback is only reachable at
-   `http://localhost:8081/oauth2/callback` — real, non-tunnelled browser
-   access to HyperDX at the appliance's FQDN will not complete login, and
-   the cookie is never marked `Secure` even when the rest of the appliance
-   is served over TLS. Fixing this needs `ironlog-hyperdx-auth.container`'s
-   `OAUTH2_PROXY_REDIRECT_URL`/`OAUTH2_PROXY_COOKIE_SECURE` and
-   `ironlog-hyperdx.container`'s `FRONTEND_URL` changed to `$VAR`
-   substitutions from `ironlog.env` (e.g. new `HYPERDX_PUBLIC_URL` /
-   `APPLIANCE_TLS`-derived vars) — a `quadlets/` edit, out of scope here.
-   Until fixed, reach HyperDX via `ssh -L 8081:localhost:8081 <appliance>`
-   and browse to `http://localhost:8081`.
-2. **`ldap`/`local` auth modes have no quadlet-level implementation at
-   all** — see "ldap / local mode limitations" above.
-3. No other conflicts found: every `.env.example` variable name is
-   referenced verbatim by at least one quadlet's `Environment=` (directly or
-   via `$VAR` rename), and every writable `Volume=` target under
-   `/var/lib/ironlog/` has a corresponding directory created here.
+Local authentication does not add TLS termination. `APPLIANCE_TLS` selects
+public URL schemes; an HTTPS deployment still requires a configured TLS
+terminator. Grafana's plugin download remains an offline-boot limitation.
+Local mode does not enforce MFA or provide per-human ClickHouse attribution.
 
 ## Testing this directory
 
 ```sh
 bash -n scripts/firstboot/ironlog-firstboot.sh
 bash -n scripts/firstboot/secret-resolver.sh
+bash scripts/tests/firstboot-local.test.sh
+bash scripts/tests/bootstrap-hyperdx-local.test.sh
 shellcheck scripts/firstboot/*.sh   # if installed
 ```
 

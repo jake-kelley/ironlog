@@ -66,6 +66,8 @@ GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=IronlogDev123!
 
 HYPERDX_DB_PASSWORD=ssm:///ironlog/prod/hyperdx_db_password
+# Persisted random signing secret for native HyperDX sessions.
+HYPERDX_SESSION_SECRET=generate:64
 # Defaults create the initial HyperDX account only. Existing database volumes
 # retain their account; bootstrap is idempotent and never silently resets it.
 HYPERDX_LOCAL_EMAIL=admin@ironlog.local

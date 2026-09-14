@@ -1,5 +1,8 @@
 # SIEM documentation update log
 
+## 2026-09-14
+* **Update**: Default deployments use [native local app accounts](local-auth.md). Keycloak integration is deferred and no identity provider is bundled. Updated deployment and control notes to remove current SSO/MFA claims.
+
 ## 2026-07-16
 * **Update**: Converted the documentation set into an Open Knowledge Format (OKF v0.1) bundle — added frontmatter to every concept, plus this log and the bundle [index](index.md).
 

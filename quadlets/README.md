@@ -15,18 +15,22 @@ bind-mounted from `/var/lib/ironlog/<name>/` (a separate EBS data volume),
 NOT podman named volumes — this makes the data survive an AMI/appliance
 rebuild independent of the container runtime state.
 
+## Local authentication
+
+Grafana and HyperDX expose native local login, using the development
+credentials in [local authentication](../docs/local-auth.md). No Keycloak,
+Postgres or oauth2-proxy unit is shipped. External Keycloak integration is
+deferred; no IdP will be installed on the appliance.
+
 ## Files
 
 | File | Produces | Purpose |
 |---|---|---|
 | `ironlog.network` | `ironlog-network.service` | Podman network `ironlog-siem`; every container joins it and gets a `NetworkAlias=` matching its original compose service name |
 | `ironlog-clickhouse.container` | `ironlog-clickhouse.service` | ClickHouse storage/query engine |
-| `ironlog-keycloak-db.container` | `ironlog-keycloak-db.service` | Postgres — Keycloak's own state |
-| `ironlog-keycloak.container` | `ironlog-keycloak.service` | Keycloak OIDC SSO + mandatory TOTP MFA |
-| `ironlog-grafana.container` | `ironlog-grafana.service` | Grafana OSS dashboards/alerts, OIDC login |
+| `ironlog-grafana.container` | `ironlog-grafana.service` | Grafana OSS dashboards/alerts, local login |
 | `ironlog-hyperdx-db.container` | `ironlog-hyperdx-db.service` | MongoDB — HyperDX app state only (users/dashboards/searches, no audit data) |
-| `ironlog-hyperdx.container` | `ironlog-hyperdx.service` | HyperDX (ClickStack) search/investigation UI, NOT published to the host |
-| `ironlog-hyperdx-auth.container` | `ironlog-hyperdx-auth.service` | oauth2-proxy — Keycloak OIDC gate in front of HyperDX |
+| `ironlog-hyperdx.container` | `ironlog-hyperdx.service` | HyperDX search/investigation UI, native local login on :8081 |
 | `ironlog-vector-hosts.container` | `ironlog-vector-hosts.service` | Vector aggregator: Linux agents (:6000) + K8s splunk_hec (:8088), always on |
 | `ironlog-vector.container` | `ironlog-vector.service` | Vector aggregator: AWS ingestion (CloudTrail/GuardDuty/VPC Flow/S3 Access via SQS+S3) — **ships disabled**, see below |
 | `hyperdx/default-sources.env` | (baked file, not a unit) | Static, non-secret `DEFAULT_SOURCES` value for HyperDX — deploy to `/opt/ironlog/hyperdx/default-sources.env` |
@@ -39,25 +43,21 @@ Use this to check nothing was silently dropped, side by side with
 | Compose service | Quadlet unit | Compose volume(s) | Quadlet mount | Compose port(s) | Quadlet port(s) |
 |---|---|---|---|---|---|
 | clickhouse | ironlog-clickhouse.container | clickhouse-data; config.d; users.d/00-lockdown.xml (file); initdb; ddl | /var/lib/ironlog/clickhouse:Z; /opt/ironlog/clickhouse/{config.d,ddl,initdb}:ro,Z; users.d/00-lockdown.xml individually :ro,Z | 127.0.0.1:8123:8123, 127.0.0.1:9000:9000 | same, unchanged (loopback preserved) |
-| keycloak-db | ironlog-keycloak-db.container | keycloak-db-data | /var/lib/ironlog/keycloak-db:Z | (none) | (none) |
-| keycloak | ironlog-keycloak.container | realm-export | /opt/ironlog/keycloak/realm-export:ro,Z | 8080:8080 | 8080:8080 |
 | grafana | ironlog-grafana.container | grafana-data; provisioning | /var/lib/ironlog/grafana:Z; /opt/ironlog/grafana/provisioning:ro,Z | 3000:3000 | 3000:3000 |
-| hyperdx | ironlog-hyperdx.container | (none) | (none, config via env) | not published | not published (unchanged) |
+| hyperdx | ironlog-hyperdx.container | (none) | (none, config via env) | 8081:8080 | 8081:8080 |
 | hyperdx-db | ironlog-hyperdx-db.container | hyperdx-db-data | /var/lib/ironlog/hyperdx-db:Z | (none) | (none) |
-| hyperdx-auth | ironlog-hyperdx-auth.container | (none) | (none) | 8081:4180 | 8081:4180 |
 | vector-hosts | ironlog-vector-hosts.container | vector-hosts-buffer; hosts.yaml | /var/lib/ironlog/vector-hosts-buffer:Z; /opt/ironlog/vector/hosts.yaml:ro,Z | 8088:8088, 6000:6000 | 8088:8088, 6000:6000 |
 | vector | ironlog-vector.container | vector-buffer; vector.yaml | /var/lib/ironlog/vector-buffer:Z; /opt/ironlog/vector/vector.yaml:ro,Z | (none published) | (none published) |
 | k3s | — excluded — | k3s-data | — | — | — |
 
 Network aliases (all required — config/env reference these DNS names
-literally): `clickhouse, keycloak-db, keycloak, grafana, hyperdx, hyperdx-db,
-hyperdx-auth, vector-hosts, vector`. All on `ironlog-siem` (via
+literally): `clickhouse, grafana, hyperdx, hyperdx-db, vector-hosts, vector`. All on `ironlog-siem` (via
 `ironlog.network`).
 
 ## Ordering: `depends_on condition: service_healthy/service_started` → systemd
 
-Compose only had real healthchecks on **clickhouse, keycloak-db, hyperdx-db**.
-Those three quadlets set `HealthCmd=`/`HealthInterval=`/`HealthRetries=` (the
+Compose only had real healthchecks on **clickhouse and hyperdx-db**.
+Those two quadlets set `HealthCmd=`/`HealthInterval=`/`HealthRetries=` (the
 same probes compose used) plus `Notify=healthy`. `Notify=healthy` makes podman
 send `READY=1` to systemd only once podman's own healthcheck reports
 `healthy`, not just once the process has started — so a plain
@@ -68,13 +68,11 @@ For `condition: service_started` edges (compose had no health probe to wait
 on anyway) we use `After=` only, no `Requires=`, matching compose's weaker
 guarantee.
 
-Edges translated:
-- keycloak → After+Requires keycloak-db (healthy)
-- grafana → After+Requires clickhouse (healthy); After only keycloak (started)
-- hyperdx → After+Requires clickhouse (healthy) and hyperdx-db (healthy)
-- hyperdx-auth → After only keycloak (started) and hyperdx (started)
-- vector-hosts → After+Requires clickhouse (healthy)
-- vector → After+Requires clickhouse (healthy)
+Current dependency edges:
+- schema reconciliation waits for healthy ClickHouse.
+- Grafana and both Vector units require schema reconciliation.
+- HyperDX requires schema reconciliation and healthy MongoDB.
+- HyperDX local-account bootstrap runs after HyperDX starts.
 
 `vector-hosts` also had a compose healthcheck (bash `/dev/tcp` probe against
 Vector's internal `:8686` API), but nothing in compose's dependency graph
@@ -87,7 +85,7 @@ on it — matching compose's actual behavior, not just its healthcheck block.
 `EnvironmentFile=/etc/ironlog/ironlog.env` (the ONE secrets file, generated
 by the appliance's first-boot secret resolver, using the `.env.example`
 variable names verbatim: `CH_ADMIN_USER`, `CH_VECTOR_PASSWORD`,
-`KC_DB_PASSWORD`, `GRAFANA_OAUTH_SECRET`, etc.) only loads a file's variables
+`GRAFANA_ADMIN_PASSWORD`, `HYPERDX_LOCAL_PASSWORD`, etc.) only loads a file's variables
 under their own literal names into a container's environment — it cannot
 rename or interpolate them, and compose did **both**: `CLICKHOUSE_USER:
 ${CH_ADMIN_USER}` renames; `MONGO_URI: mongodb://hyperdx:${HYPERDX_DB_PASSWORD}@...`
@@ -109,8 +107,7 @@ auditable list of exactly which secrets each container consumes.
 Two values needed extra care because of systemd's own unit-file quoting
 (not `EnvironmentFile=`'s — this is `Environment=` written inline in the
 unit):
-- `GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH` (grafana) and
-  `DEFAULT_CONNECTIONS` (hyperdx) contain spaces and/or quotes, so the whole
+- `DEFAULT_CONNECTIONS` (hyperdx) contains spaces and/or quotes, so the whole
   `KEY=VALUE` is wrapped in outer `"..."` with internal `"` escaped as `\"`,
   per systemd's ExecStart quoting rules.
 - `DEFAULT_SOURCES` (hyperdx) is a much larger JSON blob with embedded
@@ -218,10 +215,10 @@ sudo systemctl daemon-reload
 # 4. Bring the always-on services up (ironlog-vector.service is intentionally
 #    excluded — see "Enabling ironlog-vector.service" above):
 sudo systemctl start ironlog-network.service
-sudo systemctl start ironlog-clickhouse.service ironlog-keycloak-db.service ironlog-hyperdx-db.service
-sudo systemctl start ironlog-keycloak.service ironlog-vector-hosts.service
+sudo systemctl start ironlog-clickhouse.service ironlog-hyperdx-db.service
+sudo systemctl start ironlog-schema.service ironlog-vector-hosts.service
 sudo systemctl start ironlog-grafana.service ironlog-hyperdx.service
-sudo systemctl start ironlog-hyperdx-auth.service
+sudo systemctl start ironlog-bootstrap-hyperdx-local.service
 
 # 5. Confirm everything is actually running and (for the 3 healthchecked
 #    services) healthy:

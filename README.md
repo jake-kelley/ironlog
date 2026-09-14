@@ -2,8 +2,9 @@
 
 A NIST 800-53-oriented SIEM built entirely from free/open components:
 **ClickHouse** for storage and SQL, **Vector** for all collection, **Grafana
-OSS** for dashboards and alerting, **HyperDX** for log search, **Keycloak**
-for SSO with mandatory TOTP MFA. No ingest caps, no license keys, no
+OSS** for dashboards and alerting, **HyperDX** for log search, with native
+local accounts in each app. Keycloak integration is deferred; ironlog does
+not deploy an identity provider. No ingest caps, no license keys, no
 phone-home, no per-seat pricing.
 
 The project exists because commercial/openish alternatives gate the
@@ -41,11 +42,9 @@ flowchart TB
 
     subgraph ui["Browser tier — read-only service accounts"]
         graf["Grafana<br/><i>dashboards · SQL · alerts</i>"]
-        prox["oauth2-proxy<br/><i>requires a siem_* realm role</i>"]
         hdx["HyperDX<br/><i>log search · investigations</i>"]
     end
 
-    kc{{"Keycloak<br/>mandatory TOTP MFA"}}
     analyst(["Analysts · Auditors · Admins"])
 
     win  --> agg
@@ -58,23 +57,19 @@ flowchart TB
 
     ch -- "svc_grafana_analyst<br/>svc_grafana_auditor" --> graf
     ch -- "svc_hyperdx" --> hdx
-    prox --> hdx
 
     analyst --> graf
-    analyst --> prox
-    graf -. OIDC .-> kc
-    prox -. OIDC .-> kc
+    analyst --> hdx
 
     ch -. "every query, incl. on a user's behalf" .-> audit["audit.query_archive<br/><i>append-only · AU-9</i>"]
 
     classDef store fill:#1f2937,stroke:#60a5fa,stroke-width:2px,color:#f9fafb
-    classDef auth fill:#3f2937,stroke:#f59e0b,stroke-width:2px,color:#f9fafb
     class ch,audit store
-    class kc,prox auth
 ```
 
-Every human enters through Keycloak. Every query any UI runs is captured in
-`audit.query_archive` (AU-9). Ingest happens only through the write-only
+Each UI authenticates its own local users. Finished queries and processing
+errors are captured in `audit.query_archive` under shared database service
+accounts, not individual app identities. Ingest happens through the write-only
 `svc_vector` account; analysts can never write, auditors can also read the
 analyst-activity trail.
 
@@ -83,10 +78,8 @@ analyst-activity trail.
 | Service | Image (pinned) | License | Role |
 |---|---|---|---|
 | clickhouse | clickhouse/clickhouse-server:24.8 | Apache-2.0 | storage, SQL, RBAC, audit trail |
-| keycloak (+postgres 16) | quay.io/keycloak/keycloak:26.0 | Apache-2.0 | SSO, mandatory TOTP MFA |
 | grafana | grafana/grafana-oss:11.4.0 | AGPL-3.0 | dashboards, AU-5 alerting |
 | hyperdx (+mongo 7.0) | docker.hyperdx.io/hyperdx/hyperdx:2.19.0 | MIT | log search / investigations UI |
-| hyperdx-auth | quay.io/oauth2-proxy/oauth2-proxy:v7.15.3 | Apache-2.0 | Keycloak SSO gate for HyperDX |
 | vector-hosts | timberio/vector:0.57.0-debian | MPL-2.0 | host/K8s ingestion (always on) |
 | vector | timberio/vector:0.57.0-debian | MPL-2.0 | AWS ingestion (profile `aws`) |
 | k3s (demo) | rancher/k3s:v1.35.6-k3s1 | Apache-2.0 | local test cluster (profile `k3s`) |
@@ -117,7 +110,7 @@ control-mapping.
       install-windows-agent.ps1  elevated Windows agent installer
       fix-windows-agent-addr.ps1 WSL-lab address fix + boot task
     grafana/provisioning/        datasources, dashboards, AU-5 alert rules
-    keycloak/realm-export/       "siem" realm: MFA, roles, OIDC clients
+    keycloak/realm-export/       historical realm reference; not deployed
     docs/                        OKF v0.1 knowledge bundle (runbooks, policies, catalog)
     scripts/okf-validate.py      OKF conformance checker for docs/
 
@@ -131,17 +124,15 @@ control-mapping.
 
 | URL | What | Auth |
 |---|---|---|
-| http://localhost:3000 | Grafana — dashboards, SQL (Explore), alerts | Keycloak SSO + TOTP |
-| http://localhost:8081 | HyperDX — log search, investigations | Keycloak SSO first (oauth2-proxy), then HyperDX local account |
-| http://keycloak:8080 | Keycloak admin console | kcadmin (see .env) |
+| http://localhost:3000 | Grafana — dashboards, SQL (Explore), alerts | Local `admin` / `IronlogDev123!` |
+| http://localhost:8081 | HyperDX — log search, investigations | Local `admin@ironlog.local` / `IronlogDev123!` |
 
-Browser prerequisite: `127.0.0.1 keycloak` in the hosts file so the browser
-and containers agree on the Keycloak hostname (admin PowerShell:
-`Add-Content $env:SystemRoot\System32\drivers\etc\hosts "127.0.0.1 keycloak"`).
+These are generic development credentials for fresh installs. Existing app
+accounts are preserved. See [local authentication](docs/local-auth.md) for
+configuration and upgrade instructions; no hosts-file entry is needed.
 
-On the **appliance** the same three UIs are published on the same ports, but at
-`APPLIANCE_FQDN` instead of localhost — no hosts-file entry, because Keycloak is
-reached by the appliance's own FQDN. ClickHouse (`:8123`/`:9000`) stays bound to
+On the **appliance** the same two UIs are published at `APPLIANCE_FQDN`.
+ClickHouse (`:8123`/`:9000`) stays bound to
 loopback in both deployments and is never published.
 
 Dashboards (Grafana -> SIEM folder):
@@ -159,13 +150,13 @@ New to querying? Start with [docs/query-guide.md](docs/query-guide.md).
 
 1. Prereqs: Docker Engine + compose v2, bash, openssl. (This lab runs Docker
    CE inside WSL2 Ubuntu — no Docker Desktop.)
-2. `./bootstrap.sh you@example.com` — generates `.env` (all secrets), starts
-   the stack, rotates the Grafana + HyperDX OIDC client secrets, creates your
-   admin user (temp password printed once), verifies RBAC.
-3. Add the hosts entry (above), open http://localhost:3000, log in, set a new
-   password, enroll TOTP.
-4. Visit http://localhost:8081, pass Keycloak, register the HyperDX local
-   account — its ClickHouse connection + sources auto-provision at that moment.
+2. `./bootstrap.sh` — generates `.env` with generic app logins and random
+   backend credentials, starts the stack, provisions the HyperDX local
+   account, and verifies RBAC. An optional email argument replaces the
+   default HyperDX email.
+3. Open http://localhost:3000 and log in as `admin` / `IronlogDev123!`.
+4. Open http://localhost:8081 and log in as `admin@ironlog.local` /
+   `IronlogDev123!`. The first account seeds its ClickHouse sources.
 5. Onboard data sources (next section).
 
 `bootstrap.sh` refuses to overwrite an existing `.env`. Fully wipe with
@@ -173,9 +164,9 @@ New to querying? Start with [docs/query-guide.md](docs/query-guide.md).
 
 ## Deploy as an EC2 AMI appliance
 
-The same stack also ships as a single self-contained EC2 image that runs in any
-AWS partition (commercial, GovCloud, C2S/SC2S). No compose, no internet at
-launch: every container image is baked in, and podman systemd units
+The same stack also targets a single EC2 image for commercial, GovCloud,
+and C2S/SC2S environments. Container images are baked in; offline startup
+still needs Grafana's ClickHouse plugin staged (see `quadlets/README.md`). Podman systemd units
 (`quadlets/`) replace `docker-compose.yml` one-for-one.
 
 1. Build: `cd packer && packer build -var "build_git_sha=$(git rev-parse --short HEAD)" .`
@@ -188,9 +179,10 @@ launch: every container image is baked in, and podman systemd units
    appliance refuses to start rather than come up with default credentials.
 3. Every value is a literal, or `ssm://`, `asm://`, `file:///` (air-gapped
    enclaves), or `generate:<bytes>`. Nothing secret is baked into the AMI.
-4. Register the HyperDX local account as in step 4 above.
+4. Use the local logins above. Account bootstrap runs after HyperDX starts;
+   check its separate service result before declaring the appliance ready.
 
-What first boot does: resolves secrets, derives the Keycloak/Grafana URLs from
+What first boot does: resolves secrets, derives the Grafana/HyperDX URLs from
 `APPLIANCE_FQDN` + `APPLIANCE_TLS`, mounts the data volume at
 `/var/lib/ironlog`, then reconciles the ClickHouse schema and service accounts
 **on every boot** (`ironlog-schema.service`) — all DDL is
@@ -222,10 +214,10 @@ Phase 2 block in `.env`, uncomment `COMPOSE_PROFILES=aws`, `docker compose up
 
 ## Security model
 
-- **Authentication**: everything human-facing sits behind Keycloak (realm
-  `siem`) with TOTP enrollment forced on first login. Grafana local login is
-  disabled; HyperDX (no native SSO in OSS) is unreachable except through
-  oauth2-proxy, which requires a `siem_*` realm role.
+- **Authentication**: Grafana and HyperDX use separate native local accounts.
+  Anonymous access is not enabled. No SSO or mandatory MFA is provided in
+  this mode. Future OIDC integration will use an existing external Keycloak;
+  ironlog will not deploy Keycloak or its Postgres database.
 - **Authorization** (ClickHouse enforces, not the UIs):
 
   | Account | Can | Cannot |
@@ -235,8 +227,8 @@ Phase 2 block in `.env`, uncomment `COMPOSE_PROFILES=aws`, `docker compose up
   | svc_grafana_auditor | SELECT siem.* + audit.* | write |
   | siem_admin (bootstrap) | everything | — |
 
-  Realm roles map to Grafana roles (siem_admin→Admin, siem_analyst→Editor,
-  siem_auditor→Viewer). Readers run under a settings profile: SELECT-only,
+  App roles are managed locally. Shared Grafana datasources do not enforce
+  per-human analyst/auditor separation. Readers run under a settings profile: SELECT-only,
   8 GB / 120 s / 20B-rows per query.
 - **Audit trail (AU-9)**: an incremental MV copies every finished query from
   system.query_log into append-only `audit.query_archive` (2-year TTL) —
@@ -244,8 +236,8 @@ Phase 2 block in `.env`, uncomment `COMPOSE_PROFILES=aws`, `docker compose up
 - **Network**: ClickHouse/native+HTTP bound to localhost on the host; the
   in-container `default` user is loopback-confined; ingest listeners (:6000,
   :8088) are token/marker-validated at the aggregator and write-only at the DB.
-- **Secrets**: all in `.env` (git-ignored, chmod 600), generated by bootstrap;
-  Keycloak client secrets rotated out of the realm-export placeholders.
+- **Secrets**: `.env` is git-ignored and mode 600. Bootstrap generates backend
+  passwords; app credentials default to the documented development values.
 
 ## Compliance surface
 
@@ -281,10 +273,9 @@ The `docs/` directory is an [Open Knowledge Format](https://github.com/GoogleClo
         -e CH_VECTOR_PASSWORD=x \
         timberio/vector:0.57.0-debian test /cfg/hosts.yaml /cfg/tests-hosts.yaml
 
-- **Break-glass** (Keycloak down): set `GF_AUTH_DISABLE_LOGIN_FORM=false` on
-  the grafana service, `docker compose up -d grafana`, log in with
-  GRAFANA_ADMIN_USER from `.env`. Revert immediately; the event is in
-  Grafana's logs and the audit trail.
+- **Account recovery**: local app accounts persist in Grafana/MongoDB data.
+  Changing initial-account environment values does not reset existing users.
+  See [local authentication](docs/local-auth.md).
 - **Version bumps**: images are pinned; bump deliberately, one at a time, and
   re-run the vector unit tests + a bootstrap on a scratch host before fleet
   changes.
@@ -319,18 +310,6 @@ Hard-won lessons encoded in this repo — check here before debugging:
   shipper endpoint to the aggregator IP.
 - **HyperDX DEFAULT_CONNECTIONS/DEFAULT_SOURCES seed only when the first user
   registers**, and malformed JSON is skipped silently.
-- **oauth2-proxy 403 "You do not have permission to access this resource"
-  with the user's email resolved in the log** means *authorization* failed, not
-  authentication — don't go looking at the issuer, client secret or redirect
-  URI. `OAUTH2_PROXY_ALLOWED_ROLES` is matched against `realm_access.roles`,
-  which Keycloak only emits if the client has the **`roles` client scope**.
-- **Keycloak realms default to `sslRequired=external`**, which answers any
-  browser arriving over plain HTTP from a non-private address with
-  `403 {"error_description":"HTTPS required"}`. Put TLS in front, or relax it
-  per-realm for a closed lab.
-- **Keycloak cold start is ~50 s** (Postgres schema init, 148 changesets, realm
-  import). Anything doing OIDC discovery against it at boot needs a restart
-  budget larger than that or it will exhaust its retries first.
 - **ClickHouse's docker entrypoint runs `/docker-entrypoint-initdb.d` only when
   the data directory is empty.** A container that dies partway through init
   leaves a non-empty `metadata/` and the DDL is then skipped *forever* on every
@@ -353,35 +332,19 @@ Hard-won lessons encoded in this repo — check here before debugging:
 - **Phase 7**: operational cadence — review checklists, evidence exports,
   annual catalog review.
 - **Phase 8 (in progress)**: EC2 AMI appliance. Build pipeline, quadlets,
-  first-boot config resolution and schema reconciliation are done and verified
-  on real hardware (cold boot, FIPS, end-to-end ingest, RBAC). Outstanding:
-  first RHEL 9 build for real compliance evidence, TLS termination, and the
-  OIDC provisioning gaps under *Known issues*.
+  first-boot config resolution and schema reconciliation have historical
+  real-hardware validation (cold boot, FIPS, end-to-end ingest, RBAC).
+  The new local-auth deployment still needs a fresh live boot. Outstanding:
+  first RHEL 9 build for real compliance evidence, TLS termination, and
+  offline Grafana plugin staging. External Keycloak integration is deferred;
+  the current default uses local app accounts.
 
 ## Known issues
 
-Verified on real hardware, not yet fixed in this repo:
-
-- **HyperDX login is refused for every user** (`403` from oauth2-proxy) because
-  `keycloak/realm-export/siem-realm.json` omits `roles` from the hyperdx
-  client's `defaultClientScopes`, so `realm_access.roles` is never emitted and
-  `OAUTH2_PROXY_ALLOWED_ROLES` can never match. Affects the compose path *and*
-  the appliance. Workaround until fixed — add the scope and re-login:
-
-      docker exec siem-keycloak /opt/keycloak/bin/kcadm.sh \
-        update clients/<hyperdx-id>/default-client-scopes/<roles-scope-id> -r siem
-
-  Grafana is unaffected: its client carries a `realm-roles-flat` protocol
-  mapper that emits roles independently of the scope.
-- **The appliance never provisions OIDC the way `bootstrap.sh` does.** For the
-  compose path, `bootstrap.sh` rotates the placeholder client secrets and
-  creates the first admin user. First boot does neither, and does not rewrite
-  the realm's `YOUR_GRAFANA_DOMAIN` / `YOUR_HYPERDX_DOMAIN` redirect URIs from
-  `APPLIANCE_FQDN`. A freshly launched appliance therefore has no working
-  browser login until those three are done by hand.
-- **`ironlog-hyperdx-auth` fails on first boot** by losing the startup race
-  with Keycloak (see the ~50 s note under field notes); `systemctl restart
-  ironlog-hyperdx-auth` clears it.
+- **Offline Grafana startup** still needs the ClickHouse plugin staged at
+  build time; see `quadlets/README.md`.
+- **Existing app databases** retain their credentials. Generic defaults do
+  not reset accounts; see [local authentication](docs/local-auth.md).
 - **Packer leaks one 100 GiB volume per build** — the builder's `/dev/sdb`
   carries `delete_on_termination = false` in `packer/sources.pkr.hcl`. Fixing
   it needs an explicit `ami_block_device_mappings`, because `CreateImage`

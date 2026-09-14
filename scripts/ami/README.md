@@ -192,7 +192,7 @@ directory.
   reachable — well-documented general behavior, not confirmed against the
   specific AMI IDs `packer/sources.pkr.hcl` resolves to.
 - Container image storage sizing (12 GiB `/var` default) — a reasoned
-  estimate for 8 images including ClickHouse/Keycloak, not measured against
+  historical estimate from the earlier eight-image stack, not measured against
   actual pulled image sizes on real hardware.
 - Whether `firewalld` is even installed/active by default on the base
   cloud images before STIG remediation runs (`30-stig.sh` handles either

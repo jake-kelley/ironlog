@@ -52,6 +52,9 @@ const appPort = process.env.HYPERDX_APP_PORT;
 const apiPort = process.env.HYPERDX_API_PORT;
 const appOrigin = `http://127.0.0.1:${appPort}`;
 const apiOrigin = `http://127.0.0.1:${apiPort}`;
+// Express uses FRONTEND_URL to select secure cookies and trusts its proxy.
+// Exercise the internal proxy with the same scheme as the public TLS edge.
+const frontend = new URL(process.env.FRONTEND_URL || appOrigin);
 
 function request(origin, path, { method = 'GET', body, cookie } = {}) {
   return new Promise((resolve, reject) => {
@@ -60,9 +63,8 @@ function request(origin, path, { method = 'GET', body, cookie } = {}) {
     const req = http.request(url, {
       method,
       headers: {
-        // The frontend may set a cookie domain from FRONTEND_URL. Supplying
-        // localhost is sufficient for this in-container proxy check.
-        Host: `localhost:${url.port}`,
+        Host: frontend.host,
+        'X-Forwarded-Proto': frontend.protocol === 'https:' ? 'https' : 'http',
         ...(payload ? {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(payload),
@@ -117,7 +119,7 @@ async function waitForReadiness() {
     }
     if (attempt < attempts) await new Promise(resolve => setTimeout(resolve, 2000));
   }
-  throw new Error('HyperDX API and frontend /api proxy were not ready after 60 seconds');
+  throw new Error('HyperDX API and frontend /api proxy were not ready after 30 attempts');
 }
 
 async function main() {

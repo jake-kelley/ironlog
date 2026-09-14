@@ -3,7 +3,8 @@ set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 helper="$root/scripts/bootstrap-hyperdx-local.sh"
-tmpdir=$(mktemp -d)
+mkdir -p "$root/.decurion"
+tmpdir=$(mktemp -d "$root/.decurion/auth-test.XXXXXX")
 server_pid=''
 node_bin=$(command -v node || command -v node.exe || true)
 
@@ -14,7 +15,13 @@ node_bin=$(command -v node || command -v node.exe || true)
 
 cleanup() {
   [[ -n "$server_pid" ]] && kill "$server_pid" 2>/dev/null || true
-  rm -rf "$tmpdir"
+  # Resolve and constrain the temporary directory before recursive cleanup.
+  local resolved
+  resolved=$(cd "$tmpdir" && pwd -P)
+  case "$resolved" in
+    "$root"/.decurion/auth-test.*) rm -rf -- "$resolved" ;;
+    *) echo 'refusing cleanup outside test workspace' >&2 ;;
+  esac
 }
 trap cleanup EXIT
 
@@ -48,6 +55,9 @@ const app = http.createServer((req, res) => {
     return send(res, healthRequests < 3 ? 503 : 200, { data: 'OK' });
   }
   const authenticated = (req.headers.cookie || '').includes('sid=ok');
+  if (fs.existsSync(state) && fs.readFileSync(state, 'utf8') === 'bypass') {
+    return send(res, 200, []);
+  }
   if (req.url === '/api/sources' && req.method === 'GET') {
     return authenticated ? send(res, 200, [{ name: 'SIEM' }]) : send(res, 401, {});
   }
@@ -69,6 +79,7 @@ const app = http.createServer((req, res) => {
     }
     if (req.url === '/api/login/password') {
       if (!fs.existsSync(state) || data.email !== 'admin@ironlog.local' || data.password !== 'IronlogDev123!') return send(res, 302, {}, { Location: '/login?err=authFail' });
+      if (fs.readFileSync(state, 'utf8') === 'https' && req.headers['x-forwarded-proto'] !== 'https') return send(res, 302, {}, { Location: '/search' });
       return send(res, 302, {}, { Location: '/search', 'Set-Cookie': 'sid=ok; Path=/' });
     }
     send(res, 404, {});
@@ -89,7 +100,7 @@ cat > "$mock_runtime" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "$1" == exec && "$2" == -i && "$3" == mock-hyperdx && "$4" == node && "$5" == - ]] || exit 99
-exec env HYPERDX_LOCAL_EMAIL=admin@ironlog.local HYPERDX_LOCAL_PASSWORD='IronlogDev123!' HYPERDX_APP_PORT="$HYPERDX_TEST_APP_PORT" HYPERDX_API_PORT="$HYPERDX_TEST_API_PORT" "$HYPERDX_TEST_NODE" -
+exec env HYPERDX_LOCAL_EMAIL=admin@ironlog.local HYPERDX_LOCAL_PASSWORD="${HYPERDX_TEST_PASSWORD:-IronlogDev123!}" HYPERDX_APP_PORT="$HYPERDX_TEST_APP_PORT" HYPERDX_API_PORT="$HYPERDX_TEST_API_PORT" FRONTEND_URL="${HYPERDX_TEST_FRONTEND:-http://localhost:$HYPERDX_TEST_APP_PORT}" "$HYPERDX_TEST_NODE" -
 SH
 chmod +x "$mock_runtime"
 
@@ -98,6 +109,24 @@ grep -Fx 'HyperDX local account created and verified.' "$tmpdir/first.out"
 
 PATH="$tmpdir:$PATH" bash "$helper" docker mock-hyperdx > "$tmpdir/repeat.out"
 grep -Fx 'HyperDX existing local account verified.' "$tmpdir/repeat.out"
+
+if HYPERDX_TEST_PASSWORD='Incorrect123!' PATH="$tmpdir:$PATH" bash "$helper" docker mock-hyperdx > "$tmpdir/wrong-password.out" 2>&1; then
+  echo 'expected wrong existing password to fail' >&2
+  exit 1
+fi
+grep -F 'existing accounts were not changed' "$tmpdir/wrong-password.out"
+[[ $(cat "$tmpdir/state") == registered ]]
+
+printf https > "$tmpdir/state"
+HYPERDX_TEST_FRONTEND=https://siem.example.com PATH="$tmpdir:$PATH" bash "$helper" docker mock-hyperdx > "$tmpdir/https.out"
+grep -Fx 'HyperDX existing local account verified.' "$tmpdir/https.out"
+
+printf bypass > "$tmpdir/state"
+if PATH="$tmpdir:$PATH" bash "$helper" docker mock-hyperdx > "$tmpdir/bypass.out" 2>&1; then
+  echo 'expected auth bypass to fail' >&2
+  exit 1
+fi
+grep -F 'native authentication is not protecting' "$tmpdir/bypass.out"
 
 bad_runtime="$tmpdir/podman"
 cat > "$bad_runtime" <<'SH'

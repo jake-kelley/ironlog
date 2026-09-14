@@ -16,7 +16,8 @@ same `siem.*` tables, and every query either tool runs is itself recorded in
 
 ## HyperDX: search
 
-1. Log in (Keycloak SSO first, then your HyperDX account).
+1. Log in with your local HyperDX account. Fresh development default:
+   `admin@ironlog.local` / `IronlogDev123!` (see [local authentication](local-auth.md)).
 2. Left sidebar -> **Search**. Top of the page has three controls that matter:
    - **Source dropdown** (top-left): pick the table — `linux_syslog`,
      `k8s_logs`, `CloudTrail`, `windows_events`, ...
@@ -47,8 +48,8 @@ Try these now (real data is flowing):
 
 ## Grafana: SQL + dashboards
 
-1. Log in via Keycloak at http://localhost:3000 (needs the `keycloak` hosts
-   entry; TOTP enrolls on first login).
+1. Log in locally at http://localhost:3000. Fresh development default:
+   `admin` / `IronlogDev123!`. Existing accounts retain their passwords.
 2. **Dashboards -> SIEM folder -> AWS Security Overview** — provisioned from
    git; populates once AWS ingestion is live.
 3. For ad-hoc SQL: **Explore** (compass icon) -> datasource **SIEM (analyst)**

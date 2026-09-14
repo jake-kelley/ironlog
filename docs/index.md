@@ -10,6 +10,7 @@ This directory is an [Open Knowledge Format](https://github.com/GoogleCloudPlatf
 
 # Runbooks
 
+* [Local app authentication](local-auth.md) - development logins, existing accounts, and deferred external Keycloak integration.
 * [AWS ingestion setup](aws-ingestion.md) - S3 / SQS / IAM wiring for the four AWS log sources.
 * [Host and Kubernetes ingestion](host-ingestion.md) - onboarding Linux, Windows, and Kubernetes log sources.
 

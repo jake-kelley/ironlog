@@ -14,6 +14,10 @@ behave identically on both — that gap is the whole reason the split exists
 for anything compliance-touching). This is an operator decision already
 made; this template does not relitigate it.
 
+Local app authentication is the default. The image contains no Keycloak,
+Postgres, or oauth2-proxy. Future Keycloak integration uses an existing
+external provider and is deferred. See [local authentication](../docs/local-auth.md).
+
 ## Files
 
 - `ironlog.pkr.hcl` — `packer {}` block, required plugins.
@@ -157,10 +161,10 @@ Both sources run this exact list, in order (`build.pkr.hcl`):
 
 1. `scripts/ami/00-partition.sh` — disk layout, separate partitions
 2. `scripts/ami/10-baseline.sh` — packages, podman, `dnf update`
-3. file provisioner: `clickhouse/`, `grafana/`, `keycloak/`, `vector/` → `/opt/ironlog/...`
+3. file provisioner: `clickhouse/`, `grafana/`, `vector/` → `/opt/ironlog/...`
 4. file provisioner: `quadlets/*.container`, `quadlets/*.network` → `/etc/containers/systemd/`
 5. file provisioner: `scripts/firstboot/` → `/usr/local/lib/ironlog/`
-6. `scripts/ami/20-container-images.sh` — pre-pull all 8 container images (arm64) into containers-storage
+6. `scripts/ami/20-container-images.sh` — pre-pull all 5 container images (arm64) into containers-storage
 7. `scripts/ami/30-stig.sh` — STIG hardening
 8. `scripts/ami/40-fips.sh` — FIPS mode
 9. `scripts/ami/90-cleanup.sh` — log/ssh-key/cloud-init cleanup before snapshot
@@ -180,10 +184,9 @@ passed through here as `IRONLOG_CONTAINER_IMAGES` env var for
 documentation/single-source-of-truth purposes — the script is authoritative,
 this is not a second definition to drift):
 
-`clickhouse/clickhouse-server:24.8`, `postgres:16-alpine`,
-`quay.io/keycloak/keycloak:26.0`, `grafana/grafana-oss:11.4.0`,
+`clickhouse/clickhouse-server:24.8`, `grafana/grafana-oss:11.4.0`,
 `docker.hyperdx.io/hyperdx/hyperdx:2.19.0`, `mongo:7.0`,
-`quay.io/oauth2-proxy/oauth2-proxy:v7.15.3`, `timberio/vector:0.57.0-debian`.
+`timberio/vector:0.57.0-debian`.
 
 ## Multi-cloud extension path (Azure/OCI — not now)
 

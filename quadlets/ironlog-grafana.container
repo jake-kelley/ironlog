@@ -22,6 +22,7 @@ NetworkAlias=grafana
 Environment=GF_INSTALL_PLUGINS=grafana-clickhouse-datasource
 Environment=GF_AUTH_DISABLE_LOGIN_FORM=false
 Environment=GF_AUTH_BASIC_ENABLED=true
+Environment=GF_AUTH_ANONYMOUS_ENABLED=false
 Environment=GF_USERS_ALLOW_SIGN_UP=false
 Environment=GF_AUTH_GENERIC_OAUTH_ENABLED=false
 

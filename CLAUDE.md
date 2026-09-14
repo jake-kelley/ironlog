@@ -1,5 +1,14 @@
 # CLAUDE.md — self-hosted SIEM project
 
+## Current auth decision — 2026-09-14
+
+Local Grafana and HyperDX accounts are the current default. Keycloak IdP
+integration is paused; future integration uses an existing external Keycloak.
+Never deploy an on-box Keycloak or its Postgres. Generic development logins
+and upgrade behavior are documented in docs/local-auth.md. Historical SSO,
+MFA, service lists and login instructions below describe earlier deployments
+and are not the current contract. Database RBAC remains unchanged.
+
 ## What this is
 A license-free SIEM replacing paid products: ClickHouse (storage + SQL + RBAC),
 Grafana OSS (dashboards/alerts, OIDC login), Keycloak (SSO + mandatory TOTP MFA),
