@@ -1,5 +1,5 @@
 # SIEM core platform — Phase 1
-# Services: ClickHouse (storage/query), Grafana OSS (UI), Keycloak (OIDC/MFA), Postgres (Keycloak state)
+# Services: ClickHouse (storage/query), Grafana OSS (UI), HyperDX (investigation UI).
 # The Vector aggregator is added in Phase 2 (see comment stub at the bottom).
 
 services:
@@ -37,44 +37,6 @@ services:
       timeout: 5s
       retries: 10
 
-  keycloak-db:
-    image: postgres:16-alpine
-    container_name: siem-keycloak-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: keycloak
-      POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: ${KC_DB_PASSWORD}
-    volumes:
-      - keycloak-db-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U keycloak"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  keycloak:
-    image: quay.io/keycloak/keycloak:26.0
-    container_name: siem-keycloak
-    restart: unless-stopped
-    command: ["start", "--import-realm", "--http-enabled=true", "--proxy-headers=xforwarded"]
-    environment:
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
-      KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
-      KC_HOSTNAME: ${KC_HOSTNAME}          # e.g. http://keycloak:8080 for local, https://sso.example.com in prod
-      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER}
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
-      GRAFANA_CLIENT_SECRET: ${GRAFANA_OAUTH_SECRET}
-    volumes:
-      - ./keycloak/realm-export:/opt/keycloak/data/import:ro
-    ports:
-      - "8080:8080"
-    depends_on:
-      keycloak-db:
-        condition: service_healthy
-
   grafana:
     image: grafana/grafana-oss:11.4.0
     container_name: siem-grafana
@@ -82,28 +44,14 @@ services:
     environment:
       GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL}
-      # --- Local auth locked down; SSO only (break-glass: temporarily set DISABLE_LOGIN_FORM=false) ---
-      GF_AUTH_DISABLE_LOGIN_FORM: "true"
-      GF_AUTH_BASIC_ENABLED: "false"
+      # --- Native local authentication ---
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      GF_AUTH_BASIC_ENABLED: "true"
       GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
-      # --- OIDC via Keycloak ---
-      GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
-      GF_AUTH_GENERIC_OAUTH_NAME: Keycloak
-      GF_AUTH_GENERIC_OAUTH_CLIENT_ID: grafana
-      GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET: ${GRAFANA_OAUTH_SECRET}
-      GF_AUTH_GENERIC_OAUTH_SCOPES: openid profile email
-      GF_AUTH_GENERIC_OAUTH_AUTH_URL: ${KC_PUBLIC_URL}/realms/siem/protocol/openid-connect/auth
-      GF_AUTH_GENERIC_OAUTH_TOKEN_URL: ${KC_PUBLIC_URL}/realms/siem/protocol/openid-connect/token
-      GF_AUTH_GENERIC_OAUTH_API_URL: ${KC_PUBLIC_URL}/realms/siem/protocol/openid-connect/userinfo
-      GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP: "true"
-      GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN: "true"
-      GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_STRICT: "true"
-      GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH: >-
-        contains(roles[*], 'siem_admin') && 'Admin' ||
-        contains(roles[*], 'siem_analyst') && 'Editor' ||
-        contains(roles[*], 'siem_auditor') && 'Viewer'
+      GF_AUTH_GENERIC_OAUTH_ENABLED: "false"
       # --- ClickHouse datasource credentials (referenced by provisioning yaml) ---
       CH_GRAFANA_ANALYST_PASSWORD: ${CH_GRAFANA_ANALYST_PASSWORD}
       CH_GRAFANA_AUDITOR_PASSWORD: ${CH_GRAFANA_AUDITOR_PASSWORD}
@@ -115,25 +63,25 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
-      keycloak:
-        condition: service_started
 
   # ---------------------------------------------------------------
   # HyperDX (ClickStack) — search/investigation UI on the siem.* tables.
   # MIT-licensed. Reads ClickHouse as svc_hyperdx (SELECT on siem.* only, via
   # the siem_analyst role) so every query it runs lands in audit.query_archive.
-  # NOT published to the host: all access goes through oauth2-proxy below
-  # (OSS HyperDX has no SSO; the proxy enforces Keycloak OIDC + MFA first,
-  # HyperDX's own local accounts remain as a second layer).
+  # Native HyperDX authentication remains enabled. The app serves its frontend
+  # and proxies browser API calls internally to HYPERDX_API_PORT.
   hyperdx:
     image: docker.hyperdx.io/hyperdx/hyperdx:2.19.0
     container_name: siem-hyperdx
     restart: unless-stopped
     environment:
       MONGO_URI: mongodb://hyperdx:${HYPERDX_DB_PASSWORD}@hyperdx-db:27017/hyperdx?authSource=admin
-      FRONTEND_URL: http://localhost:8081          # the oauth2-proxy URL the browser sees
+      FRONTEND_URL: ${HYPERDX_PUBLIC_URL}
       HYPERDX_APP_PORT: 8080
       HYPERDX_API_PORT: 8000
+      SERVER_URL: http://127.0.0.1:8000
+      HYPERDX_LOCAL_EMAIL: ${HYPERDX_LOCAL_EMAIL}
+      HYPERDX_LOCAL_PASSWORD: ${HYPERDX_LOCAL_PASSWORD}
       HYPERDX_LOG_LEVEL: info
       USAGE_STATS_ENABLED: "false"                 # no phone-home
       DEFAULT_CONNECTIONS: '[{"name":"SIEM ClickHouse","host":"http://clickhouse:8123","username":"svc_hyperdx","password":"${CH_HYPERDX_PASSWORD}"}]'
@@ -143,6 +91,8 @@ services:
         condition: service_healthy
       hyperdx-db:
         condition: service_healthy
+    ports:
+      - "8081:8080"
 
   hyperdx-db:
     image: mongo:7.0
@@ -158,33 +108,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-
-  # SSO gate for HyperDX: browser -> :8081 -> Keycloak OIDC (+ TOTP) -> proxy
-  # to the unpublished hyperdx container. Only siem_* realm roles pass.
-  hyperdx-auth:
-    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
-    container_name: siem-hyperdx-auth
-    restart: unless-stopped
-    environment:
-      OAUTH2_PROXY_PROVIDER: keycloak-oidc
-      OAUTH2_PROXY_OIDC_ISSUER_URL: ${KC_PUBLIC_URL}/realms/siem
-      OAUTH2_PROXY_CLIENT_ID: hyperdx
-      OAUTH2_PROXY_CLIENT_SECRET: ${HYPERDX_OAUTH_SECRET}
-      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_PROXY_COOKIE_SECRET}
-      OAUTH2_PROXY_EMAIL_DOMAINS: "*"
-      OAUTH2_PROXY_ALLOWED_ROLES: siem_admin,siem_analyst,siem_auditor
-      OAUTH2_PROXY_UPSTREAMS: http://hyperdx:8080
-      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
-      OAUTH2_PROXY_REDIRECT_URL: http://localhost:8081/oauth2/callback
-      OAUTH2_PROXY_COOKIE_SECURE: "false"          # local HTTP; set true behind TLS in prod
-      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
-    ports:
-      - "8081:4180"
-    depends_on:
-      keycloak:
-        condition: service_started
-      hyperdx:
-        condition: service_started
 
   # ---------------------------------------------------------------
   # Phase 3 — Vector aggregator for hosts + Kubernetes (always on).
@@ -274,7 +197,6 @@ services:
 
 volumes:
   clickhouse-data:
-  keycloak-db-data:
   grafana-data:
   vector-buffer:
   vector-hosts-buffer:
