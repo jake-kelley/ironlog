@@ -23,7 +23,7 @@ die() { echo "[$LOG_TAG] FATAL: $*" >&2; exit 1; }
 # The quay.io/ and docker.hyperdx.io/ entries always worked precisely
 # because they were already qualified. These strings must also match the
 # Image= lines in quadlets/ verbatim -- see the cross-check below.
-DEFAULT_IMAGES="docker.io/clickhouse/clickhouse-server:24.8 docker.io/library/postgres:16-alpine quay.io/keycloak/keycloak:26.0 docker.io/grafana/grafana-oss:11.4.0 docker.hyperdx.io/hyperdx/hyperdx:2.19.0 docker.io/library/mongo:7.0 quay.io/oauth2-proxy/oauth2-proxy:v7.15.3 docker.io/timberio/vector:0.57.0-debian"
+DEFAULT_IMAGES="docker.io/clickhouse/clickhouse-server:24.8 docker.io/grafana/grafana-oss:11.4.0 docker.hyperdx.io/hyperdx/hyperdx:2.19.0 docker.io/library/mongo:7.0 docker.io/timberio/vector:0.57.0-debian"
 IMAGES="${IRONLOG_CONTAINER_IMAGES:-$DEFAULT_IMAGES}"
 ARCH="${IRONLOG_PULL_ARCH:-arm64}"
 

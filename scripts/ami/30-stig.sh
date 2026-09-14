@@ -39,8 +39,8 @@
 #    default-deny zone; it has no idea about ironlog's own published ports.
 #    Handled: after remediation, this script adds explicit firewalld rules
 #    for the ports the quadlets publish (see quadlets/README.md's
-#    compose-diff table): 8080 (keycloak), 3000 (grafana), 8081
-#    (hyperdx-auth), 8088 (vector-hosts HEC), 6000 (vector-hosts agents).
+#    compose-diff table): 3000 (grafana), 8081
+#    (hyperdx native auth), 8088 (vector-hosts HEC), 6000 (vector-hosts agents).
 #    ClickHouse's 8123/9000 and Keycloak's own container-to-container calls
 #    stay loopback/bridge-internal and are NOT opened on the host firewall.
 #    CROSS-TEAM FOLLOW-UP (not fixed here, out of scope — quadlets/ is owned
@@ -173,11 +173,11 @@ log "net.ipv4.ip_forward=1 pinned via /etc/sysctl.d/99-ironlog-podman.conf (podm
 
 if systemctl is-active firewalld >/dev/null 2>&1; then
   log "firewalld active (per STIG remediation) — opening ironlog published ports"
-  for p in 8080/tcp 3000/tcp 8081/tcp 8088/tcp 6000/tcp; do
+  for p in 3000/tcp 8081/tcp 8088/tcp 6000/tcp; do
     firewall-cmd --permanent --add-port="$p" >/dev/null
   done
   firewall-cmd --reload >/dev/null
-  log "firewalld: opened 8080,3000,8081,8088,6000 (keycloak, grafana, hyperdx-auth, vector-hosts HEC+agents)"
+  log "firewalld: opened 3000,8081,8088,6000 (grafana, hyperdx, vector-hosts HEC+agents)"
 else
   warn "firewalld not active after STIG remediation — expected if the stig profile in this SSG build doesn't include the firewalld rule, or the package wasn't installed. Ports were NOT explicitly opened; podman's own port publishing (iptables/nftables via CNI) is what's actually gating reachability in that case."
 fi

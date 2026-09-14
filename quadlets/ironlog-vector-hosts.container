@@ -36,7 +36,7 @@ PublishPort=6000:6000
 # compose's healthcheck used a bash /dev/tcp probe against Vector's internal
 # :8686 API, and nothing in compose's depends_on graph actually waits on it
 # (only clickhouse's health gates other services). Not in this task's
-# required Notify=healthy scope (clickhouse/keycloak-db/hyperdx-db only), so
+# required Notify=healthy scope (clickhouse/hyperdx-db only), so
 # translated as a plain HealthCmd for `podman ps`/monitoring visibility, with
 # no Notify=healthy and nothing After= it.
 HealthCmd=bash -c "exec 3<>/dev/tcp/127.0.0.1/8686 && printf 'GET /health HTTP/1.0\r\n\r\n' >&3 && grep -q 200 <&3"

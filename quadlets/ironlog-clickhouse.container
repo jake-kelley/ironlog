@@ -60,8 +60,8 @@ HealthInterval=10s
 HealthTimeout=5s
 HealthRetries=10
 # Makes systemd's "active" state track podman's health state, not just
-# process start, so dependent units (keycloak isn't one, but grafana/
-# hyperdx/vector-hosts/vector are) genuinely wait for ClickHouse to answer
+# process start, so dependent units (grafana/hyperdx/vector-hosts/vector) wait
+# for ClickHouse to answer
 # queries, matching compose's `condition: service_healthy`.
 Notify=healthy
 
