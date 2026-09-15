@@ -4,6 +4,7 @@ Description=ironlog SIEM — MongoDB (HyperDX app state: users/dashboards/search
 
 [Container]
 Image=docker.io/library/mongo:7.0
+Pull=never
 ContainerName=ironlog-hyperdx-db
 Network=ironlog.network
 NetworkAlias=hyperdx-db
