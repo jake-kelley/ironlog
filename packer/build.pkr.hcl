@@ -6,6 +6,11 @@
 // template does not create those files, only calls them by path.
 
 locals {
+  # Packer validation rules can reference only their own variable. regex()
+  # makes an empty bundle path fail during template evaluation, before any AWS
+  # API call or builder launch; internet mode selects the empty placeholder.
+  artifact_bundle_source_dir = var.software_source == "bundle" ? format("%s/", regex(".+", trimspace(var.artifact_bundle_dir))) : "${path.root}/empty-artifacts/"
+
   # Documentation/parity only: the authoritative image list lives in
   # scripts/ami/20-container-images.sh (owned by another worker). Passed
   # through as an env var in case that script wants a single source of
@@ -26,6 +31,49 @@ build {
     "source.amazon-ebs.rhel9",
     "source.amazon-ebs.rocky9",
   ]
+
+  # --- 0. stage build helpers and optional offline artifacts ---
+  # Full scripts/ami tree is installed first: 05-software-source.sh prepares
+  # DNF/image inputs and must run before 00-partition.sh needs its packages.
+  provisioner "shell" {
+    inline = [
+      "mkdir -p /tmp/ironlog-ami-stage /tmp/ironlog-artifacts-stage",
+    ]
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/../scripts/ami/"
+    destination = "/tmp/ironlog-ami-stage/"
+  }
+
+  # Packer dynamic blocks cannot generate provisioner blocks (they only
+  # generate nested source/data/provisioner configuration). Keep one file
+  # provisioner and select a tracked empty directory for internet builds.
+  provisioner "file" {
+    source      = local.artifact_bundle_source_dir
+    destination = "/tmp/ironlog-artifacts-stage/"
+  }
+
+  provisioner "shell" {
+    inline = [
+      "sudo install -d -m 0755 /opt/ironlog-build/scripts /opt/ironlog-artifacts",
+      "sudo cp -a /tmp/ironlog-ami-stage/. /opt/ironlog-build/scripts/",
+      "if [ '${var.software_source}' = internet ]; then rm -f /tmp/ironlog-artifacts-stage/packer-internet-placeholder; fi",
+      "sudo cp -a /tmp/ironlog-artifacts-stage/. /opt/ironlog-artifacts/",
+      "sudo chown -R root:root /opt/ironlog-build/scripts /opt/ironlog-artifacts",
+      "sudo rm -rf /tmp/ironlog-ami-stage /tmp/ironlog-artifacts-stage",
+    ]
+  }
+
+  provisioner "shell" {
+    environment_vars = [
+      "IRONLOG_SOFTWARE_SOURCE=${var.software_source}",
+      "IRONLOG_ARTIFACT_DIR=/opt/ironlog-artifacts",
+      "IRONLOG_EXPECTED_OS=${source.name}",
+    ]
+    inline          = ["sudo bash /opt/ironlog-build/scripts/05-software-source.sh"]
+    execute_command = "sudo env {{ .Vars }} bash '{{ .Path }}'"
+  }
 
   # --- 1. disk layout / partitioning ---
   provisioner "shell" {

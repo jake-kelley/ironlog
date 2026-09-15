@@ -20,22 +20,29 @@ source "amazon-ebs" "rhel9" {
   subnet_id     = var.subnet_id != "" ? var.subnet_id : null
 
   associate_public_ip_address = var.associate_public_ip_address
+  ssh_interface               = var.ssh_interface
   ssh_username                = var.rhel_ssh_username
   communicator                = "ssh"
+  security_group_id           = var.security_group_id != "" ? var.security_group_id : null
+  iam_instance_profile        = var.iam_instance_profile != "" ? var.iam_instance_profile : null
+  source_ami                  = var.source_ami_id != "" ? var.source_ami_id : null
 
   ena_support = true
   # sriov_net_support intentionally omitted: it's the legacy Xen "simple"
   # enhanced-networking flag. Graviton/Nitro instance families (c7g/m7g/r8g)
   # are ENA-only; ena_support above is the correct (and sufficient) setting.
 
-  source_ami_filter {
-    owners      = [var.rhel_ami_owner]
-    most_recent = true
-    filters = {
-      name                = var.rhel_ami_name_filter
-      architecture        = "arm64"
-      root-device-type    = "ebs"
-      virtualization-type = "hvm"
+  dynamic "source_ami_filter" {
+    for_each = var.source_ami_id == "" ? [true] : []
+    content {
+      owners      = [var.rhel_ami_owner]
+      most_recent = true
+      filters = {
+        name                = var.rhel_ami_name_filter
+        architecture        = "arm64"
+        root-device-type    = "ebs"
+        virtualization-type = "hvm"
+      }
     }
   }
 
@@ -112,19 +119,26 @@ source "amazon-ebs" "rocky9" {
   subnet_id     = var.subnet_id != "" ? var.subnet_id : null
 
   associate_public_ip_address = var.associate_public_ip_address
+  ssh_interface               = var.ssh_interface
   ssh_username                = var.rocky_ssh_username
   communicator                = "ssh"
+  security_group_id           = var.security_group_id != "" ? var.security_group_id : null
+  iam_instance_profile        = var.iam_instance_profile != "" ? var.iam_instance_profile : null
+  source_ami                  = var.source_ami_id != "" ? var.source_ami_id : null
 
   ena_support = true
 
-  source_ami_filter {
-    owners      = [var.rocky_ami_owner]
-    most_recent = true
-    filters = {
-      name                = var.rocky_ami_name_filter
-      architecture        = "arm64"
-      root-device-type    = "ebs"
-      virtualization-type = "hvm"
+  dynamic "source_ami_filter" {
+    for_each = var.source_ami_id == "" ? [true] : []
+    content {
+      owners      = [var.rocky_ami_owner]
+      most_recent = true
+      filters = {
+        name                = var.rocky_ami_name_filter
+        architecture        = "arm64"
+        root-device-type    = "ebs"
+        virtualization-type = "hvm"
+      }
     }
   }
 
