@@ -1,7 +1,7 @@
 # scripts/ami/ — AMI build provisioner scripts
 
-Six shell provisioners, run in order as root by `packer/build.pkr.hcl`
-(steps 1, 2, 6, 7, 8, 9), turning a stock RHEL 9 / Rocky 9 aarch64 cloud
+Shell provisioners, run in order as root by `packer/build.pkr.hcl`,
+turning a stock RHEL 9 / Rocky 9 aarch64 cloud
 image into the hardened ironlog appliance base. All are `bash`, `set -euo
 pipefail`, idempotent where practical, and log every action with an
 `[ironlog-<stage>]` prefix.
@@ -11,14 +11,19 @@ not rename.
 
 | Script | Does |
 |---|---|
+| `05-software-source.sh` | Runs before partitioning: validates OS and bundle, selects software source, and installs partition prerequisites |
 | `00-partition.sh` | Mounts the data EBS volume at `/var/lib/ironlog`; carves `/home /tmp /var /var/log /var/log/audit /var/tmp` out of the root volume as LVM logical volumes with STIG mount options |
 | `10-baseline.sh` | `dnf update`, installs podman + supporting packages, creates `/opt/ironlog` `/etc/ironlog` `/var/lib/ironlog`, configures container storage, disables podman auto-update, enables chronyd |
-| `20-container-images.sh` | Pre-pulls all 8 appliance images with `--arch arm64`, verifies each is actually arm64, fails the build otherwise |
+| `20-container-images.sh` | Loads bundle image archives or pulls the five appliance images, verifies arm64 and Quadlet references, and stages the Grafana plugin at build time |
 | `30-stig.sh` | `oscap xccdf eval --remediate` against `ssg-rhel9-ds.xml`, tailored to skip container-incompatible rules, then a second evidence-only scan; reports land in `/var/log/ironlog-build/` inside the image |
 | `40-fips.sh` | `fips-mode-setup --enable`; logs the RHEL-validated module cert numbers or the Rocky-not-validated warning; documents the outstanding reboot requirement |
 | `90-cleanup.sh` | SSH host keys, cloud-init state, logs, dnf caches, credentials, bash history, machine-id, `fstrim` — preserves `/var/log/ironlog-build/` |
 
 ## Partitioning strategy (00-partition.sh)
+
+Software selection is shared across the provisioners. For a private RPM
+repository, container archives and pre-staged Grafana plugin, see
+[RHEL 9 and private software builds](../../docs/private-software-builds.md).
 
 Two devices, identified without assuming a launch-time name (Nitro/Graviton
 instances enumerate EBS as NVMe in-guest, not `/dev/sda1`/`/dev/sdb` — see

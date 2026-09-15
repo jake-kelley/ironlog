@@ -3,7 +3,8 @@ set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 wrapper="$root/scripts/build-ami.sh"
-tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/ironlog-build-ami-test.XXXXXX")
+mkdir -p "$root/.decurion"
+tmpdir=$(mktemp -d "$root/.decurion/build-ami-test.XXXXXX")
 packer_bin=$(command -v packer || command -v packer.exe || true)
 
 [[ -n "$packer_bin" ]] || {
@@ -19,7 +20,12 @@ if [[ "$packer_bin" == *.exe ]] && command -v wslpath >/dev/null 2>&1; then
 fi
 
 cleanup() {
-  rm -rf -- "$tmpdir"
+  local resolved
+  resolved=$(cd "$tmpdir" && pwd -P)
+  case "$resolved" in
+    "$root"/.decurion/build-ami-test.*) rm -rf -- "$resolved" ;;
+    *) echo 'refusing cleanup outside test workspace' >&2 ;;
+  esac
 }
 trap cleanup EXIT
 

@@ -71,20 +71,20 @@ build {
       "IRONLOG_ARTIFACT_DIR=/opt/ironlog-artifacts",
       "IRONLOG_EXPECTED_OS=${source.name}",
     ]
-    inline          = ["sudo bash /opt/ironlog-build/scripts/05-software-source.sh"]
+    inline          = ["bash /opt/ironlog-build/scripts/05-software-source.sh"]
     execute_command = "sudo env {{ .Vars }} bash '{{ .Path }}'"
   }
 
   # --- 1. disk layout / partitioning ---
   provisioner "shell" {
-    script          = "${path.root}/../scripts/ami/00-partition.sh"
+    inline          = ["bash /opt/ironlog-build/scripts/00-partition.sh"]
     execute_command = "sudo bash '{{ .Path }}'"
   }
 
   # --- 2. baseline packages, podman, dnf update ---
   provisioner "shell" {
     remote_folder   = "/opt/ironlog-build"
-    script          = "${path.root}/../scripts/ami/10-baseline.sh"
+    inline          = ["bash /opt/ironlog-build/scripts/10-baseline.sh"]
     execute_command = "sudo bash '{{ .Path }}'"
   }
 
@@ -224,7 +224,7 @@ build {
       "IRONLOG_CONTAINER_IMAGES=${local.container_images}",
       "IRONLOG_PULL_ARCH=arm64",
     ]
-    script = "${path.root}/../scripts/ami/20-container-images.sh"
+    inline = ["bash /opt/ironlog-build/scripts/20-container-images.sh"]
     # `sudo env {{ .Vars }} ...`, NOT `sudo sh -c '{{ .Vars }} {{ .Path }}'`.
     # Packer renders .Vars as KEY='value' pairs with literal single quotes, so
     # nesting them inside sh -c '...' closed the outer quote at the first one:
@@ -238,7 +238,7 @@ build {
   # --- 7. STIG hardening ---
   provisioner "shell" {
     remote_folder   = "/opt/ironlog-build"
-    script          = "${path.root}/../scripts/ami/30-stig.sh"
+    inline          = ["bash /opt/ironlog-build/scripts/30-stig.sh"]
     execute_command = "sudo bash '{{ .Path }}'"
   }
 
@@ -248,7 +248,7 @@ build {
   # and no TLS configured is REASONED BUT UNTESTED, and only on real RHEL 9.
   provisioner "shell" {
     remote_folder   = "/opt/ironlog-build"
-    script          = "${path.root}/../scripts/ami/40-fips.sh"
+    inline          = ["bash /opt/ironlog-build/scripts/40-fips.sh"]
     execute_command = "sudo bash '{{ .Path }}'"
   }
 
@@ -282,7 +282,7 @@ build {
   # --- 9. log/ssh-key/cloud-init cleanup before snapshot ---
   provisioner "shell" {
     remote_folder   = "/opt/ironlog-build"
-    script          = "${path.root}/../scripts/ami/90-cleanup.sh"
+    inline          = ["bash /opt/ironlog-build/scripts/90-cleanup.sh"]
     execute_command = "sudo bash '{{ .Path }}'"
   }
 

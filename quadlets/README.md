@@ -180,17 +180,14 @@ To bring it up once AWS ingestion is actually configured (per
    (`podman logs -f ironlog-vector`) to confirm rows are landing, per
    CLAUDE.md's existing Phase 2 remaining-work note.
 
-## Air-gap blocker: Grafana plugin install
+## Images and Grafana plugin without runtime downloads
 
-`GF_INSTALL_PLUGINS=grafana-clickhouse-datasource` (carried over unchanged
-from compose) makes Grafana fetch the plugin from grafana.com **at container
-start**, which needs network egress. The target environments include
-disconnected enclaves (GovCloud, C2S, SC2S) where that egress will not exist.
-**Not solved in this translation** — flagging it as an open item. Options for
-whoever picks this up: bake the plugin into a custom Grafana image built at
-AMI-build time, or pre-stage the unpacked plugin directory into
-`/var/lib/ironlog/grafana/plugins/` so Grafana finds it locally and skips the
-fetch.
+Appliance Quadlets use `Pull=never`; all referenced images must already be
+loaded during the build. Grafana mounts its pre-staged plugin directory from
+`/opt/ironlog/grafana-plugins` and does not install it at container startup.
+The build can stage software from a verified local/S3 bundle; see
+[RHEL 9 and private software builds](../docs/private-software-builds.md).
+Compose's connected development path is separate from the appliance units.
 
 ## Verify on a Rocky 9 box
 
@@ -230,7 +227,7 @@ systemctl status 'ironlog-*.service'
 
 - **k3s** — excluded per task scope; it's a local test/demo producer per
   compose's own comment, not appliance-relevant.
-- **Grafana plugin egress** — see "Air-gap blocker" above.
+- **Offline artifact validation** — test the approved image/plugin bundle on the target OS before production use.
 - **`AWS_REGION` default** — see "Secret handling" above; needs the secret
   resolver to always write a concrete value.
 - **No live validation** — podman unavailable on this dev machine; see

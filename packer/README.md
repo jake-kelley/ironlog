@@ -32,6 +32,13 @@ external provider and is deferred. See [local authentication](../docs/local-auth
 
 ## Building
 
+For explicit OS selection and builds from approved local/S3 software bundles,
+use [RHEL 9 and private software builds](../docs/private-software-builds.md).
+`bash scripts/build-ami.sh --os rhel9` selects only RHEL; `--os rocky9`
+selects only Rocky. Run the wrapper from the repository root. The commands
+below show the lower-level connected build flow; `packer init` downloads
+plugins and must be completed through approved staging on a disconnected runner.
+
 Run from a Unix-like shell (WSL/Linux — matches this repo's existing
 convention of running `bootstrap.sh` from WSL Ubuntu, per `CLAUDE.md` "Host
 environment"). From the repo root:
