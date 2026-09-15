@@ -6,6 +6,10 @@ die() { echo "[ironlog-source] FATAL: $*" >&2; exit 1; }
 source_mode="${IRONLOG_SOFTWARE_SOURCE:-internet}"
 artifact_dir="${IRONLOG_ARTIFACT_DIR:-/opt/ironlog-artifacts}"
 expected_os="${IRONLOG_EXPECTED_OS:-}"
+system_etc="${IRONLOG_SYSTEM_ETC_DIR:-/etc}"
+ironlog_etc="${IRONLOG_IRONLOG_ETC_DIR:-$system_etc/ironlog}"
+dnf_config="${IRONLOG_DNF_CONFIG_FILE:-$system_etc/dnf/dnf.conf}"
+dnf_repos_dir="${IRONLOG_DNF_REPOS_DIR:-$ironlog_etc/dnf.repos.d}"
 [ "$source_mode" = internet ] || [ "$source_mode" = bundle ] || die "IRONLOG_SOFTWARE_SOURCE must be internet or bundle"
 [ "$expected_os" = rhel9 ] || [ "$expected_os" = rocky9 ] || die "IRONLOG_EXPECTED_OS must be rhel9 or rocky9"
 . "${IRONLOG_OS_RELEASE_FILE:-/etc/os-release}"
@@ -13,14 +17,19 @@ actual_os="${ID}${VERSION_ID%%.*}"
 [ "$actual_os" = "$expected_os" ] || die "host OS is $ID $VERSION_ID, expected $expected_os"
 host_arch="$(uname -m)"
 [ "$host_arch" = aarch64 ] || [ "$host_arch" = arm64 ] || die "host architecture is $host_arch, expected aarch64/arm64"
-validate_relative() { case "$1" in ''|/*|*'//'*) return 1;; esac; local p; IFS=/ read -r -a p <<<"$1"; for x in "${p[@]}"; do [ -n "$x" ] && [ "$x" != . ] && [ "$x" != .. ] || return 1; done; }
+validate_relative() {
+  [[ "$1" =~ ^[A-Za-z0-9_./+@-]+$ ]] || return 1
+  case "$1" in /*|*'//'*) return 1;; esac
+  local p; IFS=/ read -r -a p <<<"$1"
+  for x in "${p[@]}"; do [ -n "$x" ] && [ "$x" != . ] && [ "$x" != .. ] || return 1; done
+}
 validate_bundle() {
   [ -d "$artifact_dir" ] && [ ! -L "$artifact_dir" ] || die "artifact directory missing or symlink: $artifact_dir"
   local env="$artifact_dir/bundle.env" sums="$artifact_dir/SHA256SUMS"
   [ -f "$env" ] && [ ! -L "$env" ] || die "bundle.env missing or not regular"
   [ -f "$sums" ] && [ ! -L "$sums" ] || die "SHA256SUMS missing or not regular"
   [ "$(cat "$env")" = "$(printf 'FORMAT_VERSION=1\nOS_ID=%s\nARCH=arm64' "$expected_os")" ] && [ "$(wc -l < "$env" | tr -d ' ')" = 3 ] || die "bundle.env is not exact required three-line format"
-  ! find "$artifact_dir" -type l -print -quit | grep -q . || die "bundle contains symlink"
+  ! find "$artifact_dir" ! -type d ! -type f -print -quit | grep -q . || die "bundle contains symlink or special file"
   local line path; declare -A listed=()
   while IFS= read -r line || [ -n "$line" ]; do
     [[ "$line" =~ ^[0-9a-fA-F]{64}\ [\ \*]([^[:space:]].*)$ ]] || die "invalid SHA256SUMS entry: $line"
@@ -56,17 +65,24 @@ validate_bundle() {
 if [ "$source_mode" = bundle ]; then
   validate_bundle
   for key in "$artifact_dir"/keys/*.asc; do
-    approved=0; for vendor_key in /etc/pki/rpm-gpg/*; do [ -f "$vendor_key" ] && cmp -s "$key" "$vendor_key" && approved=1 && break; done
+    approved=0; for vendor_key in "$system_etc"/pki/rpm-gpg/*; do [ -f "$vendor_key" ] && cmp -s "$key" "$vendor_key" && approved=1 && break; done
     [ "$approved" = 1 ] || die "bundle RPM key $(basename "$key") is not an approved installed vendor key"
   done
 fi
-install -d -m 0700 -o root -g root /etc/ironlog
+install -d -m 0700 -o root -g root "$ironlog_etc"
 if [ "$source_mode" = bundle ]; then
-  printf '[ironlog-bundle]\nname=ironlog verified offline bundle\nbaseurl=file://%s/rpm-repo\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=0\n' "$artifact_dir" > /etc/yum.repos.d/ironlog-bundle.repo
+  install -d -m 0700 -o root -g root "$dnf_repos_dir" "$(dirname "$dnf_config")"
+  ! find "$dnf_repos_dir" -mindepth 1 -maxdepth 1 ! -name ironlog-bundle.repo -print -quit | grep -q . || die "offline DNF repo directory contains unexpected file"
+  [ ! -e "$dnf_config" ] || cp -a "$dnf_config" "$ironlog_etc/dnf.conf.pre-bundle"
+  printf '[main]\nreposdir=%s\nplugins=0\ngpgcheck=1\nrepo_gpgcheck=0\n' "$dnf_repos_dir" > "$dnf_config"
+  chmod 0600 "$dnf_config"
+  printf '[ironlog-bundle]\nname=ironlog verified offline bundle\nbaseurl=file://%s/rpm-repo\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=0\n' "$artifact_dir" > "$dnf_repos_dir/ironlog-bundle.repo"
   for key in "$artifact_dir"/keys/*.asc; do rpm --import "$key"; done
 fi
-{ printf 'IRONLOG_SOFTWARE_SOURCE=%q\n' "$source_mode"; printf 'IRONLOG_ARTIFACT_DIR=%q\n' "$artifact_dir"; printf 'IRONLOG_EXPECTED_OS=%q\n' "$expected_os"; } > /etc/ironlog/build-source.conf
-chmod 0600 /etc/ironlog/build-source.conf
+{ printf 'IRONLOG_SOFTWARE_SOURCE=%q\n' "$source_mode"; printf 'IRONLOG_ARTIFACT_DIR=%q\n' "$artifact_dir"; printf 'IRONLOG_EXPECTED_OS=%q\n' "$expected_os"; } > "$ironlog_etc/build-source.conf"
+chmod 0600 "$ironlog_etc/build-source.conf"
+IRONLOG_BUILD_SOURCE_CONFIG="$ironlog_etc/build-source.conf"
+export IRONLOG_BUILD_SOURCE_CONFIG
 . "$(dirname "$0")/lib-software-source.sh"
 ironlog_dnf install -y lvm2 parted util-linux gdisk
 log "software source configured: $source_mode (OS=$actual_os arch=$host_arch)"
