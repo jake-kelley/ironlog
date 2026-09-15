@@ -93,7 +93,7 @@ control-mapping.
 For RHEL 9 or builds without public internet software sources, see
 [RHEL 9 and private software builds](docs/private-software-builds.md).
 The same provisioners support Rocky 9 development builds; approved software
-can be staged from local media or a bucket in the build account.
+can be staged from local media or an accessible S3 bucket.
 
     docker-compose.yml           the whole platform
     bootstrap.sh                 one-command fresh install

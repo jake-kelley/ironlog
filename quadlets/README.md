@@ -185,7 +185,7 @@ To bring it up once AWS ingestion is actually configured (per
 Appliance Quadlets use `Pull=never`; all referenced images must already be
 loaded during the build. Grafana mounts its pre-staged plugin directory from
 `/opt/ironlog/grafana-plugins` and does not install it at container startup.
-The build can stage software from a verified local/S3 bundle; see
+The build can stage software from a local/S3 bundle; see
 [RHEL 9 and private software builds](../docs/private-software-builds.md).
 Compose's connected development path is separate from the appliance units.
 

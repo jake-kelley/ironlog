@@ -10,7 +10,7 @@ This directory is an [Open Knowledge Format](https://github.com/GoogleCloudPlatf
 
 # Runbooks
 
-* [RHEL 9 and private software builds](private-software-builds.md) - approved base AMIs and checked software bundles from local media or same-account S3.
+* [RHEL 9 and private software builds](private-software-builds.md) - approved base AMIs and software bundles from local media or S3.
 * [Local app authentication](local-auth.md) - development logins, existing accounts, and deferred external Keycloak integration.
 * [AWS ingestion setup](aws-ingestion.md) - S3 / SQS / IAM wiring for the four AWS log sources.
 * [Host and Kubernetes ingestion](host-ingestion.md) - onboarding Linux, Windows, and Kubernetes log sources.

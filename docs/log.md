@@ -1,7 +1,7 @@
 # SIEM documentation update log
 
 ## 2026-09-15
-* **Update**: Added [RHEL 9 and private software builds](private-software-builds.md), covering OS selection, same-account S3 staging, RPM/image/plugin bundle contents, and private build networking.
+* **Update**: Added [RHEL 9 and private software builds](private-software-builds.md), covering OS selection, S3 staging, RPM/image/plugin bundle contents, and private build networking. Removed checksum and bucket-owner requirements at operator request.
 
 ## 2026-09-14
 * **Update**: Default deployments use [native local app accounts](local-auth.md). Keycloak integration is deferred and no identity provider is bundled. Updated deployment and control notes to remove current SSO/MFA claims.

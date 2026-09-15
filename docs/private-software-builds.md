@@ -1,7 +1,7 @@
 ---
 type: Guide
 title: RHEL 9 and private software builds
-description: Select a RHEL 9 base and provision the appliance from a checked local or same-account S3 software bundle.
+description: Select a RHEL 9 base and provision the appliance from a local or S3 software bundle.
 tags: [deployment, rhel, aws, air-gap]
 timestamp: 2026-09-15T00:00:00Z
 ---
@@ -18,10 +18,10 @@ There are two software sources:
 | Mode | Build-time software | Appliance boot |
 |---|---|---|
 | `internet` | Configured OS repositories, public container registries, Grafana plugin download | Baked images and plugin |
-| `bundle` | A verified directory containing an RPM repository, image archives, and plugin files | Baked images and plugin |
+| `bundle` | A directory containing an RPM repository, image archives, and plugin files | Baked images and plugin |
 
 The S3 download happens on the **Packer runner**, before provisioning. Packer
-uploads the verified directory to the build instance over its existing SSH
+uploads the staged directory to the build instance over its existing SSH
 connection. The instance does not need AWS CLI, S3 credentials, or a public
 package repository to bootstrap the bundle. There is no fallback to public
 repositories or image registries when a bundle is incomplete.
@@ -52,7 +52,6 @@ Prepare one release bundle for each OS and architecture:
 
 ```text
 bundle.env
-SHA256SUMS
 rpm-repo/
   repodata/repomd.xml
   ... signed RPMs and repository metadata ...
@@ -81,8 +80,8 @@ ARCH=arm64
 
 Use `OS_ID=rocky9` for a Rocky bundle. `images.tsv` has one fully qualified
 image reference and one relative archive filename per line, separated by
-a literal tab. Use LF line endings for `bundle.env`, `images.tsv` and
-`SHA256SUMS`. The required appliance references are:
+a literal tab. Use LF line endings for `bundle.env` and `images.tsv`.
+The required appliance references are:
 
 ```text
 docker.io/clickhouse/clickhouse-server:24.8
@@ -114,62 +113,53 @@ does not establish trust in itself.
 
 Include an approved Grafana ClickHouse datasource plugin release compatible
 with Grafana 11.4.0 and Linux arm64. Preserve its signature and executable
-backend permissions. The bundle fixes the plugin bytes through checksums;
-record the chosen plugin version when publishing the release.
+backend permissions. Record the chosen plugin version when publishing the release.
 
-## Seal and stage the bundle
+## Package and stage the bundle
 
 Paths inside the bundle must use letters, numbers, `_`, `-`, `.`, `+`, `@`, and `/`,
 without spaces or parent traversal. Symlinks, hard links in tar archives,
-special files, duplicate entries, and unlisted files are rejected. Generate
-the checksum index on the preparation host from inside the bundle:
+special files and duplicate archive entries are rejected. From inside the
+bundle directory, create an archive:
 
 ```bash
-find . -type f ! -name SHA256SUMS -printf '%P\n' | LC_ALL=C sort |
-  while IFS= read -r file; do sha256sum -- "$file"; done > SHA256SUMS
 tar -czf ../ironlog-rhel9-arm64.tar.gz .
-sha256sum ../ironlog-rhel9-arm64.tar.gz
 ```
 
-Publish the archive SHA-256 through a trusted release channel. A hash
-downloaded alongside an untrusted archive does not independently establish
-its provenance. Store the archive in your own account's S3 bucket, or copy
-it onto approved local media. The following commands only read artifacts;
-they do not create a bucket or launch infrastructure.
+Store the archive in an S3 bucket your credentials can read, or copy it onto
+local media. No checksum manifest or bucket-owner check is required. The
+following commands only read artifacts; they do not create a bucket or
+launch infrastructure.
 
-For same-account S3, using Python 3 and AWS CLI installed on the runner:
+For S3, using Python 3 and AWS CLI installed on the runner:
 
 ```bash
 python scripts/prepare-artifacts.py \
   --source s3://YOUR-BUCKET/ironlog/releases/ironlog-rhel9-arm64.tar.gz \
-  --sha256 YOUR_TRUSTED_64_HEX_SHA256 \
   --profile YOUR_BUILD_PROFILE --region YOUR_REGION \
   --os rhel9 --output .decurion/artifacts/rhel9-release
 ```
 
-The helper obtains the active account ID through STS and passes it as
-`--expected-bucket-owner` to S3. Cross-account buckets are rejected. Use
-`--endpoint-url` for a custom S3 endpoint when necessary; TLS certificate
-verification remains enabled. Configure regional/partition-specific STS
-endpoints in AWS CLI when your environment requires them.
+The helper uses normal S3 access permissions; the bucket can be in another
+account. It does not call STS to check ownership. Use `--endpoint-url` for a
+custom S3 endpoint when necessary; TLS certificate verification remains enabled.
 
 For a local archive:
 
 ```bash
 python scripts/prepare-artifacts.py \
   --source /approved-media/ironlog-rhel9-arm64.tar.gz \
-  --sha256 YOUR_TRUSTED_64_HEX_SHA256 \
   --os rhel9 --output .decurion/artifacts/rhel9-release
 ```
 
-For an already trusted local directory, use that directory as `--source`
-and omit `--sha256`; the per-file index is still verified. Output must be a
-new directory. The helper does not overwrite an existing release.
+For a local directory, use that directory as `--source`. Output must be a
+new directory. The helper checks bundle structure, OS and image references
+and does not overwrite an existing release.
 
 ## Build through private networking
 
-Run Packer from a host that can reach the builder's private address. Use the
-same target-account profile used to stage the S3 bundle. Supply the approved
+Run Packer from a host that can reach the builder's private address. Use a
+profile authorized to build in the target account. Supply the approved
 base AMI, subnet and security group:
 
 ```bash
@@ -187,7 +177,7 @@ AWS_PROFILE=YOUR_BUILD_PROFILE bash scripts/build-ami.sh --os rhel9 \
 
 No NAT/public internet is needed for software in bundle mode. AWS control
 plane connectivity is still required: the runner uses EC2 APIs to build the
-AMI, and the S3 staging command uses S3 plus STS. Provide private endpoints
+AMI, and the S3 staging command uses S3. Provide private endpoints
 and DNS/routing appropriate to your AWS partition. The runner's SSH path to
 the builder is separate from S3 access. The build scripts do not create
 endpoints or alter VPC routing.
@@ -199,8 +189,8 @@ to your approved account and prefix. Avoid static credentials inside bundles.
 
 ## Verification and remaining limits
 
-Host preparation tests cover checksum failures, OS mismatch, unsafe tar
-entries and same-account S3 request construction. Provisioning tests use
+Host preparation tests cover bundles without checksums, OS mismatch, unsafe
+tar entries and S3 requests without owner checks. Provisioning tests use
 mock package/container commands to exercise the offline path. These checks
 are not a substitute for a real build with your approved RHEL base and RPM
 mirror. Validate the finished appliance with internet egress denied, including
@@ -215,6 +205,6 @@ build without deleting appliance data or retained snapshots.
 ## Reference documentation
 
 - [Packer Amazon EBS builder](https://developer.hashicorp.com/packer/integrations/hashicorp/amazon/latest/components/builder/ebs)
-- [S3 GetObject and expected bucket owner](https://docs.aws.amazon.com/cli/latest/reference/s3api/get-object.html)
+- [S3 GetObject](https://docs.aws.amazon.com/cli/latest/reference/s3api/get-object.html)
 - [Private S3 connectivity](https://docs.aws.amazon.com/AmazonS3/latest/userguide/privatelink-interface-endpoints.html)
 - [Podman image archives](https://docs.podman.io/en/latest/markdown/podman-save.1.html)
