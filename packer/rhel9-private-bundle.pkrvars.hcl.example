@@ -1,0 +1,14 @@
+# Prepared by scripts/prepare-artifacts.py; use an absolute local path.
+software_source     = "bundle"
+artifact_bundle_dir = "/absolute/path/to/ironlog-artifacts"
+
+# Explicit private base AMI is recommended for offline/private builds.
+source_ami_id = "ami-0123456789abcdef0"
+
+# Existing private-network controls. Packer host must reach this subnet's SSH.
+vpc_id                      = "vpc-0123456789abcdef0"
+subnet_id                   = "subnet-0123456789abcdef0"
+associate_public_ip_address = false
+ssh_interface               = "private_ip"
+security_group_id           = "sg-0123456789abcdef0"
+iam_instance_profile        = "ironlog-packer-build"

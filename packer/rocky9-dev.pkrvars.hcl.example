@@ -1,0 +1,6 @@
+# Rocky 9 development build. Public AMI filter and public SSH remain defaults.
+software_source = "internet"
+aws_region      = "us-east-1"
+extra_tags = {
+  Environment = "dev"
+}

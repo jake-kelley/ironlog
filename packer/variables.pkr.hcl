@@ -35,7 +35,30 @@ variable "instance_type" {
   EOT
 }
 
-# --- source AMI selection (by filter, not hardcoded id) ---------------------
+# --- source AMI selection ----------------------------------------------------
+
+variable "source_ami_id" {
+  type        = string
+  default     = ""
+  description = "Optional explicit EBS-backed source AMI ID. When nonempty, it bypasses both public source_ami_filter blocks and their owner/name filters."
+}
+
+variable "software_source" {
+  type        = string
+  default     = "internet"
+  description = "Software installation source: internet downloads during build, or bundle for a prepared offline artifact directory."
+
+  validation {
+    condition     = contains(["internet", "bundle"], var.software_source)
+    error_message = "Software source must be either internet or bundle."
+  }
+}
+
+variable "artifact_bundle_dir" {
+  type        = string
+  default     = ""
+  description = "Local directory prepared by scripts/prepare-artifacts.py. Its contents are uploaded to /opt/ironlog-artifacts when software_source is bundle."
+}
 
 variable "rhel_ami_owner" {
   type        = string
@@ -164,6 +187,29 @@ variable "associate_public_ip_address" {
   type        = bool
   default     = true
   description = "Whether the build instance gets a public IP for Packer's SSH connection. Set false + use a bastion/SSM if your subnet is private-only."
+}
+
+variable "ssh_interface" {
+  type        = string
+  default     = "public_ip"
+  description = "Packer SSH address selector. Default public_ip preserves public-subnet builds; set private_ip for a private subnet reachable from the Packer host."
+
+  validation {
+    condition     = contains(["public_ip", "private_ip", "public_dns", "private_dns", "ipv6", "session_manager"], var.ssh_interface)
+    error_message = "SSH interface must be public_ip, private_ip, public_dns, private_dns, ipv6, or session_manager."
+  }
+}
+
+variable "security_group_id" {
+  type        = string
+  default     = ""
+  description = "Optional existing security-group ID for the build instance. Empty lets Packer create its temporary SSH security group."
+}
+
+variable "iam_instance_profile" {
+  type        = string
+  default     = ""
+  description = "Optional existing IAM instance-profile name for the build instance (required for ssh_interface=session_manager)."
 }
 
 # --- AMI metadata ---------------------------------------------------------------
