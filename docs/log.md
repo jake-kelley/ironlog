@@ -1,6 +1,6 @@
 # SIEM documentation update log
 
-- 2026-09-15: Local bootstrap defaults to Podman, with explicit Docker selection and a shared Compose wrapper. Appliance Quadlets remain Podman-based. Runtime selection is tested with mocks; live Podman Compose validation remains open.
+- 2026-09-15: Local bootstrap defaults to Podman, with explicit Docker selection persisted in `.env` and a shared Compose wrapper. Bootstrap checks runtime and provider readiness before writing `.env`; Docker volumes are not automatically migrated to Podman. Appliance Quadlets remain Podman-based. Runtime selection is tested with mocks; live Podman Compose validation remains open.
 
 
 ## 2026-09-15
