@@ -157,6 +157,8 @@ New to querying? Start with [docs/query-guide.md](docs/query-guide.md).
 
 ## Fresh install
 
+Run these commands from the repository root in a Bash shell.
+
 1. Prereqs: Podman with a working Compose provider, Bash, and OpenSSL.
    Docker Engine with Compose v2 is also supported.
 2. `./bootstrap.sh` — generates `.env` with generic app logins and random
@@ -178,9 +180,11 @@ the wrapper. Switching engines does not migrate existing containers or volumes.
 `podman compose` requires an external provider such as `podman-compose` or
 Docker Compose. Select one with `PODMAN_COMPOSE_PROVIDER` if needed; see
 [Podman's Compose documentation](https://docs.podman.io/en/latest/markdown/podman-compose.1.html).
-On Windows/macOS, start a Podman machine before bootstrap. The optional privileged k3s demo uses the same runtime selection; rootless
-k3s operation is not verified. Local runtime
-routing is covered by mocked tests; live Podman Compose startup remains to
+On Windows/macOS, start a Podman machine before bootstrap. Bootstrap checks
+the runtime and Compose provider before generating `.env`. The optional
+privileged k3s demo uses the same runtime selection; rootless k3s operation
+is not verified. Local runtime routing is covered by mocked tests; live
+Podman Compose startup remains to
 be verified. The EC2 appliance continues to use Podman systemd Quadlets.
 
 `bootstrap.sh` refuses to overwrite an existing `.env`. Fully wipe with

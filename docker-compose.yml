@@ -1,6 +1,6 @@
-# SIEM core platform — Phase 1
+# SIEM local platform — Podman (default) or Docker via scripts/compose.sh
 # Services: ClickHouse (storage/query), Grafana OSS (UI), HyperDX (investigation UI).
-# The Vector aggregator is added in Phase 2 (see comment stub at the bottom).
+# Vector host ingestion is always on; AWS ingestion and k3s are optional profiles.
 
 services:
   clickhouse:
@@ -144,7 +144,7 @@ services:
   # Local k3s demo/test cluster (compose profile "k3s") — exercises the K8s
   # ingestion path end-to-end. k8s/vector-shipper.yaml is auto-applied via the
   # k3s manifests dir; the HEC token Secret is created once after first boot:
-  #   docker exec siem-k3s kubectl -n siem-logging create secret generic \
+  #   scripts/compose.sh exec -T k3s kubectl -n siem-logging create secret generic \
   #     siem-hec --from-literal=token=<SPLUNK_HEC_TOKEN from .env>
   # Not part of the SIEM itself — a producer for testing/demo.
   k3s:
@@ -168,7 +168,7 @@ services:
   # Phase 2 — Vector aggregator (AWS ingestion).
   # Gated behind the "aws" compose profile: it only starts once real AWS
   # credentials + SQS queue URLs are in .env and COMPOSE_PROFILES=aws is set
-  # (or `docker compose --profile aws up -d`). Keeps the core stack green
+  # (or `scripts/compose.sh --profile aws up -d`). Keeps the core stack green
   # before the AWS side is wired up (see docs/aws-ingestion.md).
   vector:
     image: docker.io/timberio/vector:0.57.0-debian
