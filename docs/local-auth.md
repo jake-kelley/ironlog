@@ -25,10 +25,13 @@ development credentials are intentional defaults, not production secrets.
 Both apps still authenticate users; anonymous query access is not enabled.
 There is no Keycloak redirect, hosts-file prerequisite, SSO, or enforced MFA.
 
-Run `./bootstrap.sh` from the repo in a Bash shell with Podman and a Compose provider available.
-For Docker, use `IRONLOG_CONTAINER_RUNTIME=docker ./bootstrap.sh`. The chosen
-runtime is saved in `.env`; existing Docker installs should set
-`IRONLOG_CONTAINER_RUNTIME=docker` there before using `scripts/compose.sh`.
+From the repository root, run `./bootstrap.sh` in a Bash shell. Podman is the
+default runtime. For Docker, use `IRONLOG_CONTAINER_RUNTIME=docker ./bootstrap.sh`.
+Bootstrap first verifies that selected runtime, its Compose
+provider, and its service or machine are ready; only then does it write `.env`.
+The selected runtime is persisted as `IRONLOG_CONTAINER_RUNTIME` in `.env`.
+Existing Docker installs should set `IRONLOG_CONTAINER_RUNTIME=docker` there
+before using `scripts/compose.sh`.
 An optional email argument selects the initial HyperDX user's email.
 Bootstrap generates random database/service credentials, starts the stack,
 and calls `scripts/bootstrap-hyperdx-local.sh podman siem-hyperdx`
@@ -39,8 +42,10 @@ connection and source definitions.
 
 To choose other credentials in Compose, copy `.env.example` to `.env`,
 set its backend secrets and `GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD`,
-`HYPERDX_LOCAL_EMAIL`, and `HYPERDX_LOCAL_PASSWORD`, then use
-`scripts/compose.sh up -d` and the HyperDX helper instead of `bootstrap.sh`.
+`HYPERDX_LOCAL_EMAIL`, and `HYPERDX_LOCAL_PASSWORD`, then run
+`scripts/compose.sh up -d` from the repository root. Next run the HyperDX
+helper with runtime selected in `.env`: `scripts/bootstrap-hyperdx-local.sh podman siem-hyperdx`
+for Podman, or `scripts/bootstrap-hyperdx-local.sh docker siem-hyperdx` for Docker.
 Set `HYPERDX_SESSION_SECRET` to a random value (`openssl rand -hex 32`);
 it signs native sessions and is independent of the generic login password.
 For an appliance, set overrides in its input config;
@@ -53,6 +58,10 @@ Preserve Grafana, MongoDB, ClickHouse and Vector data. Do not use
 `scripts/compose.sh down -v` to change authentication. Bootstrap refuses to
 overwrite an existing `.env`; update that file with the local auth variables
 from `.env.example` instead.
+
+Switching from Docker to Podman does not automatically migrate existing Docker
+volumes. Keep `IRONLOG_CONTAINER_RUNTIME=docker` to continue using those
+volumes, or plan and perform a separate data migration before changing runtime.
 
 Before recreating the Compose stack, stop the old `siem-hyperdx-auth`,
 `siem-keycloak` and `siem-keycloak-db` containers if present. The old proxy
