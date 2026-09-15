@@ -178,7 +178,8 @@ the wrapper. Switching engines does not migrate existing containers or volumes.
 `podman compose` requires an external provider such as `podman-compose` or
 Docker Compose. Select one with `PODMAN_COMPOSE_PROVIDER` if needed; see
 [Podman's Compose documentation](https://docs.podman.io/en/latest/markdown/podman-compose.1.html).
-On Windows/macOS, start a Podman machine before bootstrap. Local runtime
+On Windows/macOS, start a Podman machine before bootstrap. The optional privileged k3s demo uses the same runtime selection; rootless
+k3s operation is not verified. Local runtime
 routing is covered by mocked tests; live Podman Compose startup remains to
 be verified. The EC2 appliance continues to use Podman systemd Quadlets.
 
