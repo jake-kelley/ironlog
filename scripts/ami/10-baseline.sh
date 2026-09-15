@@ -5,6 +5,7 @@
 # down /home /tmp /var /var/log /var/log/audit /var/tmp and mounted
 # /var/lib/ironlog. Idempotent.
 set -euo pipefail
+. "$(dirname "$0")/lib-software-source.sh"
 
 LOG_TAG="ironlog-baseline"
 log() { echo "[$LOG_TAG] $*"; }
@@ -24,7 +25,10 @@ log "detected OS: $OS_ID $VERSION_ID"
 # inverse case, a step that's a silent no-op on an unentitled RHEL host, is
 # logged clearly instead of failing).
 log "running dnf update -y"
-if ! dnf update -y; then
+if ! ironlog_dnf update -y; then
+  if [ "$IRONLOG_SOFTWARE_SOURCE" = bundle ]; then
+    exit 1
+  fi
   warn "dnf update failed or found no repos (unentitled RHEL host? offline builder?) — continuing, this is not fatal to the AMI build"
 fi
 
@@ -39,9 +43,10 @@ PKGS=(
   policycoreutils      # semanage etc., needed for SELinux context work in 30-stig.sh
   audit
   openssl
+  crypto-policies-scripts
 )
 log "installing: ${PKGS[*]}"
-dnf install -y "${PKGS[@]}"
+ironlog_dnf install -y "${PKGS[@]}"
 
 # --- directories -----------------------------------------------------------
 install -d -m 0755 -o root -g root /opt/ironlog

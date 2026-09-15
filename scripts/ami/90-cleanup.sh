@@ -6,6 +6,7 @@
 # it twice is harmless, but most of what it does is one-way (there is
 # nothing left to "re-clean" the second time).
 set -euo pipefail
+. "$(dirname "$0")/lib-software-source.sh"
 
 LOG_TAG="ironlog-cleanup"
 log() { echo "[$LOG_TAG] $*"; }
@@ -47,7 +48,7 @@ find /var/log -type f \( -name '*.log' -o -name '*.log.*' \) ! -path "$EVIDENCE_
 log "truncated build-time logs under /var/log (left $EVIDENCE_DIR untouched — STIG evidence)"
 
 # --- dnf caches ----------------------------------------------------------
-dnf clean all
+ironlog_dnf clean all
 rm -rf /var/cache/dnf/*
 log "cleared dnf caches"
 
@@ -60,6 +61,9 @@ rm -rf /tmp/ironlog-stage
 # packer's remote_folder for every provisioner after 00-partition.sh; see
 # the BUILD_SCRATCH block there for why it is not /tmp.
 rm -rf /opt/ironlog-build
+# Offline input is transient build material. The validated plugin was copied
+# to /opt/ironlog/grafana-plugins by 20-container-images.sh and is retained.
+rm -rf /opt/ironlog-artifacts
 rm -f /root/.ssh/authorized_keys
 find /home -maxdepth 2 -name authorized_keys -exec rm -f {} \; 2>/dev/null || true
 rm -rf /root/.aws /home/*/.aws 2>/dev/null || true

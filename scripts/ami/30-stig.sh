@@ -92,6 +92,7 @@
 # All six items above are also mirrored in scripts/ami/README.md.
 # ============================================================================
 set -euo pipefail
+. "$(dirname "$0")/lib-software-source.sh"
 
 LOG_TAG="ironlog-stig"
 log() { echo "[$LOG_TAG] $*"; }
@@ -105,7 +106,7 @@ EVIDENCE_DIR="/var/log/ironlog-build"
 install -d -m 0750 -o root -g root "$EVIDENCE_DIR"
 
 log "installing openscap-scanner + scap-security-guide"
-dnf install -y openscap-scanner scap-security-guide
+ironlog_dnf install -y openscap-scanner scap-security-guide
 
 SSG_DS="/usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml"
 if [ ! -f "$SSG_DS" ]; then

@@ -12,14 +12,11 @@ Requires=ironlog-schema.service
 
 [Container]
 Image=docker.io/grafana/grafana-oss:11.4.0
+Pull=never
 ContainerName=ironlog-grafana
 Network=ironlog.network
 NetworkAlias=grafana
 
-# AIR-GAP BLOCKER (see quadlets/README.md): this pulls grafana-clickhouse-
-# datasource from grafana.com at container start and needs network egress.
-# Carried over unchanged from compose; NOT solved here.
-Environment=GF_INSTALL_PLUGINS=grafana-clickhouse-datasource
 Environment=GF_AUTH_DISABLE_LOGIN_FORM=false
 Environment=GF_AUTH_BASIC_ENABLED=true
 Environment=GF_AUTH_ANONYMOUS_ENABLED=false
@@ -35,6 +32,7 @@ Environment=CH_GRAFANA_AUDITOR_PASSWORD=${CH_GRAFANA_AUDITOR_PASSWORD}
 
 Volume=/var/lib/ironlog/grafana:/var/lib/grafana:Z
 Volume=/opt/ironlog/grafana/provisioning:/etc/grafana/provisioning:ro,Z
+Volume=/opt/ironlog/grafana-plugins:/var/lib/grafana/plugins:ro,Z
 
 PublishPort=3000:3000
 
