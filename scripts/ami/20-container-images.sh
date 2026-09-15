@@ -31,13 +31,15 @@ ARCH="${IRONLOG_PULL_ARCH:-arm64}"
 command -v podman >/dev/null || die "podman not installed — run scripts/ami/10-baseline.sh first"
 
 install_plugin() {
-  local plugin_dir=/opt/ironlog/grafana-plugins plugin_json executable
+  local plugin_dir="${IRONLOG_GRAFANA_PLUGIN_DIR:-/opt/ironlog/grafana-plugins}" plugin_json executable
   rm -rf "$plugin_dir"
   install -d -m 0755 -o 472 -g 472 "$plugin_dir"
   if [ "$IRONLOG_SOFTWARE_SOURCE" = bundle ]; then
     cp -a "$IRONLOG_ARTIFACT_DIR/grafana-plugins/." "$plugin_dir/"
   else
-    podman run --rm --pull=never -v "$plugin_dir:/var/lib/grafana/plugins:Z" docker.io/grafana/grafana-oss:11.4.0 grafana cli --pluginsDir /var/lib/grafana/plugins plugins install grafana-clickhouse-datasource
+    # Grafana 11.4.0 image ENTRYPOINT is /run.sh, which starts server after
+    # processing arguments. Invoke binary directly so this is CLI, not server.
+    podman run --rm --pull=never --entrypoint /usr/share/grafana/bin/grafana -v "$plugin_dir:/var/lib/grafana/plugins:Z" docker.io/grafana/grafana-oss:11.4.0 cli --pluginsDir /var/lib/grafana/plugins plugins install grafana-clickhouse-datasource
   fi
   chown -R root:root "$plugin_dir"
   plugin_json="$plugin_dir/grafana-clickhouse-datasource/plugin.json"
@@ -102,7 +104,7 @@ done
 # drift, nothing fails here -- it fails later, on a disconnected network, with
 # podman unable to resolve an image it was never given. Assert the invariant
 # while a registry is still reachable to fix it.
-QUADLET_DIR="/etc/containers/systemd"
+QUADLET_DIR="${IRONLOG_QUADLET_DIR:-/etc/containers/systemd}"
 if [ -d "$QUADLET_DIR" ]; then
   missing=0
   for want in $(grep -h '^Image=' "$QUADLET_DIR"/*.container 2>/dev/null | cut -d= -f2- | sort -u || true); do
