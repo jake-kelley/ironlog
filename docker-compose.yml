@@ -4,7 +4,7 @@
 
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:24.8
+    image: docker.io/clickhouse/clickhouse-server:24.8
     container_name: siem-clickhouse
     restart: unless-stopped
     environment:
@@ -19,13 +19,13 @@ services:
       CH_HYPERDX_PASSWORD: ${CH_HYPERDX_PASSWORD}
     volumes:
       - clickhouse-data:/var/lib/clickhouse
-      - ./clickhouse/config.d:/etc/clickhouse-server/config.d:ro
+      - ./clickhouse/config.d:/etc/clickhouse-server/config.d:ro,Z
       # Mount our lockdown file individually (not the whole dir) so the image
       # entrypoint can still write users.d/default-user.xml when CLICKHOUSE_USER
       # is set. Mounting the directory :ro makes the entrypoint crash-loop.
-      - ./clickhouse/users.d/00-lockdown.xml:/etc/clickhouse-server/users.d/00-lockdown.xml:ro
-      - ./clickhouse/initdb:/docker-entrypoint-initdb.d:ro
-      - ./clickhouse/ddl:/ddl:ro
+      - ./clickhouse/users.d/00-lockdown.xml:/etc/clickhouse-server/users.d/00-lockdown.xml:ro,Z
+      - ./clickhouse/initdb:/docker-entrypoint-initdb.d:ro,Z
+      - ./clickhouse/ddl:/ddl:ro,Z
     ports:
       - "127.0.0.1:8123:8123"   # HTTP — bound to localhost for admin use only
       - "127.0.0.1:9000:9000"   # native — bound to localhost for admin use only
@@ -38,7 +38,7 @@ services:
       retries: 10
 
   grafana:
-    image: grafana/grafana-oss:11.4.0
+    image: docker.io/grafana/grafana-oss:11.4.0
     container_name: siem-grafana
     restart: unless-stopped
     environment:
@@ -57,7 +57,7 @@ services:
       CH_GRAFANA_AUDITOR_PASSWORD: ${CH_GRAFANA_AUDITOR_PASSWORD}
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro,Z
     ports:
       - "3000:3000"
     depends_on:
@@ -97,7 +97,7 @@ services:
       - "8081:8080"
 
   hyperdx-db:
-    image: mongo:7.0
+    image: docker.io/library/mongo:7.0
     container_name: siem-hyperdx-db
     restart: unless-stopped
     environment:
@@ -116,11 +116,11 @@ services:
   # :8088 splunk_hec (K8s clusters push, token in .env)
   # :6000 vector native protocol (Linux agents, vector/agent-linux.yaml)
   vector-hosts:
-    image: timberio/vector:0.57.0-debian
+    image: docker.io/timberio/vector:0.57.0-debian
     container_name: siem-vector-hosts
     restart: unless-stopped
     volumes:
-      - ./vector/hosts.yaml:/etc/vector/vector.yaml:ro
+      - ./vector/hosts.yaml:/etc/vector/vector.yaml:ro,Z
       - vector-hosts-buffer:/var/lib/vector
     environment:
       # Vector >=0.57 disables ${VAR} interpolation in configs by default;
@@ -148,7 +148,7 @@ services:
   #     siem-hec --from-literal=token=<SPLUNK_HEC_TOKEN from .env>
   # Not part of the SIEM itself — a producer for testing/demo.
   k3s:
-    image: rancher/k3s:v1.35.6-k3s1
+    image: docker.io/rancher/k3s:v1.35.6-k3s1
     container_name: siem-k3s
     restart: unless-stopped
     profiles: ["k3s"]
@@ -159,7 +159,7 @@ services:
       - /var/run
     volumes:
       - k3s-data:/var/lib/rancher/k3s
-      - ./k8s/vector-shipper.yaml:/var/lib/rancher/k3s/server/manifests/vector-shipper.yaml:ro
+      - ./k8s/vector-shipper.yaml:/var/lib/rancher/k3s/server/manifests/vector-shipper.yaml:ro,Z
     depends_on:
       vector-hosts:
         condition: service_healthy
@@ -171,12 +171,12 @@ services:
   # (or `docker compose --profile aws up -d`). Keeps the core stack green
   # before the AWS side is wired up (see docs/aws-ingestion.md).
   vector:
-    image: timberio/vector:0.57.0-debian
+    image: docker.io/timberio/vector:0.57.0-debian
     container_name: siem-vector
     restart: unless-stopped
     profiles: ["aws"]
     volumes:
-      - ./vector/vector.yaml:/etc/vector/vector.yaml:ro
+      - ./vector/vector.yaml:/etc/vector/vector.yaml:ro,Z
       - vector-buffer:/var/lib/vector
     environment:
       # Vector >=0.57 disables ${VAR} interpolation in configs by default;

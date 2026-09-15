@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-command local-auth bootstrap. Run from repo root on Docker host:
+# One-command local-auth bootstrap. Run from repo root on Podman or Docker host:
 #   ./bootstrap.sh [hyperdx-admin-email]
 # Does: .env generation -> compose up -> ClickHouse RBAC verification ->
 # HyperDX native-account bootstrap. Refuses to
@@ -8,6 +8,11 @@ set -euo pipefail
 
 ADMIN_EMAIL="${1:-admin@ironlog.local}"
 gen() { openssl rand -base64 24 | tr -d '/+=' ; }
+
+# shellcheck source=scripts/container-runtime.sh
+source "scripts/container-runtime.sh"
+RUNTIME=$(ironlog_container_runtime)
+ironlog_require_runtime "$RUNTIME"
 
 # --- 1. Secrets ---------------------------------------------------------------
 if [[ -f .env ]]; then
@@ -18,6 +23,7 @@ CH_ANALYST_PW="$(gen)"
 CH_AUDITOR_PW="$(gen)"
 CH_HYPERDX_PW="$(gen)"
 cat > .env <<EOF
+IRONLOG_CONTAINER_RUNTIME=${RUNTIME}
 CH_ADMIN_USER=siem_admin
 CH_ADMIN_PASSWORD=$(gen)
 CH_VECTOR_PASSWORD=$(gen)
@@ -39,11 +45,11 @@ echo "[1/5] .env generated (chmod 600)."
 
 # --- 3. Stack up ----------------------------------------------------------------
 echo "[2/5] Starting stack..."
-docker compose up -d
+scripts/compose.sh up -d
 
 echo "[3/5] Waiting for ClickHouse RBAC..."
 for i in $(seq 1 60); do
-  if docker exec siem-clickhouse clickhouse-client --user svc_hyperdx \
+  if "$RUNTIME" exec siem-clickhouse clickhouse-client --user svc_hyperdx \
        --password "${CH_HYPERDX_PW}" --query "SELECT 1 FROM siem.cloudtrail LIMIT 1" >/dev/null 2>&1; then
     break
   fi
@@ -54,7 +60,7 @@ done
 echo "[4/5] Creating or verifying HyperDX local account..."
 HYPERDX_BOOTSTRAP_HELPER="scripts/bootstrap-hyperdx-local.sh"
 [[ -f "${HYPERDX_BOOTSTRAP_HELPER}" ]] || { echo "Missing ${HYPERDX_BOOTSTRAP_HELPER}"; exit 1; }
-bash "${HYPERDX_BOOTSTRAP_HELPER}" docker siem-hyperdx
+bash "${HYPERDX_BOOTSTRAP_HELPER}" "$RUNTIME" siem-hyperdx
 
 # --- 5. Verify RBAC + audit trail wiring -------------------------------------------
 echo "[5/5] Verifying ClickHouse RBAC..."
@@ -64,17 +70,17 @@ verify() {
   "$@" >/dev/null 2>&1 || { echo "FAIL ${description}"; exit 1; }
   echo "PASS ${description}"
 }
-verify "analyst can read siem.*" docker exec siem-clickhouse clickhouse-client --user svc_grafana_analyst \
+verify "analyst can read siem.*" "$RUNTIME" exec siem-clickhouse clickhouse-client --user svc_grafana_analyst \
   --password "${CH_ANALYST_PW}" --query "SELECT count() FROM siem.cloudtrail"
-if docker exec siem-clickhouse clickhouse-client --user svc_grafana_analyst \
+if "$RUNTIME" exec siem-clickhouse clickhouse-client --user svc_grafana_analyst \
   --password "${CH_ANALYST_PW}" --query "SELECT count() FROM audit.query_archive" >/dev/null 2>&1; then
   echo "FAIL analyst can read audit.*"
   exit 1
 fi
 echo "PASS analyst denied on audit.*"
-verify "auditor can read audit.*" docker exec siem-clickhouse clickhouse-client --user svc_grafana_auditor \
+verify "auditor can read audit.*" "$RUNTIME" exec siem-clickhouse clickhouse-client --user svc_grafana_auditor \
   --password "${CH_AUDITOR_PW}" --query "SELECT count() FROM audit.query_archive"
-verify "HyperDX can read siem.*" docker exec siem-clickhouse clickhouse-client --user svc_hyperdx \
+verify "HyperDX can read siem.*" "$RUNTIME" exec siem-clickhouse clickhouse-client --user svc_hyperdx \
   --password "${CH_HYPERDX_PW}" --query "SELECT count() FROM siem.cloudtrail"
 
 cat <<DONE
