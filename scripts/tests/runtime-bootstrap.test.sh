@@ -26,7 +26,10 @@ printf '%s' "$(basename "$0")" >> "$MOCK_RUNTIME_LOG"
 printf ' <%s>' "$@" >> "$MOCK_RUNTIME_LOG"
 printf '\n' >> "$MOCK_RUNTIME_LOG"
 if [[ ${1:-} == compose && ${2:-} == version ]]; then
-  exit 0
+  exit "${MOCK_PROVIDER_STATUS:-0}"
+fi
+if [[ ${1:-} == info ]]; then
+  exit "${MOCK_INFO_STATUS:-0}"
 fi
 if [[ "$*" == *svc_grafana_analyst* && "$*" == *audit.query_archive* ]]; then
   exit 1
@@ -94,6 +97,31 @@ assert_contains 'podman <compose> <ps> <--format> <json>' "$compose_log"
     "$root/scripts/compose.sh" config --quiet
 ) >/dev/null
 assert_contains 'docker <compose> <config> <--quiet>' "$compose_log"
+
+# Windows-edited persisted settings must not silently select a different engine.
+printf 'IRONLOG_CONTAINER_RUNTIME=docker\r\n' > "$compose_work/.env"
+(
+  cd "$compose_work"
+  PATH="$mockbin:$PATH" MOCK_RUNTIME_LOG="$compose_log" env -u IRONLOG_CONTAINER_RUNTIME \
+    "$root/scripts/compose.sh" ps
+) >/dev/null
+assert_contains 'docker <compose> <ps>' "$compose_log"
+printf 'IRONLOG_CONTAINER_RUNTIME=invalid\n' > "$compose_work/.env"
+if (cd "$compose_work"; PATH="$mockbin:$PATH" MOCK_RUNTIME_LOG="$compose_log" \
+  env -u IRONLOG_CONTAINER_RUNTIME "$root/scripts/compose.sh" ps) >/dev/null 2>&1; then
+  echo 'invalid persisted runtime unexpectedly accepted' >&2; exit 1
+fi
+
+for failure in MOCK_PROVIDER_STATUS MOCK_INFO_STATUS; do
+  failed_work="$tmpdir/$failure"
+  mkdir -p "$failed_work"
+  ln -s "$root/scripts" "$failed_work/scripts"
+  if (cd "$failed_work"; PATH="$mockbin:$PATH" MOCK_RUNTIME_LOG="$compose_log" \
+    env "$failure=1" IRONLOG_CONTAINER_RUNTIME=podman bash "$root/bootstrap.sh") >/dev/null 2>&1; then
+    echo 'bootstrap accepted unavailable runtime/provider' >&2; exit 1
+  fi
+  [[ ! -e "$failed_work/.env" ]] || { echo 'preflight failure wrote .env' >&2; exit 1; }
+done
 
 missing_work="$tmpdir/missing"
 mkdir -p "$missing_work"

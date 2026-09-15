@@ -7,7 +7,7 @@ ironlog_container_runtime() {
   if [[ -n "${IRONLOG_CONTAINER_RUNTIME:-}" ]]; then
     configured=$IRONLOG_CONTAINER_RUNTIME
   elif [[ -f .env ]]; then
-    configured=$(sed -n 's/^IRONLOG_CONTAINER_RUNTIME=\(podman\|docker\)$/\1/p' .env | tail -n 1)
+    configured=$(sed -n 's/^IRONLOG_CONTAINER_RUNTIME=//p' .env | tr -d '\r' | tail -n 1)
   fi
 
   printf '%s\n' "${configured:-podman}"
@@ -31,6 +31,10 @@ ironlog_require_runtime() {
 
   if ! "$runtime" compose version >/dev/null 2>&1; then
     echo "Container runtime '$runtime' has no working Compose provider." >&2
+    return 69
+  fi
+  if ! "$runtime" info >/dev/null 2>&1; then
+    echo "Container runtime '$runtime' is not ready; start its service or machine." >&2
     return 69
   fi
 }
