@@ -157,25 +157,22 @@ shared across more than one container.
 
 ## Enabling `ironlog-vector.service` (AWS ingestion)
 
-`ironlog-vector.container` has **no `[Install]` section** — it is not
-disabled by any flag, it simply has nothing for `systemctl enable` to
-symlink, so it never starts automatically at boot even if every other
-`ironlog-*` unit is enabled. This mirrors compose's `profiles: ["aws"]` gate:
-the stack stays green before AWS credentials exist (per CLAUDE.md Phase 2).
+`ironlog-vector.container` has **no `[Install]` section**, so it does not
+auto-start with the other appliance units. This mirrors Compose's
+`profiles: ["aws"]` gate. First boot detects any non-empty `SQS_URL_*` value,
+links the generated unit into `multi-user.target.wants`, and queues its start.
 
 To bring it up once AWS ingestion is actually configured (per
 `docs/aws-ingestion.md`):
-1. Confirm the secret resolver has populated `AWS_REGION`,
+1. Configure `AWS_REGION`,
    `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and the four `SQS_URL_*`
-   values in `/etc/ironlog/ironlog.env`.
-2. `systemctl daemon-reload` (picks up the unit if it wasn't already loaded).
-3. `systemctl start ironlog-vector.service` to run it now, **and/or**
-   `systemctl enable --now ironlog-vector.service` if you want it to persist
-   across reboots (this works even without an `[Install]` section — it just
-   means a plain `systemctl enable` with no `--now` and no target argument
-   has nothing to do; `enable --now` still starts it immediately, and you can
-   separately add the unit to a target's `.wants/` directory if persistent
-   enablement across reboots is desired without editing this file).
+   values in appliance user-data or `/etc/ironlog/appliance.conf` before
+   first boot. Do not edit `/etc/ironlog/ironlog.env` directly; first boot
+   generates it from resolved input.
+2. For a running appliance after configuration changes, follow the forced
+   first-boot re-run procedure in `scripts/firstboot/README.md` so it creates
+   the required `multi-user.target.wants` link.
+3. `systemctl start ironlog-vector.service` runs the collector now.
 4. `journalctl -u ironlog-vector.service -f` / `docker logs`-equivalent
    (`podman logs -f ironlog-vector`) to confirm rows are landing, per
    CLAUDE.md's existing Phase 2 remaining-work note.
@@ -189,11 +186,12 @@ The build can stage software from a local/S3 bundle; see
 [RHEL 9 and private software builds](../docs/private-software-builds.md).
 Compose's connected development path is separate from the appliance units.
 
-## Verify on a Rocky 9 box
+## Verify on a target host
 
-Podman is not installed on this Windows dev machine, so none of the units
-below have been syntax-checked or started — this section is what to run on
-real target hardware, not a claim that it already passed.
+RHEL 9 is shipping target; Rocky 9 is development-only. Podman is not
+installed on this Windows development machine, so none of the units below
+have been syntax-checked or started here. Run this on a target host; it is not
+evidence of a RHEL build, boot, STIG result, or compliance validation.
 
 ```bash
 # 1. Copy the network file + all *.container files into place (flat, as-is):

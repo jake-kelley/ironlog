@@ -34,31 +34,31 @@ external provider and is deferred. See [local authentication](../docs/local-auth
 
 For explicit OS selection and builds from approved local/S3 software bundles,
 use [RHEL 9 and private software builds](../docs/private-software-builds.md).
-`bash scripts/build-ami.sh --os rhel9` selects only RHEL; `--os rocky9`
-selects only Rocky. Run the wrapper from the repository root. The commands
-below show the lower-level connected build flow; `packer init` downloads
-plugins and must be completed through approved staging on a disconnected runner.
+Run `scripts/build-ami.sh` from the repository root: it invokes exactly one
+builder per call, RHEL 9 by default or Rocky 9 with `--os rocky9`. It forwards
+Packer options but does not run `packer init`; stage Packer and its Amazon
+plugin through the approved process before a disconnected build.
 
 Run from a Unix-like shell (WSL/Linux — matches this repo's existing
 convention of running `bootstrap.sh` from WSL Ubuntu, per `CLAUDE.md` "Host
-environment"). From the repo root:
+environment"). Initialize and validate from `packer/`, then return to the
+repository root to build:
 
 ```sh
 cd packer
 packer init .
 packer validate .
+cd ..
 
-# RHEL 9 shipping image
-packer build -only=ironlog.amazon-ebs.rhel9 \
-  -var-file=variables.auto.pkrvars.hcl \
-  -var "build_git_sha=$(git rev-parse --short HEAD)" \
-  .
+# RHEL 9 shipping image (wrapper default)
+bash scripts/build-ami.sh \
+  -var-file=packer/variables.auto.pkrvars.hcl \
+  -var "build_git_sha=$(git rev-parse --short HEAD)"
 
 # Rocky 9 dev image
-packer build -only=ironlog.amazon-ebs.rocky9 \
-  -var-file=variables.auto.pkrvars.hcl \
-  -var "build_git_sha=$(git rev-parse --short HEAD)" \
-  .
+bash scripts/build-ami.sh --os rocky9 \
+  -var-file=packer/variables.auto.pkrvars.hcl \
+  -var "build_git_sha=$(git rev-parse --short HEAD)"
 ```
 
 Both builds emit a `manifest.json` in this directory (via the `manifest`
@@ -140,8 +140,9 @@ aws ec2 describe-images --owners 792107900819   --filters "Name=name,Values=Rock
 - **Root EBS volume** (`/dev/sda1`, default 60 GiB gp3): the OS, with
   STIG-required separate partitions carved out by
   `scripts/ami/00-partition.sh`. The STIG LV layout alone carves ~26 GiB,
-  before the base OS, the baked `/opt/ironlog` config, ~8 pre-pulled
-  container images, and the STIG scan evidence written into the image — so
+  before the base OS, baked `/opt/ironlog` config, five pre-loaded container
+  images plus the Grafana plugin, and the STIG scan evidence written into the
+  image — so
   30 GiB is not enough and 60 is the working default.
 - **Second EBS volume** (`/dev/sdb`, default 100 GiB gp3): appliance data,
   mounted at `/var/lib/ironlog`. Declared as a second
@@ -171,7 +172,8 @@ Both sources run this exact list, in order (`build.pkr.hcl`):
 3. file provisioner: `clickhouse/`, `grafana/`, `vector/` → `/opt/ironlog/...`
 4. file provisioner: `quadlets/*.container`, `quadlets/*.network` → `/etc/containers/systemd/`
 5. file provisioner: `scripts/firstboot/` → `/usr/local/lib/ironlog/`
-6. `scripts/ami/20-container-images.sh` — pre-pull all 5 container images (arm64) into containers-storage
+6. `scripts/ami/20-container-images.sh` — load/pull five arm64 container
+   images and bake the Grafana ClickHouse plugin for offline runtime
 7. `scripts/ami/30-stig.sh` — STIG hardening
 8. `scripts/ami/40-fips.sh` — FIPS mode
 9. `scripts/ami/90-cleanup.sh` — log/ssh-key/cloud-init cleanup before snapshot
@@ -191,9 +193,10 @@ passed through here as `IRONLOG_CONTAINER_IMAGES` env var for
 documentation/single-source-of-truth purposes — the script is authoritative,
 this is not a second definition to drift):
 
-`clickhouse/clickhouse-server:24.8`, `grafana/grafana-oss:11.4.0`,
-`docker.hyperdx.io/hyperdx/hyperdx:2.19.0`, `mongo:7.0`,
-`timberio/vector:0.57.0-debian`.
+`docker.io/clickhouse/clickhouse-server:24.8`,
+`docker.io/grafana/grafana-oss:11.4.0`,
+`docker.hyperdx.io/hyperdx/hyperdx:2.19.0`, `docker.io/library/mongo:7.0`,
+`docker.io/timberio/vector:0.57.0-debian`.
 
 ## Multi-cloud extension path (Azure/OCI — not now)
 

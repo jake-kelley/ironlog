@@ -227,7 +227,9 @@ or exercised with Podman/systemd here. Static validation includes:
 
 Local authentication does not add TLS termination. `APPLIANCE_TLS` selects
 public URL schemes; an HTTPS deployment still requires a configured TLS
-terminator. Grafana's plugin download remains an offline-boot limitation.
+terminator. The Grafana ClickHouse plugin is baked during image build from the
+connected download or approved bundle, so it is not downloaded at appliance
+boot. Successful offline build and boot have not been validated here.
 Local mode does not enforce MFA or provide per-human ClickHouse attribution.
 
 ## Testing this directory
