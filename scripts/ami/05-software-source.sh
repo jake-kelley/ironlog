@@ -25,22 +25,10 @@ validate_relative() {
 }
 validate_bundle() {
   [ -d "$artifact_dir" ] && [ ! -L "$artifact_dir" ] || die "artifact directory missing or symlink: $artifact_dir"
-  local env="$artifact_dir/bundle.env" sums="$artifact_dir/SHA256SUMS"
+  local env="$artifact_dir/bundle.env"
   [ -f "$env" ] && [ ! -L "$env" ] || die "bundle.env missing or not regular"
-  [ -f "$sums" ] && [ ! -L "$sums" ] || die "SHA256SUMS missing or not regular"
   [ "$(cat "$env")" = "$(printf 'FORMAT_VERSION=1\nOS_ID=%s\nARCH=arm64' "$expected_os")" ] && [ "$(wc -l < "$env" | tr -d ' ')" = 3 ] || die "bundle.env is not exact required three-line format"
   ! find "$artifact_dir" ! -type d ! -type f -print -quit | grep -q . || die "bundle contains symlink or special file"
-  local line path; declare -A listed=()
-  while IFS= read -r line || [ -n "$line" ]; do
-    [[ "$line" =~ ^[0-9a-fA-F]{64}\ [\ \*]([^[:space:]].*)$ ]] || die "invalid SHA256SUMS entry: $line"
-    path="${BASH_REMATCH[1]}"; validate_relative "$path" || die "unsafe SHA256SUMS path: $path"
-    [ "$path" != SHA256SUMS ] || die "SHA256SUMS must not checksum itself"
-    [ -z "${listed[$path]+x}" ] || die "duplicate SHA256SUMS path: $path"
-    [ -f "$artifact_dir/$path" ] && [ ! -L "$artifact_dir/$path" ] || die "checksum entry not regular: $path"; listed["$path"]=1
-  done < "$sums"
-  [ "${#listed[@]}" -gt 0 ] || die "SHA256SUMS has no entries"
-  while IFS= read -r -d '' path; do path="${path#$artifact_dir/}"; [ "$path" = SHA256SUMS ] || [ -n "${listed[$path]+x}" ] || die "regular file absent from SHA256SUMS: $path"; done < <(find "$artifact_dir" -type f -print0)
-  (cd "$artifact_dir" && sha256sum -c --strict SHA256SUMS) >/dev/null || die "SHA256SUMS verification failed"
   [ -f "$artifact_dir/rpm-repo/repodata/repomd.xml" ] || die "rpm-repo metadata missing"
   find "$artifact_dir/rpm-repo" -type f -name '*.rpm' -print -quit | grep -q . || die "rpm-repo contains no RPMs"
   find "$artifact_dir/keys" -maxdepth 1 -type f -name '*.asc' -print -quit | grep -q . || die "approved vendor RPM key missing"

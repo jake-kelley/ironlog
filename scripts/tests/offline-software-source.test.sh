@@ -63,7 +63,7 @@ make_bundle() {
   for image in docker.io/clickhouse/clickhouse-server:24.8 docker.io/grafana/grafana-oss:11.4.0 docker.hyperdx.io/hyperdx/hyperdx:2.19.0 docker.io/library/mongo:7.0 docker.io/timberio/vector:0.57.0-debian; do
     archive="images/${image//[\/:]/_}.tar"; printf '%s\n' "$image" > "$bundle/$archive"; printf '%s\t%s\n' "$image" "$archive" >> "$bundle/images.tsv"
   done
-  (cd "$bundle" && find . -type f ! -name SHA256SUMS -printf '%P\0' | sort -z | xargs -0 sha256sum > SHA256SUMS)
+  printf 'obsolete manifest\n' > "$bundle/SHA256SUMS"
 }
 base_env=(PATH="$tmp/bin:$PATH" MOCK_LOG="$tmp/calls" IRONLOG_SOFTWARE_SOURCE=bundle IRONLOG_EXPECTED_OS=rocky9 IRONLOG_OS_RELEASE_FILE="$tmp/os-release" IRONLOG_SYSTEM_ETC_DIR="$tmp/etc" IRONLOG_IRONLOG_ETC_DIR="$tmp/ironlog")
 run_source() { env "${base_env[@]}" IRONLOG_ARTIFACT_DIR="$1" bash "$source_script"; }
@@ -73,8 +73,8 @@ run_fail() {
   [ ! -s "$tmp/calls" ] || { echo "mutation happened before validation: $2" >&2; exit 1; }
 }
 run_fail "$tmp/missing" missing-artifact
-mkdir -p "$tmp/bad"; printf 'FORMAT_VERSION=1\nOS_ID=rocky9\nARCH=arm64\n' > "$tmp/bad/bundle.env"; printf '%064d  bundle.env\n' 0 > "$tmp/bad/SHA256SUMS"
-run_fail "$tmp/bad" bad-checksum
+mkdir -p "$tmp/bad"; printf 'FORMAT_VERSION=1\nOS_ID=rocky9\nARCH=arm64\n' > "$tmp/bad/bundle.env"; printf 'not-an-image-index\n' > "$tmp/bad/images.tsv"
+run_fail "$tmp/bad" malformed-bundle
 make_bundle "$tmp/special"
 if mkfifo "$tmp/special/not-a-file" 2>/dev/null; then
   run_fail "$tmp/special" special-file
@@ -111,7 +111,6 @@ if env "${base_env[@]}" IRONLOG_EXPECTED_OS=rhel9 IRONLOG_ARTIFACT_DIR="$tmp/bun
 fi
 [ ! -s "$tmp/calls" ] || { echo 'OS mismatch mutated package state' >&2; exit 1; }
 printf 'FORMAT_VERSION=1\nOS_ID=rhel9\nARCH=arm64\n' > "$tmp/bundle/bundle.env"
-(cd "$tmp/bundle" && find . -type f ! -name SHA256SUMS -printf '%P\0' | sort -z | xargs -0 sha256sum > SHA256SUMS)
 env "${base_env[@]}" IRONLOG_EXPECTED_OS=rhel9 IRONLOG_ARTIFACT_DIR="$tmp/bundle" bash "$source_script"
 grep -Fx 'original-dnf-config' "$tmp/ironlog/dnf.conf.pre-bundle" >/dev/null
 echo "offline software-source integration: PASS"

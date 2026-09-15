@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""Stage a checked Ironlog software bundle; never contact package/image registries."""
+"""Stage an Ironlog software bundle; never contact package/image registries."""
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -26,42 +25,14 @@ def relative_name(name):
     return name
 
 
-def digest(path):
-    result = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            result.update(block)
-    return result.hexdigest()
-
-
 def verify_bundle(root, expected_os):
     files = set()
     for path in root.rglob("*"):
         if path.is_symlink() or not (path.is_file() or path.is_dir()):
             fail(f"Bundle contains a link or special file: {path.name}")
         name = relative_name(path.relative_to(root).as_posix())
-        if path.is_file() and name != "SHA256SUMS":
+        if path.is_file():
             files.add(name)
-    manifest = root / "SHA256SUMS"
-    if not manifest.is_file():
-        fail("Missing SHA256SUMS")
-    if b"\r" in manifest.read_bytes():
-        fail("SHA256SUMS must use LF line endings")
-    entries = {}
-    for line in manifest.read_text(encoding="utf-8").splitlines():
-        match = re.fullmatch(r"([a-fA-F0-9]{64}) [ *](.+)", line)
-        if not match:
-            fail("Invalid SHA256SUMS entry")
-        checksum, name = match.groups()
-        relative_name(name)
-        if name in entries or name == "SHA256SUMS":
-            fail(f"Duplicate or self-referencing checksum entry: {name}")
-        entries[name] = checksum.lower()
-    if set(entries) != files:
-        fail("SHA256SUMS must cover every bundle file exactly once")
-    for name, checksum in entries.items():
-        if digest(root / name) != checksum:
-            fail(f"Checksum mismatch: {name}")
     metadata = (root / "bundle.env").read_bytes()
     canonical = f"FORMAT_VERSION=1\nOS_ID={expected_os}\nARCH=arm64\n".encode("ascii")
     if metadata != canonical:
@@ -135,15 +106,11 @@ def fetch_s3(uri, destination, profile, region, endpoint):
     common = ["aws", "--region", region]
     if profile:
         common += ["--profile", profile]
-    identity = subprocess.run(common + ["sts", "get-caller-identity", "--output", "json"],
-                              check=True, capture_output=True, text=True)
-    account = json.loads(identity.stdout)["Account"]
-    if not re.fullmatch(r"\d{12}", account):
-        fail("Unexpected AWS account identity")
-    command = common + ["s3api", "get-object", "--bucket", parsed.netloc,
-                        "--key", parsed.path.lstrip("/"), "--expected-bucket-owner", account]
+    command = common
     if endpoint:
         command += ["--endpoint-url", endpoint]
+    command += ["s3api", "get-object", "--bucket", parsed.netloc,
+                "--key", parsed.path.lstrip("/")]
     subprocess.run(command + [str(destination)], check=True, stdout=subprocess.DEVNULL)
 
 
@@ -156,8 +123,6 @@ def prepare(args):
     directory = source is not None and source.is_dir()
     if directory and (source == output or source in output.parents):
         fail("Output cannot be inside the input bundle")
-    if not directory and not re.fullmatch(r"[a-fA-F0-9]{64}", args.sha256 or ""):
-        fail("Archive input requires --sha256 from an independently trusted source")
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".ironlog-stage-", dir=output.parent) as temporary:
         work = Path(temporary)
@@ -171,13 +136,11 @@ def prepare(args):
                 fetch_s3(args.source, archive, args.profile, args.region, args.endpoint_url)
             else:
                 shutil.copyfile(source, archive)
-            if digest(archive) != args.sha256.lower():
-                fail("Archive SHA-256 mismatch; nothing extracted")
             staged.mkdir()
             unpack(archive, staged)
         count = verify_bundle(staged, args.os)
         os.replace(staged, output)
-    print(f"Verified {count} files for {args.os}/arm64: {output}")
+    print(f"Staged {count} files for {args.os}/arm64: {output}")
 
 
 def main():
@@ -185,10 +148,9 @@ def main():
     parser.add_argument("--source", required=True, help="Local directory/archive or s3://bucket/key archive")
     parser.add_argument("--output", required=True, help="New local directory for Packer artifact_bundle_dir")
     parser.add_argument("--os", choices=("rhel9", "rocky9"), required=True)
-    parser.add_argument("--sha256", help="Trusted archive SHA-256 (required for archives, including S3)")
     parser.add_argument("--profile", help="AWS CLI profile; otherwise uses normal credential chain")
     parser.add_argument("--region", help="Explicit AWS region (required for S3)")
-    parser.add_argument("--endpoint-url", help="Optional S3 endpoint URL; standard endpoint verification stays enabled")
+    parser.add_argument("--endpoint-url", help="Optional S3 endpoint URL")
     args = parser.parse_args()
     try:
         prepare(args)

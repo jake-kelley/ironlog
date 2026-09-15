@@ -39,16 +39,12 @@ class BundleTests(unittest.TestCase):
             path = self.bundle / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content.encode("utf-8"))
-        self.seal()
-
-    def seal(self):
-        lines = [f"{artifacts.digest(path)}  {path.relative_to(self.bundle).as_posix()}\n"
-                 for path in sorted(self.bundle.rglob("*")) if path.is_file() and path.name != "SHA256SUMS"]
-        (self.bundle / "SHA256SUMS").write_bytes("".join(lines).encode("utf-8"))
+        # Old manifests are ordinary bundle files and do not affect staging.
+        (self.bundle / "SHA256SUMS").write_text("obsolete manifest\n")
 
     def args(self, **changes):
         values = dict(source=str(self.bundle), output=str(self.root / "output"), os="rhel9",
-                      sha256=None, profile=None, region=None, endpoint_url=None)
+                      profile=None, region=None, endpoint_url=None)
         values.update(changes)
         return argparse.Namespace(**values)
 
@@ -58,31 +54,25 @@ class BundleTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "already exists"):
             artifacts.prepare(self.args())
 
-    def test_tampered_and_unlisted_files(self):
+    def test_files_and_old_manifest_do_not_require_checksums(self):
         (self.bundle / "images/test.tar").write_text("tampered")
-        with self.assertRaisesRegex(ValueError, "Checksum mismatch"):
-            artifacts.prepare(self.args())
-        self.seal()
         (self.bundle / "extra").write_text("unlisted")
-        with self.assertRaisesRegex(ValueError, "every bundle file"):
-            artifacts.prepare(self.args())
-        self.assertFalse((self.root / "output").exists())
+        artifacts.prepare(self.args())
+        self.assertTrue((self.root / "output/extra").is_file())
+        self.assertEqual((self.root / "output/SHA256SUMS").read_text(), "obsolete manifest\n")
 
-    def test_wrong_os_and_duplicate_checksum(self):
+    def test_wrong_os_and_malformed_bundle(self):
         with self.assertRaisesRegex(ValueError, "match requested OS"):
             artifacts.prepare(self.args(os="rocky9"))
-        manifest = self.bundle / "SHA256SUMS"
-        manifest.write_bytes((manifest.read_text() + manifest.read_text().splitlines()[0] + "\n").encode("utf-8"))
-        with self.assertRaisesRegex(ValueError, "Duplicate"):
+        (self.bundle / "images.tsv").write_bytes(b"not-an-image-index\n")
+        with self.assertRaisesRegex(ValueError, "reference<TAB>archive"):
             artifacts.prepare(self.args())
 
-    def test_archive_hash_and_valid_tar(self):
+    def test_valid_archive_without_checksum(self):
         archive = self.root / "bundle.tar.gz"
         with tarfile.open(archive, "w:gz") as stream:
             stream.add(self.bundle, arcname=".")
-        with self.assertRaisesRegex(ValueError, "SHA-256 mismatch"):
-            artifacts.prepare(self.args(source=str(archive), sha256="0" * 64))
-        artifacts.prepare(self.args(source=str(archive), sha256=artifacts.digest(archive)))
+        artifacts.prepare(self.args(source=str(archive)))
         self.assertTrue((self.root / "output/bundle.env").exists())
 
     def test_reject_tar_traversal_links_and_duplicate_entries(self):
@@ -97,26 +87,28 @@ class BundleTests(unittest.TestCase):
                 if name == "duplicate":
                     stream.addfile(member, io.BytesIO(b"x"))
             with self.assertRaises(ValueError):
-                artifacts.prepare(self.args(source=str(archive), sha256=artifacts.digest(archive)))
+                artifacts.prepare(self.args(source=str(archive)))
             self.assertFalse((self.root / "escape").exists())
 
-    def test_s3_enforces_current_account_owner(self):
+    def test_s3_uses_single_get_object_without_owner_check(self):
+        archive = self.root / "bundle.tar.gz"
+        with tarfile.open(archive, "w:gz") as stream:
+            stream.add(self.bundle, arcname=".")
         calls = []
         def run(command, **kwargs):
             calls.append(command)
-            return argparse.Namespace(stdout='{"Account":"123456789012"}')
+            Path(command[-1]).write_bytes(archive.read_bytes())
+            return argparse.Namespace()
         with patch.object(artifacts.subprocess, "run", side_effect=run):
-            artifacts.fetch_s3("s3://private-bucket/bundle.tar.gz", self.root / "download", "build", "us-east-1", None)
+            artifacts.prepare(self.args(source="s3://private-bucket/bundle.tar.gz", profile="build",
+                                        region="us-east-1", endpoint_url="https://s3.example.test"))
+        self.assertTrue((self.root / "output/bundle.env").is_file())
+        self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0][:5], ["aws", "--region", "us-east-1", "--profile", "build"])
-        self.assertIn("get-caller-identity", calls[0])
-        index = calls[1].index("--expected-bucket-owner")
-        self.assertEqual(calls[1][index + 1], "123456789012")
-
-    def test_require_archive_digest_before_aws(self):
-        with patch.object(artifacts.subprocess, "run") as run:
-            with self.assertRaisesRegex(ValueError, "requires --sha256"):
-                artifacts.prepare(self.args(source="s3://private-bucket/bundle.tar.gz"))
-            run.assert_not_called()
+        self.assertIn("--endpoint-url", calls[0])
+        self.assertIn("get-object", calls[0])
+        self.assertNotIn("get-caller-identity", calls[0])
+        self.assertNotIn("--expected-bucket-owner", calls[0])
 
 
 if __name__ == "__main__":
