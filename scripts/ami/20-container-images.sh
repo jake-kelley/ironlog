@@ -47,10 +47,14 @@ install_plugin() {
   grep -Eq '"id"[[:space:]]*:[[:space:]]*"grafana-clickhouse-datasource"' "$plugin_json" || die "Grafana plugin ID is not grafana-clickhouse-datasource"
   executable="$(sed -nE 's/.*"executable"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$plugin_json" | head -n1)"
   if [ -n "$executable" ]; then
+    [[ "$executable" =~ ^[A-Za-z0-9_.-]+$ ]] || die "invalid Grafana plugin executable name"
     executable="$plugin_dir/grafana-clickhouse-datasource/$executable"
-    [ -x "$executable" ] || executable="${executable}_linux_arm64"
-    [ -x "$executable" ] || die "Grafana plugin executable missing or not executable for linux/arm64"
-    if command -v file >/dev/null && ! file "$executable" | grep -Eqi 'aarch64|arm64'; then die "Grafana plugin executable is not linux/arm64: $executable"; fi
+    [ ! -f "${executable}_linux_arm64" ] || executable="${executable}_linux_arm64"
+    [ -f "$executable" ] || die "Grafana plugin executable missing for linux/arm64"
+    file "$executable" | grep -Eqi 'ELF.*(aarch64|arm64)' || die "Grafana plugin executable is not linux/arm64: $executable"
+    # SCP from a Windows runner can lose POSIX execute bits. Restore them
+    # only after validating the selected backend, without changing its bytes.
+    chmod 0755 "$executable"
   fi
   chmod -R a+rX "$plugin_dir"
   log "Grafana ClickHouse plugin baked at $plugin_dir"

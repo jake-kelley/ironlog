@@ -4,8 +4,17 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 source_script="$root/scripts/ami/05-software-source.sh"
 images_script="$root/scripts/ami/20-container-images.sh"
-tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
+mkdir -p "$root/.decurion"
+tmp="$(mktemp -d "$root/.decurion/offline-source-test.XXXXXX")"
+cleanup() {
+  local resolved
+  resolved=$(cd "$tmp" && pwd -P)
+  case "$resolved" in
+    "$root"/.decurion/offline-source-test.*) rm -rf -- "$resolved" ;;
+    *) echo 'refusing cleanup outside test workspace' >&2 ;;
+  esac
+}
+trap cleanup EXIT
 mkdir -p "$tmp/bin" "$tmp/etc/pki/rpm-gpg" "$tmp/etc/dnf"
 cat > "$tmp/os-release" <<'EOF'
 ID=rocky
@@ -25,9 +34,9 @@ cat > "$tmp/bin/install" <<'EOF'
 #!/usr/bin/env bash
 args=()
 while [ "$#" -gt 0 ]; do
-  case "$1" in -o|-g) shift 2;; *) args+=("$1"); shift;; esac
+  case "$1" in -o|-g|-m) shift 2;; -d) shift;; *) args+=("$1"); shift;; esac
 done
-/usr/bin/install "${args[@]}"
+mkdir -p "${args[@]}"
 EOF
 printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/bin/chown"
 printf '#!/usr/bin/env bash\necho "ELF 64-bit LSB executable, ARM aarch64"\n' > "$tmp/bin/file"
@@ -66,8 +75,12 @@ run_fail() {
 run_fail "$tmp/missing" missing-artifact
 mkdir -p "$tmp/bad"; printf 'FORMAT_VERSION=1\nOS_ID=rocky9\nARCH=arm64\n' > "$tmp/bad/bundle.env"; printf '%064d  bundle.env\n' 0 > "$tmp/bad/SHA256SUMS"
 run_fail "$tmp/bad" bad-checksum
-make_bundle "$tmp/special"; mkfifo "$tmp/special/not-a-file"
-run_fail "$tmp/special" special-file
+make_bundle "$tmp/special"
+if mkfifo "$tmp/special/not-a-file" 2>/dev/null; then
+  run_fail "$tmp/special" special-file
+else
+  echo 'FIFO fixture unavailable on this host; special-file case requires Linux'
+fi
 make_bundle "$tmp/bundle"
 : > "$tmp/calls"
 run_source "$tmp/bundle"
@@ -79,8 +92,9 @@ grep -Fx 'repo_gpgcheck=0' "$tmp/etc/dnf/dnf.conf" >/dev/null
 [ "$(find "$tmp/ironlog/dnf.repos.d" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 1 ]
 grep -F -- '--disablerepo=* --enablerepo=ironlog-bundle --setopt=plugins=0 --setopt=gpgcheck=1 --setopt=repo_gpgcheck=0 install -y lvm2 parted util-linux gdisk' "$tmp/calls" >/dev/null
 grep -F 'rpm --import' "$tmp/calls" >/dev/null
-env "${base_env[@]}" IRONLOG_ARTIFACT_DIR="$tmp/bundle" IRONLOG_BUILD_SOURCE_CONFIG="$tmp/ironlog/build-source.conf" IRONLOG_GRAFANA_PLUGIN_DIR="$tmp/plugin-stage" IRONLOG_QUADLET_DIR="$tmp/no-quadlets" bash "$images_script"
+env "${base_env[@]}" IRONLOG_ARTIFACT_DIR="$tmp/bundle" IRONLOG_BUILD_SOURCE_CONFIG="$tmp/ironlog/build-source.conf" IRONLOG_GRAFANA_PLUGIN_DIR="$tmp/plugin-stage" IRONLOG_QUADLET_DIR="$root/quadlets" bash "$images_script"
 [ -f "$tmp/plugin-stage/grafana-clickhouse-datasource/plugin.json" ]
+[ -x "$tmp/plugin-stage/grafana-clickhouse-datasource/plugin" ]
 [ "$(grep -c '^podman load --input ' "$tmp/calls")" -eq 5 ]
 ! grep -F 'podman pull ' "$tmp/calls" >/dev/null
 if env "${base_env[@]}" PODMAN_ARCH=amd64 IRONLOG_ARTIFACT_DIR="$tmp/bundle" IRONLOG_BUILD_SOURCE_CONFIG="$tmp/ironlog/build-source.conf" IRONLOG_GRAFANA_PLUGIN_DIR="$tmp/plugin-stage-bad" IRONLOG_QUADLET_DIR="$tmp/no-quadlets" bash "$images_script" >/dev/null 2>&1; then
@@ -89,4 +103,15 @@ fi
 if env "${base_env[@]}" PODMAN_LOAD_FAIL=1 IRONLOG_ARTIFACT_DIR="$tmp/bundle" IRONLOG_BUILD_SOURCE_CONFIG="$tmp/ironlog/build-source.conf" IRONLOG_GRAFANA_PLUGIN_DIR="$tmp/plugin-stage-load-fail" IRONLOG_QUADLET_DIR="$tmp/no-quadlets" bash "$images_script" >/dev/null 2>&1; then
   echo 'expected image-load failure' >&2; exit 1
 fi
+# Same provisioning entry point accepts RHEL 9, but not a Rocky bundle on RHEL.
+printf 'ID=rhel\nVERSION_ID=9.6\n' > "$tmp/os-release"
+: > "$tmp/calls"
+if env "${base_env[@]}" IRONLOG_EXPECTED_OS=rhel9 IRONLOG_ARTIFACT_DIR="$tmp/bundle" bash "$source_script" >/dev/null 2>&1; then
+  echo 'expected RHEL/Rocky bundle mismatch failure' >&2; exit 1
+fi
+[ ! -s "$tmp/calls" ] || { echo 'OS mismatch mutated package state' >&2; exit 1; }
+printf 'FORMAT_VERSION=1\nOS_ID=rhel9\nARCH=arm64\n' > "$tmp/bundle/bundle.env"
+(cd "$tmp/bundle" && find . -type f ! -name SHA256SUMS -printf '%P\0' | sort -z | xargs -0 sha256sum > SHA256SUMS)
+env "${base_env[@]}" IRONLOG_EXPECTED_OS=rhel9 IRONLOG_ARTIFACT_DIR="$tmp/bundle" bash "$source_script"
+grep -Fx 'original-dnf-config' "$tmp/ironlog/dnf.conf.pre-bundle" >/dev/null
 echo "offline software-source integration: PASS"

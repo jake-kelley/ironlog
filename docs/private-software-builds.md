@@ -103,7 +103,7 @@ The RPM repository must contain the required packages and dependency closure
 for the **specific base AMI**. Include packages used by partitioning, baseline,
 SCAP remediation and FIPS setup: `lvm2`, `parted`, `util-linux`, `gdisk`,
 `podman`, `podman-plugins`, `chrony`, `rsync`, `policycoreutils`, `audit`,
-`openssl`, `openscap-scanner`, `scap-security-guide`, and
+`openssl`, `file`, `openscap-scanner`, `scap-security-guide`, and
 `crypto-policies-scripts`, plus their dependencies and any intended updates.
 Mirror entitled content using your approved RHEL repository process and
 include valid repository metadata. A directory of arbitrary RPMs without

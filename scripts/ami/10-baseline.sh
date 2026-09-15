@@ -43,6 +43,7 @@ PKGS=(
   policycoreutils      # semanage etc., needed for SELinux context work in 30-stig.sh
   audit
   openssl
+  file                # verify bundled Grafana backend ELF architecture
   crypto-policies-scripts
 )
 log "installing: ${PKGS[*]}"

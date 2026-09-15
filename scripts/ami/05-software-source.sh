@@ -73,7 +73,9 @@ install -d -m 0700 -o root -g root "$ironlog_etc"
 if [ "$source_mode" = bundle ]; then
   install -d -m 0700 -o root -g root "$dnf_repos_dir" "$(dirname "$dnf_config")"
   ! find "$dnf_repos_dir" -mindepth 1 -maxdepth 1 ! -name ironlog-bundle.repo -print -quit | grep -q . || die "offline DNF repo directory contains unexpected file"
-  [ ! -e "$dnf_config" ] || cp -a "$dnf_config" "$ironlog_etc/dnf.conf.pre-bundle"
+  if [ -e "$dnf_config" ] && [ ! -e "$ironlog_etc/dnf.conf.pre-bundle" ]; then
+    cp -a "$dnf_config" "$ironlog_etc/dnf.conf.pre-bundle"
+  fi
   printf '[main]\nreposdir=%s\nplugins=0\ngpgcheck=1\nrepo_gpgcheck=0\n' "$dnf_repos_dir" > "$dnf_config"
   chmod 0600 "$dnf_config"
   printf '[ironlog-bundle]\nname=ironlog verified offline bundle\nbaseurl=file://%s/rpm-repo\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=0\n' "$artifact_dir" > "$dnf_repos_dir/ironlog-bundle.repo"
