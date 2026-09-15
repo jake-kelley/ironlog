@@ -9,7 +9,49 @@ and upgrade behavior are documented in docs/local-auth.md. Historical SSO,
 MFA, service lists and login instructions below describe earlier deployments
 and are not the current contract. Database RBAC remains unchanged.
 
-## What this is
+## Current build and deployment contract
+
+Ironlog uses ClickHouse, Vector, Grafana OSS, HyperDX and MongoDB. Grafana
+and HyperDX authenticate local users independently. MongoDB holds HyperDX
+app state; no Keycloak, Postgres or oauth2-proxy is deployed.
+
+- RHEL 9 is the shipping/compliance target; Rocky 9 is for development.
+  Both builders currently use arm64. Select exactly one with
+  `scripts/build-ami.sh --os rhel9` or `--os rocky9`.
+- `source_ami_id` selects an approved base image. Private builds can use
+  `software_source=bundle` and a local `artifact_bundle_dir` prepared by
+  `scripts/prepare-artifacts.py` from local media or S3.
+- Operator explicitly requested no bundle checksums or bucket ownership
+  checks. Do not add SHA256SUMS, archive hash arguments, STS identity calls,
+  or expected-bucket-owner enforcement. RPM signature checks remain enabled.
+- Bundle builds use a local RPM repository and container archives. Grafana's
+  ClickHouse plugin is baked in; Quadlets use `Pull=never`.
+- See docs/private-software-builds.md and packer/README.md for exact commands.
+  Compose remains the connected development path.
+
+## Validation and remaining work
+
+Local-auth Rocky appliances have been live-tested. Those AWS test resources,
+including retained AMIs and snapshots, were subsequently deleted. Do not
+assume any endpoint or local agent from historical notes remains live.
+
+RHEL/private-bundle changes have local validation and mocked provisioning
+tests; a real RHEL 9 build with private software sources remains unverified.
+Rocky results do not establish RHEL FIPS/STIG compliance. External OIDC is
+paused. S3 retention/tiering and export work remains separate; consult
+current DDL and docs/retention-policy.md before changing retention.
+
+Run `python scripts/okf-validate.py docs` after doc edits. For build changes,
+use scripts/tests/build-ami.test.sh, scripts/tests/offline-software-source.test.sh,
+and scripts/tests/prepare-artifacts.test.py as appropriate.
+
+## Development host
+
+Use a Bash shell for shell scripts and Docker Engine with Compose v2 for
+the local stack. No Keycloak hosts-file entry is required. Verify installed
+tools and running services rather than relying on historical host notes.
+
+## Historical implementation notes — superseded where noted
 A license-free SIEM replacing paid products: ClickHouse (storage + SQL + RBAC),
 Grafana OSS (dashboards/alerts, OIDC login), Keycloak (SSO + mandatory TOTP MFA),
 Vector (all log collection). Primary mission: NIST 800-53 audit evidence
@@ -138,40 +180,6 @@ HyperDX added (2026-07-14), deployed and verified:
   Operator still needs to: visit http://localhost:8081, pass Keycloak, create
   the HyperDX local account (first visit), confirm sources appear.
 
-## Host environment
-Operator is on Windows. Use Docker Desktop (WSL2 backend). Run bootstrap.sh from
-a WSL Ubuntu shell (or Git Bash) in the repo directory. The `127.0.0.1 keycloak`
-hosts entry goes in C:\Windows\System32\drivers\etc\hosts (admin PowerShell:
-`Add-Content $env:SystemRoot\System32\drivers\etc\hosts "127.0.0.1 keycloak"`).
-
-## Immediate tasks
-1. DONE (2026-07-14): Phase 1 deployed; bootstrap green; RBAC + audit-trail exit
-   criteria verified from the host. Remaining for the operator: add the Windows
-   hosts entry (admin) and complete the browser SSO+MFA login to confirm the two
-   login-flow exit criteria end-to-end.
-2. DONE (2026-07-14) SIEM-side: Phase 2 artifacts built/tested (see Phase 2
-   state above). Remaining: operator wires the AWS side per
-   docs/aws-ingestion.md, fills .env, sets COMPOSE_PROFILES=aws; then watch
-   `docker logs siem-vector` and confirm the dashboard populates with real data.
-3. DONE (2026-07-14) SIEM-side: Phase 3 aggregator deployed + E2E-verified
-   (see Phase 3 state above). Remaining: onboard real Linux hosts / K8s
-   clusters per docs/host-ingestion.md.
-4. DONE (2026-07-15): Phase 4 Windows agent live on this machine (see Phase 4
-   state above). Keep watching for the idle-freeze symptom during the pilot.
-5. DONE (2026-07-15) Phase 5 partial — AU-5 alerting live:
-   grafana/provisioning/alerting/au5-pipeline-alerts.yaml (3 active source-
-   silence rules for linux/windows/k8s; 4 AWS rules ship PAUSED — un-pause at
-   AWS go-live; NoData/Error -> Alerting so CH-down fires). Contact point
-   "siem-oncall" has a placeholder address; needs real address + GF_SMTP_* for
-   delivery. Dashboards added: pipeline-health.json (AU-5 lag/rate) and
-   nist-80053-weekly.json (ISSO weekly evidence — all committed Win/Linux/AWS
-   event families, control IDs in panel titles, 7d window). README fully
-   rewritten (architecture, onboarding matrix, security model, ops runbook,
-   field-notes/troubleshooting section that indexes every gotcha).
-6. Next: Phase 5 remainder (S3 tiering, Object Lock raw archive, query_archive
-   export — blocked on AWS creds + retention-number confirmation; user is
-   considering 5-year retention, see retention-policy.md), Phase 6 (detection
-   SQL), Phase 7 (ops cadence). AWS-side wiring for Phase 2 still pending.
 
 ## Conventions (do not violate)
 - Schema density rules: ORDER BY low-cardinality-first + timestamp last;

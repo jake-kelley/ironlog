@@ -1,6 +1,6 @@
-# Self-hosted, license-free SIEM
+# ironlog — self-hosted SIEM
 
-A NIST 800-53-oriented SIEM built entirely from free/open components:
+A NIST 800-53-oriented SIEM built from self-hosted components:
 **ClickHouse** for storage and SQL, **Vector** for all collection, **Grafana
 OSS** for dashboards and alerting, **HyperDX** for log search, with native
 local accounts in each app. Keycloak integration is deferred; ironlog does
@@ -95,8 +95,8 @@ For RHEL 9 or builds without public internet software sources, see
 The same provisioners support Rocky 9 development builds; approved software
 can be staged from local media or an accessible S3 bucket.
 
-    docker-compose.yml           the whole platform
-    bootstrap.sh                 one-command fresh install
+    docker-compose.yml           connected development stack
+    bootstrap.sh                 fresh Compose install
     .env.example                 every secret/setting, annotated
     clickhouse/
       ddl/                       schemas, audit trail, RBAC (auto-applied on first start)
@@ -122,7 +122,9 @@ can be staged from local media or an accessible S3 bucket.
     --- appliance build (Phase 8) ---
     packer/                      HCL2 build: RHEL 9 (shipping) / Rocky 9 (dev)
     quadlets/                    podman systemd units — the compose stack, without compose
-    scripts/ami/                 build-time: partitioning, baseline, STIG, FIPS, cleanup
+    scripts/build-ami.sh         select one RHEL 9 or Rocky 9 builder
+    scripts/prepare-artifacts.py stage local/S3 software bundles
+    scripts/ami/                 software source, partitioning, baseline, STIG, FIPS, cleanup
     scripts/firstboot/           launch-time: config resolution, schema reconciliation
 
 ## UIs
@@ -136,7 +138,9 @@ These are generic development credentials for fresh installs. Existing app
 accounts are preserved. See [local authentication](docs/local-auth.md) for
 configuration and upgrade instructions; no hosts-file entry is needed.
 
-On the **appliance** the same two UIs are published at `APPLIANCE_FQDN`.
+On the **appliance**, connect to `http://<appliance-host>:3000` and
+`http://<appliance-host>:8081` when `APPLIANCE_TLS=false`. HTTPS URLs require
+a configured TLS terminator; setting `APPLIANCE_TLS=true` does not install one.
 ClickHouse (`:8123`/`:9000`) stays bound to
 loopback in both deployments and is never published.
 
@@ -169,15 +173,33 @@ New to querying? Start with [docs/query-guide.md](docs/query-guide.md).
 
 ## Deploy as an EC2 AMI appliance
 
-The same stack also targets a single EC2 image for commercial, GovCloud,
-and C2S/SC2S environments. Container images are baked in; offline startup
-still needs Grafana's ClickHouse plugin staged (see `quadlets/README.md`). Podman systemd units
-(`quadlets/`) replace `docker-compose.yml` one-for-one.
+The appliance uses Podman with systemd Quadlets on **RHEL 9 for shipping**
+and **Rocky Linux 9 for development**, currently on arm64. Commercial,
+GovCloud, and C2S/SC2S are deployment targets; availability and compliance
+must be validated in the target environment.
 
-1. Build: `cd packer && packer build -var "build_git_sha=$(git rev-parse --short HEAD)" .`
-   Use `-only=ironlog.amazon-ebs.rhel9` for anything shipping or
-   compliance-touching; the `rocky9` source is for development only and its
-   STIG/FIPS output is functional evidence, not audit evidence.
+Container images and the Grafana ClickHouse plugin are baked into the AMI.
+Builds can use public software sources or a prepared bundle containing an
+RPM repository, container archives, and plugin files. Stage the bundle from
+local media or any S3 bucket your credentials can read. No checksum manifest
+or bucket-owner check is required. See the
+[private software build guide](docs/private-software-builds.md) for bundle
+layout, S3 staging, and private-network configuration.
+
+1. Install Packer and its required plugin, then select one builder from the
+   repository root:
+
+   ```bash
+   scripts/build-ami.sh --os rhel9
+   # Development alternative:
+   scripts/build-ami.sh --os rocky9
+   ```
+
+   For private builds, copy and customize
+   `packer/rhel9-private-bundle.pkrvars.hcl.example`, then pass the resulting
+   file with `-var-file=packer/rhel9-private-bundle.pkrvars.hcl`. Set
+   `source_ami_id` to use your approved base image. The wrapper does not
+   download Packer plugins.
 2. Launch with the appliance config as **EC2 user-data** (see
    [scripts/firstboot/appliance.conf.example](scripts/firstboot/appliance.conf.example)).
    First boot **hard-fails by design** if no config is found — an unconfigured
@@ -208,9 +230,9 @@ Details: [packer/README.md](packer/README.md),
 
 | Source | Status here | Runbook |
 |---|---|---|
-| Linux hosts (journald+auditd) | LIVE (WSL host) | [docs/host-ingestion.md](docs/host-ingestion.md) |
-| Kubernetes (any cluster, HEC) | LIVE (local k3s demo) | same |
-| Windows (Security/System/PowerShell) | LIVE (this machine, idle-freeze pilot) | same |
+| Linux hosts (journald+auditd) | agent and normalization implemented | [docs/host-ingestion.md](docs/host-ingestion.md) |
+| Kubernetes (any cluster, HEC) | shipper and HEC ingestion implemented | same |
+| Windows (Security/System/PowerShell) | agent and normalization implemented | same |
 | AWS CloudTrail/GuardDuty/VPCFlow/S3 | staged — needs account wiring | [docs/aws-ingestion.md](docs/aws-ingestion.md) |
 
 AWS go-live: follow the runbook (S3 -> SQS -> least-privilege IAM), fill the
@@ -263,8 +285,8 @@ The `docs/` directory is an [Open Knowledge Format](https://github.com/GoogleClo
 ## Operations
 
 - **Start/stop**: `docker compose up -d` / `docker compose down` (add
-  `--profile aws --profile k3s` to include optional services). On this lab
-  machine a SYSTEM boot task starts WSL -> docker -> stack automatically.
+  `--profile aws --profile k3s` to include optional services). For appliance services, use systemd; see
+  [Quadlet operations](quadlets/README.md).
 - **Weekly ISSO pass**: open the 800-53 dashboard, review each section (red
   stats first), check Alerting for anything firing, spot-check
   `audit.query_archive` via the audit-trail datasource.
