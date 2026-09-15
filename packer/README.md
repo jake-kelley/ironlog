@@ -40,8 +40,7 @@ Packer options but does not run `packer init`; stage Packer and its Amazon
 plugin through the approved process before a disconnected build.
 
 Run from a Unix-like shell (WSL/Linux — matches this repo's existing
-convention of running `bootstrap.sh` from WSL Ubuntu, per `CLAUDE.md` "Host
-environment"). Initialize and validate from `packer/`, then return to the
+convention of running `bootstrap.sh` from WSL Ubuntu, per `CLAUDE.md` "Development host"). Initialize and validate from `packer/`, then return to the
 repository root to build:
 
 ```sh
@@ -165,7 +164,11 @@ silently breaks a partitioning script; not fixed in this template because
 
 ## Provisioner order
 
-Both sources run this exact list, in order (`build.pkr.hcl`):
+Both sources share `build.pkr.hcl`. First Packer stages the AMI scripts and
+optional software bundle, installs them under `/opt/ironlog-build/scripts`
+and `/opt/ironlog-artifacts`, then runs `05-software-source.sh`. This selects
+the software source and installs disk-layout prerequisites before partitioning.
+The remaining major steps run in this order:
 
 1. `scripts/ami/00-partition.sh` — disk layout, separate partitions
 2. `scripts/ami/10-baseline.sh` — packages, podman, `dnf update`
@@ -175,7 +178,7 @@ Both sources run this exact list, in order (`build.pkr.hcl`):
 6. `scripts/ami/20-container-images.sh` — load/pull five arm64 container
    images and bake the Grafana ClickHouse plugin for offline runtime
 7. `scripts/ami/30-stig.sh` — STIG hardening
-8. `scripts/ami/40-fips.sh` — FIPS mode
+8. `scripts/ami/40-fips.sh` — enable FIPS, reboot, then verify the running kernel
 9. `scripts/ami/90-cleanup.sh` — log/ssh-key/cloud-init cleanup before snapshot
 
 File uploads stage under `/tmp/ironlog-stage` (the SSH user has no direct
