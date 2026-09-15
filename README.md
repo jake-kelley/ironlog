@@ -157,8 +157,8 @@ New to querying? Start with [docs/query-guide.md](docs/query-guide.md).
 
 ## Fresh install
 
-1. Prereqs: Docker Engine + compose v2, bash, openssl. (This lab runs Docker
-   CE inside WSL2 Ubuntu — no Docker Desktop.)
+1. Prereqs: Podman with a working Compose provider, Bash, and OpenSSL.
+   Docker Engine with Compose v2 is also supported.
 2. `./bootstrap.sh` — generates `.env` with generic app logins and random
    backend credentials, starts the stack, provisions the HyperDX local
    account, and verifies RBAC. An optional email argument replaces the
@@ -168,8 +168,22 @@ New to querying? Start with [docs/query-guide.md](docs/query-guide.md).
    `IronlogDev123!`. The first account seeds its ClickHouse sources.
 5. Onboard data sources (next section).
 
+Podman is the default. For Docker, run
+`IRONLOG_CONTAINER_RUNTIME=docker ./bootstrap.sh`. Bootstrap records the
+selection in `.env`; `scripts/compose.sh up -d`, `scripts/compose.sh logs`,
+and `scripts/compose.sh down` use it for later operations. Existing Docker
+installs should add `IRONLOG_CONTAINER_RUNTIME=docker` to `.env` before using
+the wrapper. Switching engines does not migrate existing containers or volumes.
+
+`podman compose` requires an external provider such as `podman-compose` or
+Docker Compose. Select one with `PODMAN_COMPOSE_PROVIDER` if needed; see
+[Podman's Compose documentation](https://docs.podman.io/en/latest/markdown/podman-compose.1.html).
+On Windows/macOS, start a Podman machine before bootstrap. Local runtime
+routing is covered by mocked tests; live Podman Compose startup remains to
+be verified. The EC2 appliance continues to use Podman systemd Quadlets.
+
 `bootstrap.sh` refuses to overwrite an existing `.env`. Fully wipe with
-`docker compose down -v` (destroys data).
+`scripts/compose.sh down -v` (destroys data).
 
 ## Deploy as an EC2 AMI appliance
 
@@ -236,7 +250,7 @@ Details: [packer/README.md](packer/README.md),
 | AWS CloudTrail/GuardDuty/VPCFlow/S3 | staged — needs account wiring | [docs/aws-ingestion.md](docs/aws-ingestion.md) |
 
 AWS go-live: follow the runbook (S3 -> SQS -> least-privilege IAM), fill the
-Phase 2 block in `.env`, uncomment `COMPOSE_PROFILES=aws`, `docker compose up
+Phase 2 block in `.env`, uncomment `COMPOSE_PROFILES=aws`, `scripts/compose.sh up
 -d`, then un-pause the four AWS alert rules (Alerting -> AU-5 pipeline health).
 
 ## Security model
@@ -284,7 +298,7 @@ The `docs/` directory is an [Open Knowledge Format](https://github.com/GoogleClo
 
 ## Operations
 
-- **Start/stop**: `docker compose up -d` / `docker compose down` (add
+- **Start/stop**: `scripts/compose.sh up -d` / `scripts/compose.sh down` (add
   `--profile aws --profile k3s` to include optional services). For appliance services, use systemd; see
   [Quadlet operations](quadlets/README.md).
 - **Weekly ISSO pass**: open the 800-53 dashboard, review each section (red
@@ -292,13 +306,13 @@ The `docs/` directory is an [Open Knowledge Format](https://github.com/GoogleClo
   `audit.query_archive` via the audit-trail datasource.
 - **VRL changes**: edit vector/*.yaml, run the unit tests, restart the service:
 
-      docker run --rm -v "$PWD/vector:/cfg:ro" -e AWS_REGION=x \
+      podman run --rm -v "$PWD/vector:/cfg:ro,z" -e AWS_REGION=x \
         -e SQS_URL_CLOUDTRAIL=x -e SQS_URL_GUARDDUTY=x -e SQS_URL_VPCFLOW=x \
         -e SQS_URL_S3ACCESS=x -e CH_VECTOR_PASSWORD=x \
-        timberio/vector:0.57.0-debian test /cfg/vector.yaml /cfg/tests.yaml
-      docker run --rm -v "$PWD/vector:/cfg:ro" -e SPLUNK_HEC_TOKEN=x \
+        docker.io/timberio/vector:0.57.0-debian test /cfg/vector.yaml /cfg/tests.yaml
+      podman run --rm -v "$PWD/vector:/cfg:ro,z" -e SPLUNK_HEC_TOKEN=x \
         -e CH_VECTOR_PASSWORD=x \
-        timberio/vector:0.57.0-debian test /cfg/hosts.yaml /cfg/tests-hosts.yaml
+        docker.io/timberio/vector:0.57.0-debian test /cfg/hosts.yaml /cfg/tests-hosts.yaml
 
 - **Account recovery**: local app accounts persist in Grafana/MongoDB data.
   Changing initial-account environment values does not reset existing users.

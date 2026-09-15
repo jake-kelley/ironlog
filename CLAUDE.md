@@ -47,8 +47,12 @@ and scripts/tests/prepare-artifacts.test.py as appropriate.
 
 ## Development host
 
-Use a Bash shell for shell scripts and Docker Engine with Compose v2 for
-the local stack. No Keycloak hosts-file entry is required. Verify installed
+Use a Bash shell for shell scripts. Podman with a Compose provider is the
+default local runtime; Docker Compose v2 remains selectable through
+`IRONLOG_CONTAINER_RUNTIME=docker`. Bootstrap saves the selection in `.env`;
+use `scripts/compose.sh` for later stack operations. Engine switching does
+not migrate volumes. Keep Docker-specific historical notes scoped to their
+original deployment. No Keycloak hosts-file entry is required. Verify installed
 tools and running services rather than relying on historical host notes.
 
 ## Historical implementation notes — superseded where noted

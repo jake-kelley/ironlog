@@ -25,10 +25,14 @@ development credentials are intentional defaults, not production secrets.
 Both apps still authenticate users; anonymous query access is not enabled.
 There is no Keycloak redirect, hosts-file prerequisite, SSO, or enforced MFA.
 
-Run `./bootstrap.sh` from the repo in a Bash shell with Docker available.
+Run `./bootstrap.sh` from the repo in a Bash shell with Podman and a Compose provider available.
+For Docker, use `IRONLOG_CONTAINER_RUNTIME=docker ./bootstrap.sh`. The chosen
+runtime is saved in `.env`; existing Docker installs should set
+`IRONLOG_CONTAINER_RUNTIME=docker` there before using `scripts/compose.sh`.
 An optional email argument selects the initial HyperDX user's email.
 Bootstrap generates random database/service credentials, starts the stack,
-and calls `scripts/bootstrap-hyperdx-local.sh docker siem-hyperdx` to create
+and calls `scripts/bootstrap-hyperdx-local.sh podman siem-hyperdx`
+(use `docker` for a Docker deployment) to create
 and verify the HyperDX account. Grafana creates its administrator from its
 initial configuration. HyperDX's first team seeds the configured ClickHouse
 connection and source definitions.
@@ -36,7 +40,7 @@ connection and source definitions.
 To choose other credentials in Compose, copy `.env.example` to `.env`,
 set its backend secrets and `GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD`,
 `HYPERDX_LOCAL_EMAIL`, and `HYPERDX_LOCAL_PASSWORD`, then use
-`docker compose up -d` and the HyperDX helper instead of `bootstrap.sh`.
+`scripts/compose.sh up -d` and the HyperDX helper instead of `bootstrap.sh`.
 Set `HYPERDX_SESSION_SECRET` to a random value (`openssl rand -hex 32`);
 it signs native sessions and is independent of the generic login password.
 For an appliance, set overrides in its input config;
@@ -46,7 +50,7 @@ deferred and rejected rather than silently producing a different auth mode.
 ## Existing deployments
 
 Preserve Grafana, MongoDB, ClickHouse and Vector data. Do not use
-`docker compose down -v` to change authentication. Bootstrap refuses to
+`scripts/compose.sh down -v` to change authentication. Bootstrap refuses to
 overwrite an existing `.env`; update that file with the local auth variables
 from `.env.example` instead.
 

@@ -1,5 +1,8 @@
 # SIEM documentation update log
 
+- 2026-09-15: Local bootstrap defaults to Podman, with explicit Docker selection and a shared Compose wrapper. Appliance Quadlets remain Podman-based. Runtime selection is tested with mocks; live Podman Compose validation remains open.
+
+
 ## 2026-09-15
 * **Update**: Added [RHEL 9 and private software builds](private-software-builds.md), covering OS selection, S3 staging, RPM/image/plugin bundle contents, and private build networking. Removed checksum and bucket-owner requirements at operator request.
 
