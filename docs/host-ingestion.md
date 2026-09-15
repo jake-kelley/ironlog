@@ -45,7 +45,7 @@ Point any Splunk-HEC-compatible shipper (Vector DaemonSet with `splunk_hec`
 sink, splunk-connect-for-kubernetes, fluentd splunk plugin) at:
 
     endpoint:  http://<siem-host>:8088   (path /services/collector/event)
-    token:     SPLUNK_HEC_TOKEN from .env
+    token:     SPLUNK_HEC_TOKEN from appliance configuration
 
 Event contract — send JSON event objects with these keys (all optional,
 defaulted to '' when missing; unknown keys are kept in `raw`):
@@ -80,7 +80,9 @@ kubectl, create the secret, and set SIEM_ENDPOINT to your aggregator URL.
 
 ## Verifying the pipeline
 
-- `docker logs siem-vector-hosts` — no auth or sink errors.
+- Appliance: `journalctl -u ironlog-vector-hosts.service` and
+  `podman logs ironlog-vector-hosts` — no auth or sink errors.
+- Connected Compose development: `docker logs siem-vector-hosts`.
 - HEC smoke test (expect `{"text":"Success"}`):
 
       curl -H "Authorization: Splunk $TOKEN" \
@@ -118,8 +120,10 @@ whenever the aggregator is unreachable, so restarts don't lose data.
 
 ## Notes
 
-- One shared HEC token (SPLUNK_HEC_TOKEN). Rotating it: update .env,
-  `docker compose up -d vector-hosts`, then update cluster shippers.
+- One shared HEC token (SPLUNK_HEC_TOKEN). On an appliance, update the
+  configured resolver value, re-run first boot as documented in
+  `scripts/firstboot/README.md`, then update cluster shippers. For connected
+  Compose development, update `.env` and recreate `vector-hosts`.
 - The sink-level ClickHouse healthcheck is disabled in the vector configs:
   Vector probes without auth, which our locked-down `default` user correctly
   rejects (403). Inserts are authenticated and unaffected.

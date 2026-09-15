@@ -5,6 +5,7 @@
 
 ## 2026-09-14
 * **Update**: Default deployments use [native local app accounts](local-auth.md). Keycloak integration is deferred and no identity provider is bundled. Updated deployment and control notes to remove current SSO/MFA claims.
+* **Update**: Refreshed appliance runbooks for single-builder RHEL/Rocky selection, local/S3 artifact staging, baked offline runtime assets, and native local app authentication. No live RHEL build, boot, or compliance result is recorded.
 
 ## 2026-07-16
 * **Update**: Converted the documentation set into an Open Knowledge Format (OKF v0.1) bundle — added frontmatter to every concept, plus this log and the bundle [index](index.md).

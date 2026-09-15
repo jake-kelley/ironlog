@@ -8,9 +8,11 @@ timestamp: 2026-07-16T00:00:00Z
 
 # Querying the SIEM — analyst quick-start (AU-6)
 
-Two UIs, one database. **HyperDX** (http://localhost:8081) is for interactive
-search and investigations — fast filtering, log tailing, drill-down. **Grafana**
-(http://localhost:3000) is for SQL, dashboards, and alerting. Both read the
+Two UIs, one database. **HyperDX** (`http://APPLIANCE_FQDN:8081`) is for
+interactive search and investigations — fast filtering, log tailing,
+drill-down. **Grafana** (`http://APPLIANCE_FQDN:3000`) is for SQL,
+dashboards, and alerting. Replace `APPLIANCE_FQDN` with `localhost` for
+connected development. Both read the
 same `siem.*` tables, and every query either tool runs is itself recorded in
 `audit.query_archive` (that's the AU-9 analyst audit trail working).
 
@@ -41,10 +43,9 @@ Search syntax (Lucene-style; column names = the ClickHouse columns):
 There is also a SQL mode toggle in the search bar if you'd rather write a raw
 WHERE clause. Saved searches (Save button) become the basis for HyperDX alerts.
 
-Try these now (real data is flowing):
-- Source `linux_syslog`, search `identifier:sudo` — your own sudo activity
-  from the WSL host.
-- Source `k8s_logs`, search `namespace:kube-system` — k3s system pods.
+After a source is onboarded, try a source-specific query such as
+`identifier:sudo` in `linux_syslog` or `namespace:kube-system` in `k8s_logs`.
+No live data flow is asserted by this guide.
 
 ## Grafana: SQL + dashboards
 

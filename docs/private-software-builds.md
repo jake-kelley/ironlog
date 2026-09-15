@@ -13,6 +13,10 @@ use the same appliance provisioners and local Grafana/HyperDX authentication.
 The architecture remains **arm64**. This change does not add x86_64 support
 or establish RHEL FIPS/STIG compliance through Rocky testing.
 
+`scripts/build-ami.sh` invokes exactly one Packer builder per run: RHEL 9 by
+default, or Rocky 9 only when `--os rocky9` is supplied. It forwards Packer
+options unchanged and does not run `packer init`.
+
 There are two software sources:
 
 | Mode | Build-time software | Appliance boot |
@@ -189,12 +193,12 @@ to your approved account and prefix. Avoid static credentials inside bundles.
 
 ## Verification and remaining limits
 
-Host preparation tests cover bundles without checksums, OS mismatch, unsafe
-tar entries and S3 requests without owner checks. Provisioning tests use
-mock package/container commands to exercise the offline path. These checks
-are not a substitute for a real build with your approved RHEL base and RPM
-mirror. Validate the finished appliance with internet egress denied, including
-Grafana datasource queries and a reboot.
+Host preparation checks cover bundles without checksums, OS mismatch, unsafe
+tar entries, and S3 downloads without an ownership lookup. Provisioning checks
+use mock package/container commands for the offline path. These are not a
+substitute for a real build with an approved RHEL base and RPM mirror. A real
+RHEL build, offline boot, Grafana datasource query, and reboot remain
+unverified here.
 
 No AWS infrastructure is launched by the code change itself. The prior test
 AMIs and snapshots were deleted at the operator's request; a fresh build is

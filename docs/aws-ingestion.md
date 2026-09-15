@@ -74,15 +74,29 @@ Create IAM user `svc-siem-vector`, programmatic access only. Policy:
 No write, no list, no delete on S3: Vector only fetches the objects named in
 queue messages. (Object deletion/lifecycle stays an S3 lifecycle-rule concern.)
 
-## 4. Turn it on
+## 4. Turn it on for an appliance
 
-1. Fill the `--- Phase 2 ---` block in `.env` (region, keys, 4 queue URLs).
-2. Uncomment `COMPOSE_PROFILES=aws` in `.env`.
-3. `docker compose up -d` (starts the `vector` service).
+1. Put `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and the
+   required `SQS_URL_*` values in appliance user-data or
+   `/etc/ironlog/appliance.conf`; see
+   [first boot](../scripts/firstboot/README.md). Use `ssm://`, `asm://`, or
+   another supported resolver value for secrets rather than placing access
+   keys in source control.
+2. On first boot, any non-empty `SQS_URL_*` value causes first boot to link
+   and start `ironlog-vector.service`. With no queue URLs, that AWS collector
+   remains disabled.
+3. For an already configured appliance, update its input configuration and
+   follow the forced first-boot re-run procedure in
+   [first boot](../scripts/firstboot/README.md); it creates the
+   `multi-user.target.wants` link for later reboots.
 4. Verify:
-   - `docker logs siem-vector` — no auth/queue errors, sinks healthy.
+   - `journalctl -u ironlog-vector.service` and
+     `podman logs ironlog-vector` — no auth/queue errors.
    - Row counts rising: `SELECT count() FROM siem.cloudtrail` (as admin or analyst).
    - Grafana -> SIEM folder -> "AWS Security Overview" populates.
+
+For connected Compose development only, retain the existing `.env` AWS values
+and start its `aws` profile. That path is separate from appliance operation.
 
 ## Operational notes
 
