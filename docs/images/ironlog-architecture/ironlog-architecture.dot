@@ -1,0 +1,30 @@
+digraph ironlog_architecture {
+  label="Ironlog | Architecture overview";
+  subgraph cluster_sources {
+    kind=zone; label="01  SOURCES";
+    hosts [kind=server label="Hosts + Kubernetes" color="#7C3AED" notes="Purple: event sources. Windows/Linux agents and Kubernetes HEC shippers."];
+    aws [kind=cloud-storage label="AWS logs (optional)" color="#7C3AED" notes="Purple: event sources. S3 objects and SQS notifications."];
+  }
+  subgraph cluster_ingestion {
+    kind=zone; label="02  INGESTION";
+    vectorHosts [kind=container label="Vector Hosts" color="#0D9488" notes="Teal: ingestion. Always on; native TCP 6000 and HEC 8088; disk buffers."];
+    vectorAws [kind=container label="Vector AWS (optional)" color="#0D9488" notes="Teal: ingestion. Optional AWS profile; reads SQS messages and S3 objects."];
+  }
+  subgraph cluster_data {
+    kind=zone; label="03  DATA";
+    clickhouse [kind=database label="ClickHouse" color="#2563EB" notes="Blue: data. Seven SIEM tables and audit.query_archive; local storage; S3 tiering disabled."];
+  }
+  subgraph cluster_apps {
+    kind=zone; label="04  APPLICATIONS";
+    grafana [kind=container label="Grafana OSS" color="#D97706" notes="Amber: applications. Dashboards, SQL Explore and pipeline alerting. Local login on 3000."];
+    hyperdx [kind=container label="HyperDX" color="#D97706" notes="Amber: applications. Search and investigation UI. Native local login on 8081."];
+    mongo [kind=database label="MongoDB" color="#2563EB" notes="Blue: data. HyperDX state only; not event storage. Internal 27017."];
+  }
+  hosts -> vectorHosts [label="6000 / 8088"];
+  aws -> vectorAws [label="S3 + SQS"];
+  vectorHosts -> clickhouse [label="INSERT only"];
+  vectorAws -> clickhouse [label="INSERT only"];
+  grafana -> clickhouse [label="SQL queries"];
+  hyperdx -> clickhouse [label="Read queries"];
+  hyperdx -> mongo [label="App state"];
+}

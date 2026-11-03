@@ -1,0 +1,136 @@
+{
+  "pages": [
+    {
+      "name": "ironlog_access_audit",
+      "devices": [
+        {
+          "id": "n5",
+          "kind": "user-group",
+          "label": "Analysts + auditors",
+          "data": {
+            "notes": "Purple: people. Each UI authenticates its own native local accounts. External IdP integration is deferred."
+          }
+        },
+        {
+          "id": "n6",
+          "kind": "container",
+          "label": "Grafana OSS",
+          "data": {
+            "notes": "Amber: UI. Host port 3000. Shared analyst/auditor ClickHouse datasource credentials. Dashboards, SQL Explore and pipeline health alerts."
+          }
+        },
+        {
+          "id": "n7",
+          "kind": "container",
+          "label": "HyperDX",
+          "data": {
+            "notes": "Amber: UI. Host port 8081. Native local login; svc_hyperdx reads siem tables; denied audit tables."
+          }
+        },
+        {
+          "id": "n8",
+          "kind": "database",
+          "label": "ClickHouse",
+          "data": {
+            "notes": "Blue: data. Host 8123/9000 bind to loopback; applications use internal service connectivity. Query log records shared database service identities, not individual app users."
+          }
+        },
+        {
+          "id": "n9",
+          "kind": "database",
+          "label": "MongoDB",
+          "data": {
+            "notes": "Blue: data. HyperDX app state only on internal 27017. Contains no SIEM event store."
+          }
+        },
+        {
+          "id": "n10",
+          "kind": "database",
+          "label": "Query audit archive",
+          "data": {
+            "notes": "Blue: data. Logical table audit.query_archive INSIDE ClickHouse, not a separate server. Incremental materialized view from system.query_log; two-year TTL. Not a claim of immutable external storage or complete per-user audit attribution."
+          }
+        }
+      ],
+      "links": [
+        {
+          "id": "e1",
+          "from": {
+            "device": "n5",
+            "label": "Analysts + auditors"
+          },
+          "to": {
+            "device": "n6",
+            "label": "Grafana OSS"
+          },
+          "label": "Local login :3000"
+        },
+        {
+          "id": "e2",
+          "from": {
+            "device": "n5",
+            "label": "Analysts + auditors"
+          },
+          "to": {
+            "device": "n7",
+            "label": "HyperDX"
+          },
+          "label": "Local login :8081"
+        },
+        {
+          "id": "e3",
+          "from": {
+            "device": "n6",
+            "label": "Grafana OSS"
+          },
+          "to": {
+            "device": "n8",
+            "label": "ClickHouse"
+          },
+          "label": "Analyst / auditor SQL"
+        },
+        {
+          "id": "e4",
+          "from": {
+            "device": "n7",
+            "label": "HyperDX"
+          },
+          "to": {
+            "device": "n8",
+            "label": "ClickHouse"
+          },
+          "label": "svc_hyperdx / SELECT"
+        },
+        {
+          "id": "e5",
+          "from": {
+            "device": "n7",
+            "label": "HyperDX"
+          },
+          "to": {
+            "device": "n9",
+            "label": "MongoDB"
+          },
+          "label": "App state :27017"
+        },
+        {
+          "id": "e6",
+          "from": {
+            "device": "n8",
+            "label": "ClickHouse"
+          },
+          "to": {
+            "device": "n10",
+            "label": "Query audit archive"
+          },
+          "label": "Query log capture"
+        }
+      ]
+    }
+  ],
+  "counts": {
+    "pages": 1,
+    "devices": 6,
+    "links": 6
+  }
+}

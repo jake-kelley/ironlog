@@ -1,0 +1,26 @@
+digraph ironlog_access_audit {
+ subgraph cluster_users {
+  kind=zone; label="01  PEOPLE";
+  users [kind=user-group label="Analysts + auditors" color="#7C3AED" notes="Purple: people. Each UI authenticates its own native local accounts. External IdP integration is deferred."];
+ }
+ subgraph cluster_apps {
+  kind=zone; label="02  APPLICATIONS";
+  grafana [kind=container label="Grafana OSS" color="#D97706" notes="Amber: UI. Host port 3000. Shared analyst/auditor ClickHouse datasource credentials. Dashboards, SQL Explore and pipeline health alerts."];
+  hyperdx [kind=container label="HyperDX" color="#D97706" notes="Amber: UI. Host port 8081. Native local login; svc_hyperdx reads siem tables; denied audit tables."];
+ }
+ subgraph cluster_data {
+  kind=zone; label="03  DATA SERVICES";
+  ch [kind=database label="ClickHouse" color="#2563EB" notes="Blue: data. Host 8123/9000 bind to loopback; applications use internal service connectivity. Query log records shared database service identities, not individual app users."];
+  mongo [kind=database label="MongoDB" color="#2563EB" notes="Blue: data. HyperDX app state only on internal 27017. Contains no SIEM event store."];
+ }
+ subgraph cluster_evidence {
+  kind=zone; label="04  AUDIT EVIDENCE";
+  audit [kind=database label="Query audit archive" color="#2563EB" notes="Blue: data. Logical table audit.query_archive INSIDE ClickHouse, not a separate server. Incremental materialized view from system.query_log; two-year TTL. Not a claim of immutable external storage or complete per-user audit attribution."];
+ }
+ users -> grafana [label="Local login :3000"];
+ users -> hyperdx [label="Local login :8081"];
+ grafana -> ch [label="Analyst / auditor SQL"];
+ hyperdx -> ch [label="svc_hyperdx / SELECT"];
+ hyperdx -> mongo [label="App state :27017"];
+ ch -> audit [label="Query log capture"];
+}

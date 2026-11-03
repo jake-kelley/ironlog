@@ -1,0 +1,144 @@
+{
+  "pages": [
+    {
+      "name": "ironlog_ingestion",
+      "devices": [
+        {
+          "id": "n4",
+          "kind": "desktop",
+          "label": "Windows agent",
+          "data": {
+            "notes": "Purple: source. Vector reads Windows Security, System and PowerShell Operational events."
+          }
+        },
+        {
+          "id": "n5",
+          "kind": "server",
+          "label": "Linux agent",
+          "data": {
+            "notes": "Purple: source. Vector reads journald and auditd files."
+          }
+        },
+        {
+          "id": "n6",
+          "kind": "container-host",
+          "label": "Kubernetes shipper",
+          "data": {
+            "notes": "Purple: source. Vector DaemonSet ships pod logs using token-authenticated HEC."
+          }
+        },
+        {
+          "id": "n7",
+          "kind": "cloud-storage",
+          "label": "S3 + SQS (optional)",
+          "data": {
+            "notes": "Purple: optional AWS source. CloudTrail, GuardDuty, VPC Flow and S3 access; SQS references S3 objects. Not an on-prem dependency."
+          }
+        },
+        {
+          "id": "n8",
+          "kind": "container",
+          "label": "Vector Hosts",
+          "data": {
+            "notes": "Teal: always-on collector. Native TCP 6000; HEC 8088. VRL normalization; per-sink disk buffers."
+          }
+        },
+        {
+          "id": "n9",
+          "kind": "container",
+          "label": "Vector AWS (optional)",
+          "data": {
+            "notes": "Teal: optional AWS collector. Reads SQS notifications and fetches S3 objects; VRL transforms and disk buffers."
+          }
+        },
+        {
+          "id": "n10",
+          "kind": "database",
+          "label": "ClickHouse",
+          "data": {
+            "notes": "Blue: event storage. Seven typed tables: cloudtrail, guardduty, vpc_flow, s3_access, windows_events, linux_syslog, k8s_logs. INSERT-only svc_vector. Current table retention: 30 days; selected raw fields: 7 days."
+          }
+        }
+      ],
+      "links": [
+        {
+          "id": "e1",
+          "from": {
+            "device": "n4",
+            "label": "Windows agent"
+          },
+          "to": {
+            "device": "n8",
+            "label": "Vector Hosts"
+          },
+          "label": "Native TCP 6000"
+        },
+        {
+          "id": "e2",
+          "from": {
+            "device": "n5",
+            "label": "Linux agent"
+          },
+          "to": {
+            "device": "n8",
+            "label": "Vector Hosts"
+          },
+          "label": "Native TCP 6000"
+        },
+        {
+          "id": "e3",
+          "from": {
+            "device": "n6",
+            "label": "Kubernetes shipper"
+          },
+          "to": {
+            "device": "n8",
+            "label": "Vector Hosts"
+          },
+          "label": "HEC 8088 + token"
+        },
+        {
+          "id": "e4",
+          "from": {
+            "device": "n7",
+            "label": "S3 + SQS (optional)"
+          },
+          "to": {
+            "device": "n9",
+            "label": "Vector AWS (optional)"
+          },
+          "label": "Notifications + objects"
+        },
+        {
+          "id": "e5",
+          "from": {
+            "device": "n8",
+            "label": "Vector Hosts"
+          },
+          "to": {
+            "device": "n10",
+            "label": "ClickHouse"
+          },
+          "label": "svc_vector / INSERT"
+        },
+        {
+          "id": "e6",
+          "from": {
+            "device": "n9",
+            "label": "Vector AWS (optional)"
+          },
+          "to": {
+            "device": "n10",
+            "label": "ClickHouse"
+          },
+          "label": "svc_vector / INSERT"
+        }
+      ]
+    }
+  ],
+  "counts": {
+    "pages": 1,
+    "devices": 7,
+    "links": 6
+  }
+}

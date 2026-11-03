@@ -24,48 +24,13 @@ each panel tagged with its control ID. Querying: [docs/query-guide.md](docs/quer
 
 ## Architecture
 
-```mermaid
-flowchart TB
-    subgraph sources["Log sources"]
-        win["Windows hosts<br/>vector agent<br/><i>Security / System / PowerShell</i>"]
-        lin["Linux hosts<br/>vector agent<br/><i>journald + auditd</i>"]
-        k8s["Kubernetes clusters<br/>vector DaemonSet"]
-        aws["AWS<br/><i>CloudTrail / GuardDuty<br/>VPC Flow / S3 Access</i>"]
-    end
+![Ironlog architecture — sources, ingestion, data, and applications](docs/images/ironlog-architecture/ironlog-architecture.svg)
 
-    subgraph ingest["Ingest tier — writes as svc_vector (INSERT-only)"]
-        agg["vector-hosts aggregator<br/><b>:6000</b> native · <b>:8088</b> HEC"]
-        vaws["vector (aws profile)<br/><i>S3 → SQS</i>"]
-    end
-
-    ch[("<b>ClickHouse</b><br/>siem.* tables<br/>audit.query_archive")]
-
-    subgraph ui["Browser tier — read-only service accounts"]
-        graf["Grafana<br/><i>dashboards · SQL · alerts</i>"]
-        hdx["HyperDX<br/><i>log search · investigations</i>"]
-    end
-
-    analyst(["Analysts · Auditors · Admins"])
-
-    win  --> agg
-    lin  --> agg
-    k8s  --> agg
-    aws  --> vaws
-
-    agg  -- "normalize (VRL)" --> ch
-    vaws -- "normalize (VRL)" --> ch
-
-    ch -- "svc_grafana_analyst<br/>svc_grafana_auditor" --> graf
-    ch -- "svc_hyperdx" --> hdx
-
-    analyst --> graf
-    analyst --> hdx
-
-    ch -. "every query, incl. on a user's behalf" .-> audit["audit.query_archive<br/><i>append-only · AU-9</i>"]
-
-    classDef store fill:#1f2937,stroke:#60a5fa,stroke-width:2px,color:#f9fafb
-    class ch,audit store
-```
+[Architecture details](docs/architecture.md) ·
+[Editable diagram](docs/images/ironlog-architecture/ironlog-architecture.drawio) ·
+[PNG](docs/images/ironlog-architecture/ironlog-architecture.png) ·
+[Ingestion paths](docs/images/ironlog-ingestion/ironlog-ingestion.svg) ·
+[User access and audit flow](docs/images/ironlog-access-audit/ironlog-access-audit.svg)
 
 Each UI authenticates its own local users. Finished queries and processing
 errors are captured in `audit.query_archive` under shared database service

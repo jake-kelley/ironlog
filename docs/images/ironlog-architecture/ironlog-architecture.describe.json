@@ -1,0 +1,164 @@
+{
+  "pages": [
+    {
+      "name": "ironlog_architecture",
+      "devices": [
+        {
+          "id": "n5",
+          "kind": "server",
+          "label": "Hosts + Kubernetes",
+          "data": {
+            "notes": "Purple: event sources. Windows/Linux agents and Kubernetes HEC shippers."
+          }
+        },
+        {
+          "id": "n6",
+          "kind": "cloud-storage",
+          "label": "AWS logs (optional)",
+          "data": {
+            "notes": "Purple: event sources. S3 objects and SQS notifications."
+          }
+        },
+        {
+          "id": "n7",
+          "kind": "container",
+          "label": "Vector Hosts",
+          "data": {
+            "notes": "Teal: ingestion. Always on; native TCP 6000 and HEC 8088; disk buffers."
+          }
+        },
+        {
+          "id": "n8",
+          "kind": "container",
+          "label": "Vector AWS (optional)",
+          "data": {
+            "notes": "Teal: ingestion. Optional AWS profile; reads SQS messages and S3 objects."
+          }
+        },
+        {
+          "id": "n9",
+          "kind": "database",
+          "label": "ClickHouse",
+          "data": {
+            "notes": "Blue: data. Seven SIEM tables and audit.query_archive; local storage; S3 tiering disabled."
+          }
+        },
+        {
+          "id": "n10",
+          "kind": "container",
+          "label": "Grafana OSS",
+          "data": {
+            "notes": "Amber: applications. Dashboards, SQL Explore and pipeline alerting. Local login on 3000."
+          }
+        },
+        {
+          "id": "n11",
+          "kind": "container",
+          "label": "HyperDX",
+          "data": {
+            "notes": "Amber: applications. Search and investigation UI. Native local login on 8081."
+          }
+        },
+        {
+          "id": "n12",
+          "kind": "database",
+          "label": "MongoDB",
+          "data": {
+            "notes": "Blue: data. HyperDX state only; not event storage. Internal 27017."
+          }
+        }
+      ],
+      "links": [
+        {
+          "id": "e1",
+          "from": {
+            "device": "n5",
+            "label": "Hosts + Kubernetes"
+          },
+          "to": {
+            "device": "n7",
+            "label": "Vector Hosts"
+          },
+          "label": "6000 / 8088"
+        },
+        {
+          "id": "e2",
+          "from": {
+            "device": "n6",
+            "label": "AWS logs (optional)"
+          },
+          "to": {
+            "device": "n8",
+            "label": "Vector AWS (optional)"
+          },
+          "label": "S3 + SQS"
+        },
+        {
+          "id": "e3",
+          "from": {
+            "device": "n7",
+            "label": "Vector Hosts"
+          },
+          "to": {
+            "device": "n9",
+            "label": "ClickHouse"
+          },
+          "label": "INSERT only"
+        },
+        {
+          "id": "e4",
+          "from": {
+            "device": "n8",
+            "label": "Vector AWS (optional)"
+          },
+          "to": {
+            "device": "n9",
+            "label": "ClickHouse"
+          },
+          "label": "INSERT only"
+        },
+        {
+          "id": "e5",
+          "from": {
+            "device": "n10",
+            "label": "Grafana OSS"
+          },
+          "to": {
+            "device": "n9",
+            "label": "ClickHouse"
+          },
+          "label": "SQL queries"
+        },
+        {
+          "id": "e6",
+          "from": {
+            "device": "n11",
+            "label": "HyperDX"
+          },
+          "to": {
+            "device": "n9",
+            "label": "ClickHouse"
+          },
+          "label": "Read queries"
+        },
+        {
+          "id": "e7",
+          "from": {
+            "device": "n11",
+            "label": "HyperDX"
+          },
+          "to": {
+            "device": "n12",
+            "label": "MongoDB"
+          },
+          "label": "App state"
+        }
+      ]
+    }
+  ],
+  "counts": {
+    "pages": 1,
+    "devices": 8,
+    "links": 7
+  }
+}
