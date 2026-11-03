@@ -40,25 +40,6 @@
   },
   "clients": [
     {
-      "clientId": "hyperdx",
-      "name": "HyperDX (via oauth2-proxy)",
-      "protocol": "openid-connect",
-      "enabled": true,
-      "publicClient": false,
-      "secret": "CHANGE_ME_HYPERDX_CLIENT_SECRET",
-      "standardFlowEnabled": true,
-      "implicitFlowEnabled": false,
-      "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": false,
-      "redirectUris": [
-        "http://localhost:8081/oauth2/callback",
-        "https://YOUR_HYPERDX_DOMAIN/oauth2/callback"
-      ],
-      "webOrigins": ["+"],
-      "defaultClientScopes": ["profile", "email", "web-origins"],
-      "optionalClientScopes": []
-    },
-    {
       "clientId": "grafana",
       "name": "Grafana OSS",
       "protocol": "openid-connect",

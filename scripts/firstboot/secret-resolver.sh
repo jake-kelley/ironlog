@@ -26,7 +26,7 @@
 # directly executable for standalone testing:
 #   ./secret-resolver.sh resolve 'ssm:///ironlog/ch_admin_password'
 #   ./secret-resolver.sh resolve 'asm://ironlog/keycloak#admin_password'
-#   ./secret-resolver.sh resolve 'generate:32' OAUTH2_PROXY_COOKIE_SECRET
+#   ./secret-resolver.sh resolve 'generate:32' EXAMPLE_SESSION_SECRET
 #
 # All AWS calls use `aws --region <region>`; region comes from (in order)
 # SECRET_RESOLVER_AWS_REGION env var, then IMDSv2 placement/region, then
@@ -141,8 +141,7 @@ sr_resolve_file() {
 # sr_resolve_generate <bytes> <varname>
 # Persisted at $GENERATED_DIR/<varname>.secret so a reboot (or a re-run of
 # firstboot after the sentinel is cleared) does NOT regenerate it — critical
-# for OAUTH2_PROXY_COOKIE_SECRET: a changed cookie secret invalidates every
-# live session.
+# for session-signing secrets: a changed secret invalidates every live session.
 sr_resolve_generate() {
 	local bytes="$1" varname="$2" out
 	[[ "$bytes" =~ ^[0-9]+$ ]] || { sr_log "generate: scheme needs a numeric byte count, got '$bytes'"; return 1; }
@@ -155,9 +154,8 @@ sr_resolve_generate() {
 	mkdir -p "$GENERATED_DIR"
 	chmod 700 "$GENERATED_DIR"
 	# openssl rand -hex N emits 2*N hex characters == N bytes when read back
-	# as a raw ASCII string later (this is exactly what .env.example's own
-	# guidance for OAUTH2_PROXY_COOKIE_SECRET assumes: "openssl rand -hex 16"
-	# for a 32-byte secret). Halve the requested byte count accordingly.
+	# as a raw ASCII string later (i.e. "openssl rand -hex 16"
+	# yields a 32-byte secret). Halve the requested byte count accordingly.
 	local half=$((bytes / 2))
 	if [[ $((half * 2)) -ne $bytes ]]; then
 		sr_log "generate:$bytes requests an odd byte count; openssl rand -hex needs an even split — rounding up"

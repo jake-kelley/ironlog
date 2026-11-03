@@ -1,5 +1,5 @@
 # SIEM local platform — Podman (default) or Docker via scripts/compose.sh
-# Services: ClickHouse (storage/query), Grafana OSS (UI), HyperDX (investigation UI).
+# Services: ClickHouse (storage/query), Grafana OSS (UI).
 # Vector host ingestion is always on; AWS ingestion and k3s are optional profiles.
 
 services:
@@ -16,7 +16,6 @@ services:
       CH_VECTOR_PASSWORD: ${CH_VECTOR_PASSWORD}
       CH_GRAFANA_ANALYST_PASSWORD: ${CH_GRAFANA_ANALYST_PASSWORD}
       CH_GRAFANA_AUDITOR_PASSWORD: ${CH_GRAFANA_AUDITOR_PASSWORD}
-      CH_HYPERDX_PASSWORD: ${CH_HYPERDX_PASSWORD}
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - ./clickhouse/config.d:/etc/clickhouse-server/config.d:ro,Z
@@ -63,53 +62,6 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
-
-  # ---------------------------------------------------------------
-  # HyperDX (ClickStack) — search/investigation UI on the siem.* tables.
-  # MIT-licensed. Reads ClickHouse as svc_hyperdx (SELECT on siem.* only, via
-  # the siem_analyst role) so every query it runs lands in audit.query_archive.
-  # Native HyperDX authentication remains enabled. The app serves its frontend
-  # and proxies browser API calls internally to HYPERDX_API_PORT.
-  hyperdx:
-    image: docker.hyperdx.io/hyperdx/hyperdx:2.19.0
-    container_name: siem-hyperdx
-    restart: unless-stopped
-    environment:
-      MONGO_URI: mongodb://hyperdx:${HYPERDX_DB_PASSWORD}@hyperdx-db:27017/hyperdx?authSource=admin
-      FRONTEND_URL: ${HYPERDX_PUBLIC_URL}
-      HYPERDX_APP_PORT: 8080
-      HYPERDX_API_PORT: 8000
-      SERVER_URL: http://127.0.0.1:8000
-      IS_LOCAL_APP_MODE: "false"                 # native auth; never HyperDX's no-auth mode
-      EXPRESS_SESSION_SECRET: ${HYPERDX_SESSION_SECRET:?set HYPERDX_SESSION_SECRET}
-      HYPERDX_LOCAL_EMAIL: ${HYPERDX_LOCAL_EMAIL}
-      HYPERDX_LOCAL_PASSWORD: ${HYPERDX_LOCAL_PASSWORD}
-      HYPERDX_LOG_LEVEL: info
-      USAGE_STATS_ENABLED: "false"                 # no phone-home
-      DEFAULT_CONNECTIONS: '[{"name":"SIEM ClickHouse","host":"http://clickhouse:8123","username":"svc_hyperdx","password":"${CH_HYPERDX_PASSWORD}"}]'
-      DEFAULT_SOURCES: '[{"from":{"databaseName":"siem","tableName":"cloudtrail"},"kind":"log","name":"CloudTrail","timestampValueExpression":"event_time","displayedTimestampValueExpression":"event_time","implicitColumnExpression":"raw","bodyExpression":"raw","serviceNameExpression":"event_source","defaultTableSelectExpression":"event_time,event_name,principal_arn,source_ip,error_code","connection":"SIEM ClickHouse"},{"from":{"databaseName":"siem","tableName":"guardduty"},"kind":"log","name":"GuardDuty","timestampValueExpression":"event_time","displayedTimestampValueExpression":"event_time","implicitColumnExpression":"title","bodyExpression":"title","serviceNameExpression":"finding_type","defaultTableSelectExpression":"event_time,finding_type,severity,resource_type,resource_id,title","connection":"SIEM ClickHouse"},{"from":{"databaseName":"siem","tableName":"vpc_flow"},"kind":"log","name":"VPC Flow","timestampValueExpression":"event_time","displayedTimestampValueExpression":"event_time","implicitColumnExpression":"interface_id","bodyExpression":"concat(toString(src_addr),'':'',toString(src_port),'' -> '',toString(dst_addr),'':'',toString(dst_port))","defaultTableSelectExpression":"event_time,aws_account,src_addr,src_port,dst_addr,dst_port,protocol,action,bytes","connection":"SIEM ClickHouse"},{"from":{"databaseName":"siem","tableName":"s3_access"},"kind":"log","name":"S3 Access","timestampValueExpression":"event_time","displayedTimestampValueExpression":"event_time","implicitColumnExpression":"object_key","bodyExpression":"concat(operation,'' '',object_key)","serviceNameExpression":"bucket","defaultTableSelectExpression":"event_time,bucket,operation,object_key,remote_ip,http_status","connection":"SIEM ClickHouse"}]'
-    depends_on:
-      clickhouse:
-        condition: service_healthy
-      hyperdx-db:
-        condition: service_healthy
-    ports:
-      - "8081:8080"
-
-  hyperdx-db:
-    image: docker.io/library/mongo:7.0
-    container_name: siem-hyperdx-db
-    restart: unless-stopped
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: hyperdx
-      MONGO_INITDB_ROOT_PASSWORD: ${HYPERDX_DB_PASSWORD}
-    volumes:
-      - hyperdx-db-data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
 
   # ---------------------------------------------------------------
   # Phase 3 — Vector aggregator for hosts + Kubernetes (always on).
@@ -202,5 +154,4 @@ volumes:
   grafana-data:
   vector-buffer:
   vector-hosts-buffer:
-  hyperdx-db-data:
   k3s-data:

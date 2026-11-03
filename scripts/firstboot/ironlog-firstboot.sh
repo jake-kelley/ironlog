@@ -95,7 +95,7 @@ case "$MODE" in
 esac
 
 FQDN="${CONF[APPLIANCE_FQDN]:-}"
-[[ -n "$FQDN" ]] || die "APPLIANCE_FQDN is required (the appliance's public/internal hostname; used to derive Grafana and HyperDX URLs)"
+[[ -n "$FQDN" ]] || die "APPLIANCE_FQDN is required (the appliance's public/internal hostname; used to derive the Grafana URL)"
 
 TLS="${CONF[APPLIANCE_TLS]:-true}"
 case "$TLS" in
@@ -113,8 +113,6 @@ log "mode=$MODE fqdn=$FQDN tls=$TLS"
 # ---------------------------------------------------------------------------
 
 : "${CONF[GRAFANA_ROOT_URL]:=${SCHEME}://${FQDN}:3000}"
-# HyperDX native auth is served directly on host port 8081.
-: "${CONF[HYPERDX_PUBLIC_URL]:=${SCHEME}://${FQDN}:8081}"
 : "${CONF[AWS_REGION]:=$(sr_region)}"
 
 # ---------------------------------------------------------------------------
@@ -128,7 +126,7 @@ log "mode=$MODE fqdn=$FQDN tls=$TLS"
 # Vars needed regardless of auth mode (ClickHouse core + always-on vector-hosts).
 CORE_VARS=(
 	CH_ADMIN_USER CH_ADMIN_PASSWORD CH_VECTOR_PASSWORD
-	CH_GRAFANA_ANALYST_PASSWORD CH_GRAFANA_AUDITOR_PASSWORD CH_HYPERDX_PASSWORD
+	CH_GRAFANA_ANALYST_PASSWORD CH_GRAFANA_AUDITOR_PASSWORD
 	SPLUNK_HEC_TOKEN
 )
 
@@ -136,7 +134,6 @@ CORE_VARS=(
 # IdP credential is resolved or emitted by this AMI.
 APP_VARS=(
 	GRAFANA_ROOT_URL GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD
-	HYPERDX_DB_PASSWORD HYPERDX_SESSION_SECRET HYPERDX_LOCAL_EMAIL HYPERDX_LOCAL_PASSWORD HYPERDX_PUBLIC_URL
 )
 
 # Optional: AWS ingestion (ironlog-vector.service). Empty is valid — that
@@ -149,9 +146,6 @@ declare -A VAR_DEFAULT=(
 	[CH_ADMIN_USER]=siem_admin
 	[GRAFANA_ADMIN_USER]=admin
 	[GRAFANA_ADMIN_PASSWORD]=IronlogDev123!
-	[HYPERDX_LOCAL_EMAIL]=admin@ironlog.local
-	[HYPERDX_LOCAL_PASSWORD]=IronlogDev123!
-	[HYPERDX_SESSION_SECRET]=generate:64
 )
 
 declare -A RESOLVED
@@ -251,7 +245,6 @@ fi
 declare -A SVC_OWNER=(
 	[clickhouse]="101:101"          # clickhouse/clickhouse-server: user "clickhouse"
 	[grafana]="472:472"             # grafana/grafana-oss: well-known "grafana" uid/gid
-	[hyperdx-db]="999:999"          # mongo:7.0 (debian-based): user "mongodb"
 	[vector-hosts-buffer]="0:0"     # timberio/vector debian image: runs as root by default
 	[vector-buffer]="0:0"           # same image as vector-hosts
 )
@@ -287,8 +280,7 @@ done
 # ---------------------------------------------------------------------------
 
 KNOWN_UNITS=(
-	ironlog-clickhouse.service ironlog-grafana.service ironlog-hyperdx-db.service
-	ironlog-hyperdx.service ironlog-bootstrap-hyperdx-local.service
+	ironlog-clickhouse.service ironlog-grafana.service
 	ironlog-vector-hosts.service ironlog-vector.service
 	# Not a quadlet -- a real /etc/systemd/system unit (see
 	# scripts/firstboot/ironlog-schema.service). It would inherit the ordering
@@ -350,7 +342,7 @@ start_failures=0
 # vector-hosts already pulls it in via Requires=, but it is queued explicitly
 # so that a failure to even queue it is counted as a start failure here.
 CORE_SERVICES=(ironlog-clickhouse.service ironlog-schema.service ironlog-vector-hosts.service)
-APP_SERVICES=(ironlog-grafana.service ironlog-hyperdx-db.service ironlog-hyperdx.service ironlog-bootstrap-hyperdx-local.service)
+APP_SERVICES=(ironlog-grafana.service)
 
 for unit in "${CORE_SERVICES[@]}"; do
 	start_unit "$unit" || start_failures=$((start_failures + 1))

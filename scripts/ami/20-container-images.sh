@@ -21,10 +21,9 @@ die() { echo "[$LOG_TAG] FATAL: $*" >&2; exit 1; }
 # short-name-mode = "enforcing" in /etc/containers/registries.conf, so a
 # Docker Hub short name cannot be resolved without a TTY to prompt at:
 #   "Error: short-name resolution enforced but cannot prompt without a TTY"
-# The quay.io/ and docker.hyperdx.io/ entries always worked precisely
-# because they were already qualified. These strings must also match the
+# These strings must also match the
 # Image= lines in quadlets/ verbatim -- see the cross-check below.
-DEFAULT_IMAGES="docker.io/clickhouse/clickhouse-server:24.8 docker.io/grafana/grafana-oss:11.4.0 docker.hyperdx.io/hyperdx/hyperdx:2.19.0 docker.io/library/mongo:7.0 docker.io/timberio/vector:0.57.0-debian"
+DEFAULT_IMAGES="docker.io/clickhouse/clickhouse-server:24.8 docker.io/grafana/grafana-oss:11.4.0 docker.io/timberio/vector:0.57.0-debian"
 IMAGES="${IRONLOG_CONTAINER_IMAGES:-$DEFAULT_IMAGES}"
 ARCH="${IRONLOG_PULL_ARCH:-arm64}"
 
@@ -59,18 +58,6 @@ install_plugin() {
   chmod -R a+rX "$plugin_dir"
   log "Grafana ClickHouse plugin baked at $plugin_dir"
 }
-
-# docker.hyperdx.io/hyperdx/hyperdx is a thin proxy in front of Docker Hub:
-# it 307-redirects to auth.docker.io with scope repository:hyperdx/hyperdx:pull,
-# then serves the actual blob from Docker Hub's registry. Verified working in
-# an earlier session (this comment records that, not a fresh check here).
-# FALLBACK for a disconnected/mirrored build environment where
-# docker.hyperdx.io itself isn't reachable but a Docker Hub mirror is: pull
-# docker.io/hyperdxio/hyperdx:2.19.0 directly instead (the underlying image
-# docker.hyperdx.io proxies to) and retag it locally as
-# docker.hyperdx.io/hyperdx/hyperdx:2.19.0 before this script runs, since
-# quadlets/ironlog-hyperdx.container references the docker.hyperdx.io name
-# literally.
 
 fail=0
 if [ "$IRONLOG_SOFTWARE_SOURCE" = bundle ]; then

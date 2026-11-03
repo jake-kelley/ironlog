@@ -30,7 +30,6 @@ class BundleTests(unittest.TestCase):
             "keys/vendor.asc": "test key",
             "images.tsv": "".join(ref + "\timages/test.tar\n" for ref in (
                 "docker.io/clickhouse/clickhouse-server:24.8", "docker.io/grafana/grafana-oss:11.4.0",
-                "docker.hyperdx.io/hyperdx/hyperdx:2.19.0", "docker.io/library/mongo:7.0",
                 "docker.io/timberio/vector:0.57.0-debian")),
             "images/test.tar": "test archive",
             "grafana-plugins/grafana-clickhouse-datasource/plugin.json": json.dumps({"id": "grafana-clickhouse-datasource"}),
