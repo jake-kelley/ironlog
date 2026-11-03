@@ -196,7 +196,7 @@ passed through here as `IRONLOG_CONTAINER_IMAGES` env var for
 documentation/single-source-of-truth purposes — the script is authoritative,
 this is not a second definition to drift):
 
-`docker.io/clickhouse/clickhouse-server:24.8`,
+`docker.io/clickhouse/clickhouse-server:26.8.34.13`,
 `docker.io/grafana/grafana-oss:11.4.0`,
 `docker.hyperdx.io/hyperdx/hyperdx:2.19.0`, `docker.io/library/mongo:7.0`,
 `docker.io/timberio/vector:0.57.0-debian`.

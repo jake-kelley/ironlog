@@ -60,7 +60,7 @@ make_bundle() {
   printf '{"id":"grafana-clickhouse-datasource","executable":"plugin"}\n' > "$bundle/grafana-plugins/grafana-clickhouse-datasource/plugin.json"
   printf '#!/bin/sh\n' > "$bundle/grafana-plugins/grafana-clickhouse-datasource/plugin"; chmod +x "$bundle/grafana-plugins/grafana-clickhouse-datasource/plugin"
   : > "$bundle/images.tsv"
-  for image in docker.io/clickhouse/clickhouse-server:24.8 docker.io/grafana/grafana-oss:11.4.0 docker.io/timberio/vector:0.57.0-debian; do
+  for image in docker.io/clickhouse/clickhouse-server:26.8.34.13 docker.io/grafana/grafana-oss:11.4.0 docker.io/timberio/vector:0.57.0-debian; do
     archive="images/${image//[\/:]/_}.tar"; printf '%s\n' "$image" > "$bundle/$archive"; printf '%s\t%s\n' "$image" "$archive" >> "$bundle/images.tsv"
   done
   printf 'obsolete manifest\n' > "$bundle/SHA256SUMS"
