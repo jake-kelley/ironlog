@@ -20,7 +20,4 @@ ch --query "GRANT siem_analyst TO svc_grafana_analyst"
 ch --query "CREATE USER IF NOT EXISTS svc_grafana_auditor IDENTIFIED WITH sha256_password BY '${CH_GRAFANA_AUDITOR_PASSWORD}' DEFAULT ROLE siem_auditor SETTINGS PROFILE 'siem_reader'"
 ch --query "GRANT siem_auditor TO svc_grafana_auditor"
 
-ch --query "CREATE USER IF NOT EXISTS svc_hyperdx IDENTIFIED WITH sha256_password BY '${CH_HYPERDX_PASSWORD}' DEFAULT ROLE siem_analyst SETTINGS PROFILE 'siem_reader'"
-ch --query "GRANT siem_analyst TO svc_hyperdx"
-
 echo "SIEM schema and RBAC bootstrap complete."

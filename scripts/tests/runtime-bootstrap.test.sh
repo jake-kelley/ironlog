@@ -56,10 +56,10 @@ run_bootstrap() {
     cd "$workdir"
     if [[ -n "$runtime" ]]; then
       PATH="$mockbin:$PATH" MOCK_RUNTIME_LOG="$log" \
-        IRONLOG_CONTAINER_RUNTIME="$runtime" bash ./bootstrap.sh runtime-test@ironlog.local
+        IRONLOG_CONTAINER_RUNTIME="$runtime" bash ./bootstrap.sh
     else
       PATH="$mockbin:$PATH" MOCK_RUNTIME_LOG="$log" \
-        env -u IRONLOG_CONTAINER_RUNTIME bash ./bootstrap.sh runtime-test@ironlog.local
+        env -u IRONLOG_CONTAINER_RUNTIME bash ./bootstrap.sh
     fi
   ) >"$workdir/bootstrap.out" 2>&1; then
     cat "$workdir/bootstrap.out" >&2
@@ -72,7 +72,6 @@ podman_log="$tmpdir/podman.log"
 run_bootstrap '' "$podman_work" "$podman_log"
 assert_contains 'IRONLOG_CONTAINER_RUNTIME=podman' "$podman_work/.env"
 assert_contains 'podman <compose> <up> <-d>' "$podman_log"
-assert_contains 'podman <exec> <-i> <siem-hyperdx> <node> <->' "$podman_log"
 assert_contains 'podman <exec> <siem-clickhouse>' "$podman_log"
 
 docker_work="$tmpdir/docker"
@@ -80,7 +79,6 @@ docker_log="$tmpdir/docker.log"
 run_bootstrap docker "$docker_work" "$docker_log"
 assert_contains 'IRONLOG_CONTAINER_RUNTIME=docker' "$docker_work/.env"
 assert_contains 'docker <compose> <up> <-d>' "$docker_log"
-assert_contains 'docker <exec> <-i> <siem-hyperdx> <node> <->' "$docker_log"
 
 compose_work="$tmpdir/compose"
 mkdir -p "$compose_work"

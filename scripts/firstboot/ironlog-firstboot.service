@@ -19,8 +19,7 @@
 Description=ironlog appliance first-boot configuration
 Wants=network-online.target
 After=network-online.target
-Before=ironlog-clickhouse.service ironlog-grafana.service ironlog-hyperdx-db.service
-Before=ironlog-hyperdx.service ironlog-bootstrap-hyperdx-local.service
+Before=ironlog-clickhouse.service ironlog-grafana.service
 Before=ironlog-vector-hosts.service ironlog-vector.service
 Before=ironlog-schema.service
 Before=multi-user.target

@@ -18,8 +18,6 @@ locals {
   container_images = join(" ", [
     "docker.io/clickhouse/clickhouse-server:24.8",
     "docker.io/grafana/grafana-oss:11.4.0",
-    "docker.hyperdx.io/hyperdx/hyperdx:2.19.0",
-    "docker.io/library/mongo:7.0",
     "docker.io/timberio/vector:0.57.0-debian",
   ])
 }
@@ -128,8 +126,8 @@ build {
   }
 
   # --- 4. quadlets/*.container + quadlets/*.network -> /etc/containers/systemd/ ---
-  # Whole quadlets/ tree staged (it also has README.md and hyperdx/ which are
-  # NOT unit files), then only *.container/*.network copied into the target
+  # Whole quadlets/ tree staged (it also has README.md which is
+  # NOT a unit file), then only *.container/*.network copied into the target
   # dir — matches the contract literally instead of assuming the directory
   # only ever contains unit files.
   provisioner "file" {
@@ -144,24 +142,10 @@ build {
       # Rebuilds can begin from a staged tree carrying prior appliance units.
       # Remove retired on-box IdP/proxy definitions only; never touch data
       # under /var/lib/ironlog, where existing app accounts live.
-      "sudo rm -f /etc/containers/systemd/ironlog-keycloak.container /etc/containers/systemd/ironlog-keycloak-db.container /etc/containers/systemd/ironlog-hyperdx-auth.container",
+      "sudo rm -f /etc/containers/systemd/ironlog-keycloak.container /etc/containers/systemd/ironlog-keycloak-db.container",
       "sudo find /tmp/ironlog-stage/quadlets -maxdepth 1 -type f \\( -name '*.container' -o -name '*.network' \\) -exec cp {} /etc/containers/systemd/ \\;",
       "sudo chown -R root:root /etc/containers/systemd",
       "sudo chmod 0644 /etc/containers/systemd/*.container /etc/containers/systemd/*.network",
-      # quadlets/hyperdx/default-sources.env is NOT a unit file, so the copy
-      # above skips it -- and nothing else installed it either, so
-      # /opt/ironlog/hyperdx/default-sources.env never existed on the AMI.
-      # ironlog-hyperdx.container hard-references that path as an
-      # [Container] EnvironmentFile=, so podman refused to start HyperDX at
-      # all: "Error: parsing file /opt/ironlog/hyperdx/default-sources.env:
-      # no such file or directory" (exit 125, restart-looped to failure).
-      # The file itself was written correctly and carries its own deploy
-      # instruction in its header; only this install step was missing.
-      "sudo mkdir -p /opt/ironlog/hyperdx",
-      "sudo cp /tmp/ironlog-stage/quadlets/hyperdx/default-sources.env /opt/ironlog/hyperdx/default-sources.env",
-      "sudo chown -R root:root /opt/ironlog/hyperdx",
-      "sudo chmod 0755 /opt/ironlog/hyperdx",
-      "sudo chmod 0644 /opt/ironlog/hyperdx/default-sources.env",
       "sudo rm -rf /tmp/ironlog-stage/quadlets",
     ]
   }
@@ -172,19 +156,11 @@ build {
     destination = "/tmp/ironlog-stage/firstboot"
   }
 
-  # Shared helper is owned outside this appliance surface. It creates the
-  # native HyperDX account after the app is up; no IdP is bundled on-box.
-  provisioner "file" {
-    source      = "${path.root}/../scripts/bootstrap-hyperdx-local.sh"
-    destination = "/tmp/ironlog-stage/bootstrap-hyperdx-local.sh"
-  }
-
   provisioner "shell" {
     remote_folder = "/opt/ironlog-build"
     inline = [
       "sudo mkdir -p /usr/local/lib/ironlog",
       "sudo cp -r /tmp/ironlog-stage/firstboot/. /usr/local/lib/ironlog/",
-      "sudo install -m 0755 /tmp/ironlog-stage/bootstrap-hyperdx-local.sh /usr/local/lib/ironlog/bootstrap-hyperdx-local.sh",
       "sudo chown -R root:root /usr/local/lib/ironlog",
       "sudo find /usr/local/lib/ironlog -type f -name '*.sh' -exec chmod 0755 {} \\;",
       # Install and enable the first-boot unit. Copying scripts/firstboot/ into
@@ -208,11 +184,9 @@ build {
       # volume permanently and the container healthcheck (SELECT 1) still
       # passes. Measured on a real c7g.large 2026-08-18.
       "sudo install -m 0644 /usr/local/lib/ironlog/ironlog-schema.service /etc/systemd/system/ironlog-schema.service",
-      "sudo install -m 0644 /usr/local/lib/ironlog/ironlog-bootstrap-hyperdx-local.service /etc/systemd/system/ironlog-bootstrap-hyperdx-local.service",
-      "sudo rm -f /etc/systemd/system/ironlog-keycloak.service /etc/systemd/system/ironlog-keycloak-db.service /etc/systemd/system/ironlog-hyperdx-auth.service",
+      "sudo rm -f /etc/systemd/system/ironlog-keycloak.service /etc/systemd/system/ironlog-keycloak-db.service",
       "sudo systemctl daemon-reload",
       "sudo systemctl enable ironlog-schema.service",
-      "sudo systemctl enable ironlog-bootstrap-hyperdx-local.service",
       "sudo rm -rf /tmp/ironlog-stage",
     ]
   }

@@ -132,7 +132,7 @@ variable "data_volume_size" {
   default     = 100
   description = <<-EOT
     Size in GiB, gp3, of the SECOND EBS volume carrying appliance data
-    (/var/lib/ironlog — ClickHouse data, Grafana/Keycloak/HyperDX state,
+    (/var/lib/ironlog — ClickHouse data, Grafana state,
     Vector disk buffers). Declared as a launch_block_device_mapping, not
     baked into the AMI's own snapshot, so it can be resized/snapshotted
     independently and survives an AMI rebuild.

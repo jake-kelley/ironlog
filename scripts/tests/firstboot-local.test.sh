@@ -51,9 +51,7 @@ CH_ADMIN_PASSWORD=test-password
 CH_VECTOR_PASSWORD=test-password
 CH_GRAFANA_ANALYST_PASSWORD=test-password
 CH_GRAFANA_AUDITOR_PASSWORD=test-password
-CH_HYPERDX_PASSWORD=test-password
 SPLUNK_HEC_TOKEN=test-token
-HYPERDX_DB_PASSWORD=test-password
 CONF
 }
 run() { bash "$tmpdir/lib/firstboot.sh" > "$IRONLOG_TEST_ROOT/output" 2>&1; }
@@ -61,10 +59,10 @@ fixture defaults
 run
 test -f "$IRONLOG_TEST_ROOT/etc/.firstboot-complete"
 grep -Fx 'GRAFANA_ADMIN_USER="admin"' "$IRONLOG_TEST_ROOT/etc/ironlog.env"
-grep -Fx 'HYPERDX_LOCAL_EMAIL="admin@ironlog.local"' "$IRONLOG_TEST_ROOT/etc/ironlog.env"
-grep -Fx 'HYPERDX_SESSION_SECRET="test-session-signing-secret"' "$IRONLOG_TEST_ROOT/etc/ironlog.env"
-grep -Fx 'start --no-block ironlog-bootstrap-hyperdx-local.service' "$IRONLOG_TEST_ROOT/jobs"
+grep -Fx 'GRAFANA_ADMIN_PASSWORD="IronlogDev123!"' "$IRONLOG_TEST_ROOT/etc/ironlog.env"
+grep -Fx 'start --no-block ironlog-grafana.service' "$IRONLOG_TEST_ROOT/jobs"
 ! grep -Ei 'keycloak|oauth2|postgres' "$IRONLOG_TEST_ROOT/jobs"
+! grep -Ei 'hyperdx|mongo' "$IRONLOG_TEST_ROOT/jobs" "$IRONLOG_TEST_ROOT/etc/ironlog.env"
 # A repeat boot does not queue jobs or replace the environment file.
 before=$(cat "$IRONLOG_TEST_ROOT/jobs")
 run
@@ -76,17 +74,17 @@ for mode in oidc ldap; do
   test ! -f "$IRONLOG_TEST_ROOT/etc/ironlog.env"
 done
 fixture failed-start
-if FAIL_UNIT=ironlog-bootstrap-hyperdx-local.service run; then exit 1; fi
+if FAIL_UNIT=ironlog-grafana.service run; then exit 1; fi
 test ! -f "$IRONLOG_TEST_ROOT/etc/.firstboot-complete"
 for value in empty multiline; do
   fixture "$value"
-  printf '\nHYPERDX_LOCAL_PASSWORD=file://%s\n' "$value" >> "$IRONLOG_TEST_ROOT/config"
+  printf '\nGRAFANA_ADMIN_PASSWORD=file://%s\n' "$value" >> "$IRONLOG_TEST_ROOT/config"
   if run; then echo "unexpected success: $value" >&2; exit 1; fi
   test ! -f "$IRONLOG_TEST_ROOT/etc/ironlog.env"
   test ! -f "$IRONLOG_TEST_ROOT/etc/.firstboot-complete"
 done
 fixture quoted
-printf '\nHYPERDX_LOCAL_PASSWORD=Space "quote" \\ dollar$\n' >> "$IRONLOG_TEST_ROOT/config"
+printf '\nGRAFANA_ADMIN_PASSWORD=Space "quote" \\ dollar$\n' >> "$IRONLOG_TEST_ROOT/config"
 run
-grep -Fx 'HYPERDX_LOCAL_PASSWORD="Space \"quote\" \\ dollar$"' "$IRONLOG_TEST_ROOT/etc/ironlog.env"
+grep -Fx 'GRAFANA_ADMIN_PASSWORD="Space \"quote\" \\ dollar$"' "$IRONLOG_TEST_ROOT/etc/ironlog.env"
 echo 'firstboot-local tests passed'

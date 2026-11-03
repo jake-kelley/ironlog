@@ -60,7 +60,7 @@ make_bundle() {
   printf '{"id":"grafana-clickhouse-datasource","executable":"plugin"}\n' > "$bundle/grafana-plugins/grafana-clickhouse-datasource/plugin.json"
   printf '#!/bin/sh\n' > "$bundle/grafana-plugins/grafana-clickhouse-datasource/plugin"; chmod +x "$bundle/grafana-plugins/grafana-clickhouse-datasource/plugin"
   : > "$bundle/images.tsv"
-  for image in docker.io/clickhouse/clickhouse-server:24.8 docker.io/grafana/grafana-oss:11.4.0 docker.hyperdx.io/hyperdx/hyperdx:2.19.0 docker.io/library/mongo:7.0 docker.io/timberio/vector:0.57.0-debian; do
+  for image in docker.io/clickhouse/clickhouse-server:24.8 docker.io/grafana/grafana-oss:11.4.0 docker.io/timberio/vector:0.57.0-debian; do
     archive="images/${image//[\/:]/_}.tar"; printf '%s\n' "$image" > "$bundle/$archive"; printf '%s\t%s\n' "$image" "$archive" >> "$bundle/images.tsv"
   done
   printf 'obsolete manifest\n' > "$bundle/SHA256SUMS"
@@ -95,7 +95,7 @@ grep -F 'rpm --import' "$tmp/calls" >/dev/null
 env "${base_env[@]}" IRONLOG_ARTIFACT_DIR="$tmp/bundle" IRONLOG_BUILD_SOURCE_CONFIG="$tmp/ironlog/build-source.conf" IRONLOG_GRAFANA_PLUGIN_DIR="$tmp/plugin-stage" IRONLOG_QUADLET_DIR="$root/quadlets" bash "$images_script"
 [ -f "$tmp/plugin-stage/grafana-clickhouse-datasource/plugin.json" ]
 [ -x "$tmp/plugin-stage/grafana-clickhouse-datasource/plugin" ]
-[ "$(grep -c '^podman load --input ' "$tmp/calls")" -eq 5 ]
+[ "$(grep -c '^podman load --input ' "$tmp/calls")" -eq 3 ]
 ! grep -F 'podman pull ' "$tmp/calls" >/dev/null
 if env "${base_env[@]}" PODMAN_ARCH=amd64 IRONLOG_ARTIFACT_DIR="$tmp/bundle" IRONLOG_BUILD_SOURCE_CONFIG="$tmp/ironlog/build-source.conf" IRONLOG_GRAFANA_PLUGIN_DIR="$tmp/plugin-stage-bad" IRONLOG_QUADLET_DIR="$tmp/no-quadlets" bash "$images_script" >/dev/null 2>&1; then
   echo 'expected wrong-architecture image failure' >&2; exit 1

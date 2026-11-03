@@ -12,8 +12,8 @@
 # poisoned the data dir, and every subsequent (correct) start came up with NO
 # siem database, NO audit database and NO service accounts while reporting
 # `healthy` -- because the container healthcheck is `SELECT 1`, which answers
-# perfectly well against a server with no schema at all. Grafana, HyperDX and
-# Vector all started successfully against an empty database and ingested
+# perfectly well against a server with no schema at all. Grafana and
+# Vector both started successfully against an empty database and ingested
 # nothing, silently.
 #
 # This script closes that hole. It re-runs the SAME initdb script inside the
@@ -60,8 +60,8 @@ fi
 # error at all.
 EXPECTED_TABLES="'cloudtrail','guardduty','k8s_logs','linux_syslog','s3_access','vpc_flow','windows_events'"
 EXPECTED_TABLE_COUNT=7
-EXPECTED_USERS="'svc_vector','svc_grafana_analyst','svc_grafana_auditor','svc_hyperdx'"
-EXPECTED_USER_COUNT=4
+EXPECTED_USERS="'svc_vector','svc_grafana_analyst','svc_grafana_auditor'"
+EXPECTED_USER_COUNT=3
 
 table_count="$(ch_query "SELECT count() FROM system.tables WHERE database = 'siem' AND name IN ($EXPECTED_TABLES)" | tr -d '[:space:]')"
 audit_count="$(ch_query "SELECT count() FROM system.tables WHERE database = 'audit' AND name = 'query_archive'" | tr -d '[:space:]')"
@@ -74,7 +74,7 @@ if [ "$table_count" != "$EXPECTED_TABLE_COUNT" ] || [ "$audit_count" != "1" ] ||
 	echo "[$LOG_TAG] Most likely cause: the ClickHouse data volume was initialised by an earlier FAILED boot," >&2
 	echo "[$LOG_TAG] so the image entrypoint now skips initdb permanently (DATABASE_ALREADY_EXISTS)." >&2
 	echo "[$LOG_TAG] If /var/lib/ironlog/clickhouse holds no events you care about, reset it with:" >&2
-	echo "[$LOG_TAG]   systemctl stop ironlog-vector-hosts ironlog-hyperdx ironlog-grafana ironlog-clickhouse" >&2
+	echo "[$LOG_TAG]   systemctl stop ironlog-vector-hosts ironlog-grafana ironlog-clickhouse" >&2
 	echo "[$LOG_TAG]   find /var/lib/ironlog/clickhouse -mindepth 1 -delete" >&2
 	echo "[$LOG_TAG]   systemctl start ironlog-clickhouse ironlog-schema" >&2
 	echo "[$LOG_TAG] That command DESTROYS all stored events -- confirm the volume is disposable first." >&2
