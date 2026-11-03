@@ -108,6 +108,12 @@ CREATE TABLE IF NOT EXISTS siem.s3_access
     user_agent      String CODEC(ZSTD(3)),
     request_id      String CODEC(ZSTD(3)),
     INDEX idx_ip remote_ip TYPE bloom_filter(0.01) GRANULARITY 4,
+    -- idx_key stays tokenbf_v1 (evaluated for the 26.8 upgrade, deliberately NOT
+    -- moved to a text index): it is not message search, nothing queries
+    -- object_key through an index today, and key fragments (timestamps, UUIDs,
+    -- hashes) are near-unique tokens, so a text index dictionary would be large
+    -- for little gain. tokenbf_v1 is still supported in 26.8. Revisit only if
+    -- analysts start running hasToken(object_key, ...) at volume.
     INDEX idx_key object_key TYPE tokenbf_v1(4096, 3, 0) GRANULARITY 4
 )
 ENGINE = MergeTree

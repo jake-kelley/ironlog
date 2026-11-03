@@ -16,7 +16,7 @@ locals {
   # through as an env var in case that script wants a single source of
   # truth to read from instead of hardcoding the list twice.
   container_images = join(" ", [
-    "docker.io/clickhouse/clickhouse-server:24.8",
+    "docker.io/clickhouse/clickhouse-server:26.8.34.13",
     "docker.io/grafana/grafana-oss:11.4.0",
     "docker.hyperdx.io/hyperdx/hyperdx:2.19.0",
     "docker.io/library/mongo:7.0",

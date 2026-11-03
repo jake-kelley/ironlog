@@ -44,7 +44,7 @@ validate_bundle() {
     bundle_images["$image_ref"]=1; image_line_count=$((image_line_count + 1))
   done < "$artifact_dir/images.tsv"
   [ "$image_line_count" -eq 5 ] || die "images.tsv must contain exactly five image archives"
-  for image_ref in docker.io/clickhouse/clickhouse-server:24.8 docker.io/grafana/grafana-oss:11.4.0 docker.hyperdx.io/hyperdx/hyperdx:2.19.0 docker.io/library/mongo:7.0 docker.io/timberio/vector:0.57.0-debian; do
+  for image_ref in docker.io/clickhouse/clickhouse-server:26.8.34.13 docker.io/grafana/grafana-oss:11.4.0 docker.hyperdx.io/hyperdx/hyperdx:2.19.0 docker.io/library/mongo:7.0 docker.io/timberio/vector:0.57.0-debian; do
     [ -n "${bundle_images[$image_ref]+x}" ] || die "images.tsv missing required image: $image_ref"
   done
   [ -f "$artifact_dir/grafana-plugins/grafana-clickhouse-datasource/plugin.json" ] || die "Grafana ClickHouse plugin.json missing"
