@@ -1,0 +1,646 @@
+{
+  "format_version": 1,
+  "assessment_date": "2026-11-03",
+  "scope": "Current repository-declared appliance plus explicitly labeled development/build alternatives; registry snapshot is supplemental, not deployment attestation.",
+  "foss_status": "OSI_LICENSED_RUNTIME_ARTIFACT_REVIEW_INCOMPLETE",
+  "foci_status": "NOT_ESTABLISHED",
+  "excluded": [
+    "Ironlog deployment/configuration bundle itself; not a separate software product in this BOM",
+    "HyperDX and its MongoDB app-state store (removed 2026-11-03; existing installs clean up per docs/local-auth.md)",
+    "Historical on-box Keycloak, PostgreSQL and oauth2-proxy (not deployed by current stack)",
+    "Deferred AI/MCP and cancelled ECS work",
+    "FerretDB and other proposed replacements (not implemented)",
+    "Customer log-producing operating systems and external browsers",
+    "Cloud-provider hardware, firmware, hypervisor, managed-service internals and organization-specific TLS terminator"
+  ],
+  "known_gaps": [
+    "Exact shipping AMI/RPM/base-system inventory unavailable.",
+    "Grafana plugin version pinned (4.23.4) but plugin artifact not scanned.",
+    "Transitive license coverage incomplete; image scanners do not establish total FOSS compliance.",
+    "No supplier SF-328, ownership/control disclosures or agency FOCI determination.",
+    "No vulnerability, malware, reproducible-build or runtime-egress attestation."
+  ],
+  "components": [
+    {
+      "id": "clickhouse",
+      "name": "ClickHouse Server",
+      "category": "runtime",
+      "version": "26.8.34.13",
+      "license_expression": "Apache-2.0",
+      "supplier": "ClickHouse, Inc.",
+      "image": "docker.io/clickhouse/clickhouse-server:26.8.34.13",
+      "source_paths": [
+        "docker-compose.yml",
+        "quadlets/ironlog-clickhouse.container"
+      ],
+      "evidence_urls": [
+        "https://github.com/ClickHouse/ClickHouse/blob/v26.8.34.13-lts/LICENSE",
+        "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres",
+        "https://nebius.com/newsroom/nebius-participates-in-clickhouse-series-c-crystallizes-value-of-asset-to-fund-hypergrowth-of-core-ai-infrastructure-business"
+      ],
+      "notes": "Exact 26.8 LTS build tag. Upstream Apache license does not license every bundled library. Foreign investment disclosed; no current cap table/control rights supplied.",
+      "depends_on": [],
+      "foci_status": "REVIEW_REQUIRED_FOREIGN_INVESTMENT_DISCLOSED"
+    },
+    {
+      "id": "grafana",
+      "name": "Grafana OSS",
+      "category": "runtime",
+      "version": "13.3.0",
+      "license_expression": "AGPL-3.0-only",
+      "supplier": "Grafana Labs",
+      "image": "docker.io/grafana/grafana:13.3.0",
+      "source_paths": [
+        "docker-compose.yml",
+        "quadlets/ironlog-grafana.container"
+      ],
+      "evidence_urls": [
+        "https://github.com/grafana/grafana/blob/v13.3.0/LICENSING.md",
+        "https://grafana.com/press/2022/04/06/grafana-labs-announces-240-million-investment-round-led-by-gic-and-welcomes-new-investor-j-p--morgan/"
+      ],
+      "notes": "Image is grafana/grafana (grafana-oss stopped publishing at 13.0.2); default license AGPL-3.0-only per LICENSING.md, with Apache-2.0 directories and third-party licenses. Disclosed GIC investment is historical evidence requiring current ownership review.",
+      "depends_on": [
+        "clickhouse",
+        "grafana-clickhouse-plugin"
+      ],
+      "foci_status": "REVIEW_REQUIRED_FOREIGN_INVESTMENT_DISCLOSED"
+    },
+    {
+      "id": "vector",
+      "name": "Vector",
+      "category": "runtime",
+      "version": "0.61.0-debian",
+      "license_expression": "MPL-2.0",
+      "supplier": "Datadog, Inc. / Vector contributors",
+      "image": "docker.io/timberio/vector:0.61.0-debian",
+      "source_paths": [
+        "docker-compose.yml",
+        "quadlets/ironlog-vector-hosts.container",
+        "quadlets/ironlog-vector.container",
+        "k8s/vector-shipper.yaml"
+      ],
+      "evidence_urls": [
+        "https://github.com/vectordotdev/vector/blob/v0.61.0/LICENSE",
+        "https://vector.dev/blog/datadog-acquisition/"
+      ],
+      "notes": "One unique appliance image; host collector always present, AWS collector enabled when configured. Agent binaries and the k8s shipper (0.61.0-distroless-libc, not scanned) use 0.61.0. Supplier clearance and bundled/static libraries remain unreviewed.",
+      "depends_on": [
+        "clickhouse"
+      ],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "grafana-clickhouse-plugin",
+      "name": "Grafana ClickHouse datasource",
+      "category": "runtime",
+      "version": "4.23.4",
+      "license_expression": "Apache-2.0",
+      "supplier": "Grafana Labs / upstream contributors",
+      "image": "",
+      "source_paths": [
+        "scripts/ami/grafana-clickhouse-plugin.version",
+        "scripts/ami/20-container-images.sh",
+        "docker-compose.yml"
+      ],
+      "evidence_urls": [
+        "https://github.com/grafana/clickhouse-datasource/blob/v4.23.4/LICENSE"
+      ],
+      "notes": "Pinned in scripts/ami/grafana-clickhouse-plugin.version; AMI build fails if the baked plugin.json differs, and Compose preinstalls the same version. Plugin artifact and backend dependencies not scanned.",
+      "depends_on": [
+        "clickhouse"
+      ],
+      "foci_status": "REVIEW_REQUIRED_SUPPLIER_AND_VERSION"
+    },
+    {
+      "id": "rhel9",
+      "name": "Red Hat Enterprise Linux",
+      "category": "shipping-platform",
+      "version": "9",
+      "license_expression": "",
+      "supplier": "Red Hat, Inc. / IBM",
+      "image": "",
+      "source_paths": [
+        "packer/sources.pkr.hcl",
+        "packer/variables.pkr.hcl"
+      ],
+      "evidence_urls": [
+        "https://www.ibm.com/investor/news/ibm-completes-acquisition-of-red-hat",
+        "https://www.redhat.com/en/about/agreements"
+      ],
+      "notes": "Shipping/compliance target; package licenses vary. Exact AMI, RPM versions, firmware, subscription and redistribution terms not verified. Paid subscription does not itself make FOSS packages non-FOSS.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "rocky9",
+      "name": "Rocky Linux",
+      "category": "development-platform",
+      "version": "9",
+      "license_expression": "",
+      "supplier": "Rocky Enterprise Software Foundation / upstream contributors",
+      "image": "",
+      "source_paths": [
+        "packer/sources.pkr.hcl"
+      ],
+      "evidence_urls": [
+        "https://rockylinux.org/about"
+      ],
+      "notes": "Alternative development platform, not co-installed with RHEL. Not evidence of RHEL FIPS compliance. Exact AMI and RPM inventory unavailable.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "podman",
+      "name": "Podman including Quadlet",
+      "category": "host-package",
+      "version": "",
+      "license_expression": "Apache-2.0",
+      "supplier": "OS distribution / Podman contributors",
+      "image": "",
+      "source_paths": [
+        "scripts/ami/10-baseline.sh",
+        "quadlets/README.md"
+      ],
+      "evidence_urls": [
+        "https://github.com/containers/podman/blob/main/LICENSE"
+      ],
+      "notes": "Host package version selected by distribution repositories; not scanned.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "rpm-podman-plugins",
+      "name": "podman-plugins",
+      "category": "host-package",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky repository",
+      "image": "",
+      "source_paths": [
+        "scripts/ami/10-baseline.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "rpm-chrony",
+      "name": "chrony",
+      "category": "host-package",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky repository",
+      "image": "",
+      "source_paths": [
+        "scripts/ami/10-baseline.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "rpm-rsync",
+      "name": "rsync",
+      "category": "host-package",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky repository",
+      "image": "",
+      "source_paths": [
+        "scripts/ami/10-baseline.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "rpm-lvm2",
+      "name": "lvm2",
+      "category": "host-package",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky repository",
+      "image": "",
+      "source_paths": [
+        "scripts/ami/10-baseline.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "rpm-parted",
+      "name": "parted",
+      "category": "host-package",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky repository",
+      "image": "",
+      "source_paths": [
+        "scripts/ami/10-baseline.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "rpm-policycoreutils",
+      "name": "policycoreutils",
+      "category": "host-package",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky repository",
+      "image": "",
+      "source_paths": [
+        "scripts/ami/10-baseline.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "rpm-audit",
+      "name": "audit",
+      "category": "host-package",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky repository",
+      "image": "",
+      "source_paths": [
+        "scripts/ami/10-baseline.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "rpm-openssl",
+      "name": "openssl",
+      "category": "host-package",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky repository",
+      "image": "",
+      "source_paths": [
+        "scripts/ami/10-baseline.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "rpm-file",
+      "name": "file",
+      "category": "host-package",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky repository",
+      "image": "",
+      "source_paths": [
+        "scripts/ami/10-baseline.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "rpm-crypto-policies-scripts",
+      "name": "crypto-policies-scripts",
+      "category": "host-package",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky repository",
+      "image": "",
+      "source_paths": [
+        "scripts/ami/10-baseline.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "rpm-util-linux",
+      "name": "util-linux",
+      "category": "host-package",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky repository",
+      "image": "",
+      "source_paths": [
+        "scripts/ami/05-software-source.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "rpm-gdisk",
+      "name": "gdisk",
+      "category": "host-package",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky repository",
+      "image": "",
+      "source_paths": [
+        "scripts/ami/05-software-source.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "rpm-openscap-scanner",
+      "name": "openscap-scanner",
+      "category": "host-package",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky repository",
+      "image": "",
+      "source_paths": [
+        "scripts/ami/30-stig.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "rpm-scap-security-guide",
+      "name": "scap-security-guide",
+      "category": "host-package",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky repository",
+      "image": "",
+      "source_paths": [
+        "scripts/ami/30-stig.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "base-kernel",
+      "name": "kernel",
+      "category": "base-os-requirement",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky AMI",
+      "image": "",
+      "source_paths": [
+        "packer/sources.pkr.hcl",
+        "scripts/firstboot/ironlog-firstboot.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Base-system requirement/dependency, not measured package presence. No exact version or package license asserted.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "base-systemd",
+      "name": "systemd",
+      "category": "base-os-requirement",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky AMI",
+      "image": "",
+      "source_paths": [
+        "packer/sources.pkr.hcl",
+        "scripts/firstboot/ironlog-firstboot.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Base-system requirement/dependency, not measured package presence. No exact version or package license asserted.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "base-bash",
+      "name": "bash",
+      "category": "base-os-requirement",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky AMI",
+      "image": "",
+      "source_paths": [
+        "packer/sources.pkr.hcl",
+        "scripts/firstboot/ironlog-firstboot.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Base-system requirement/dependency, not measured package presence. No exact version or package license asserted.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "base-coreutils",
+      "name": "coreutils",
+      "category": "base-os-requirement",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky AMI",
+      "image": "",
+      "source_paths": [
+        "packer/sources.pkr.hcl",
+        "scripts/firstboot/ironlog-firstboot.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Base-system requirement/dependency, not measured package presence. No exact version or package license asserted.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "base-rpm",
+      "name": "rpm",
+      "category": "base-os-requirement",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky AMI",
+      "image": "",
+      "source_paths": [
+        "packer/sources.pkr.hcl",
+        "scripts/firstboot/ironlog-firstboot.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Base-system requirement/dependency, not measured package presence. No exact version or package license asserted.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "base-dnf",
+      "name": "dnf",
+      "category": "base-os-requirement",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky AMI",
+      "image": "",
+      "source_paths": [
+        "packer/sources.pkr.hcl",
+        "scripts/firstboot/ironlog-firstboot.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Base-system requirement/dependency, not measured package presence. No exact version or package license asserted.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "base-cloud-init",
+      "name": "cloud-init",
+      "category": "base-os-requirement",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky AMI",
+      "image": "",
+      "source_paths": [
+        "packer/sources.pkr.hcl",
+        "scripts/firstboot/ironlog-firstboot.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Base-system requirement/dependency, not measured package presence. No exact version or package license asserted.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "base-curl",
+      "name": "curl",
+      "category": "base-os-requirement",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Selected RHEL/Rocky AMI",
+      "image": "",
+      "source_paths": [
+        "packer/sources.pkr.hcl",
+        "scripts/firstboot/ironlog-firstboot.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Base-system requirement/dependency, not measured package presence. No exact version or package license asserted.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "aws-cli",
+      "name": "AWS CLI",
+      "category": "conditional-host-tool",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Amazon Web Services",
+      "image": "",
+      "source_paths": [
+        "scripts/firstboot/secret-resolver.sh",
+        "scripts/prepare-artifacts.py"
+      ],
+      "evidence_urls": [
+        "https://github.com/aws/aws-cli/blob/v2/LICENSE.txt"
+      ],
+      "notes": "Needed for ssm:// and asm:// secrets and some S3 preparation paths. Installation/version not established; upstream and bundled package licensing need artifact review.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "python",
+      "name": "Python 3 or jq JSON parser",
+      "category": "conditional-host-tool",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Operator / OS distribution",
+      "image": "",
+      "source_paths": [
+        "scripts/firstboot/secret-resolver.sh",
+        "scripts/prepare-artifacts.py"
+      ],
+      "evidence_urls": [],
+      "notes": "Alternative JSON parsers for secret extraction; Python also prepares artifacts. Exact interpreter and library inventories unresolved.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "packer",
+      "name": "HashiCorp Packer",
+      "category": "build-tool",
+      "version": ">= 1.9.0",
+      "license_expression": "",
+      "supplier": "HashiCorp / IBM",
+      "image": "",
+      "source_paths": [
+        "packer/ironlog.pkr.hcl"
+      ],
+      "evidence_urls": [
+        "https://github.com/hashicorp/packer/blob/v1.16.0/LICENSE",
+        "https://www.hashicorp.com/blog/hashicorp-adopts-business-source-license"
+      ],
+      "notes": "Constraint, not installed version. Permits BUSL-1.1 releases, which are not FOSS before their change date. No build-tool FOSS conclusion until exact version/license confirmed. Not deployed as runtime service.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "packer-amazon",
+      "name": "Packer Amazon plugin",
+      "category": "build-tool",
+      "version": ">= 1.3.0",
+      "license_expression": "",
+      "supplier": "HashiCorp / IBM",
+      "image": "",
+      "source_paths": [
+        "packer/ironlog.pkr.hcl"
+      ],
+      "evidence_urls": [
+        "https://github.com/hashicorp/packer-plugin-amazon"
+      ],
+      "notes": "Constraint only. Exact plugin version and license unresolved; assess separately from Packer core.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "compose-provider",
+      "name": "Compose provider",
+      "category": "development-tool",
+      "version": "",
+      "license_expression": "",
+      "supplier": "Operator-selected provider",
+      "image": "",
+      "source_paths": [
+        "scripts/container-runtime.sh"
+      ],
+      "evidence_urls": [],
+      "notes": "Podman Compose provider not fixed. Docker Engine/Compose optional. Docker Desktop neither required nor declared; do not infer its license from Docker Engine.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    },
+    {
+      "id": "k3s",
+      "name": "k3s demo producer",
+      "category": "optional-demo",
+      "version": "v1.37.1-k3s1",
+      "license_expression": "Apache-2.0",
+      "supplier": "K3s project / CNCF contributors",
+      "image": "docker.io/rancher/k3s:v1.37.1-k3s1",
+      "source_paths": [
+        "docker-compose.yml",
+        "k8s/vector-shipper.yaml"
+      ],
+      "evidence_urls": [
+        "https://github.com/k3s-io/k3s/blob/master/LICENSE"
+      ],
+      "notes": "Optional test producer, not baked into appliance. Image contents and publisher ownership/control not scanned; source upstream license only.",
+      "depends_on": [],
+      "foci_status": "UNREVIEWED"
+    }
+  ],
+  "deployment_model": "Owner-operated internal deployment; not SaaS.",
+  "license_policy": {
+    "intended_use": "Runtime components carry OSI-approved primary licenses (Apache-2.0, AGPL-3.0-only, MPL-2.0). HyperDX and MongoDB (SSPL-1.0) were removed 2026-11-03; no SSPL exception is needed.",
+    "standard_classification": "Primary upstream licenses only; bundled and transitive dependency licenses remain unreviewed.",
+    "inventory_scope": "Constituent software only. Ironlog is deployment/configuration, not a separate software product listed in BOM."
+  }
+}

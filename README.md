@@ -54,7 +54,11 @@ publishing at 13.0.2. The plugin version is pinned in
 
 License status: HyperDX and its MongoDB (SSPL) were removed; the remaining
 component licenses in this table (Apache-2.0, AGPL-3.0, MPL-2.0) are
-OSI-approved.
+OSI-approved. BOM lists constituent
+software, not Ironlog as a separate software product. Artifact license
+coverage remains incomplete; FOCI assurance is not established. See
+[FOSS/FOCI assessment](docs/foss-foci-assessment.md), [BOM](docs/bom.md), and
+[CycloneDX SBOM bundle](sbom/README.md) for evidence and unresolved items.
 
 ## Repository layout
 

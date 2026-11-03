@@ -1,0 +1,84 @@
+{
+ "generator": "Syft 1.56.0",
+ "purpose": "Current registry artifacts behind repository image tags, identified by manifest digest; not attestation of any built or deployed Ironlog appliance",
+ "results": [
+  {
+   "component": "clickhouse",
+   "reference": "docker.io/clickhouse/clickhouse-server:26.8.34.13",
+   "platform": "linux/arm64",
+   "scope": "squashed",
+   "exitCode": 0,
+   "started": "2026-11-03T23:20:02+00:00",
+   "finished": "2026-11-03T23:20:10+00:00",
+   "file": "clickhouse.cdx.json",
+   "status": "success",
+   "scanReference": "docker.io/clickhouse/clickhouse-server@sha256:b2910adff2a8b7616ad8c6aca4fc1f73b19fb2473a4f406ab26a9b1ac3850422",
+   "manifestDigest": "sha256:b2910adff2a8b7616ad8c6aca4fc1f73b19fb2473a4f406ab26a9b1ac3850422",
+   "imageID": "sha256:1554354dcbb18d362fdfe49bb408c9504d49a2607aa614ad44045281412667fd",
+   "architecture": "arm64",
+   "imageSize": 845043098,
+   "labels": {
+    "com.clickhouse.build.version": "26.8.34.13",
+    "org.opencontainers.image.version": "22.04"
+   },
+   "packages": 111,
+   "files": 4463,
+   "operatingSystems": 1,
+   "components": 4575
+  },
+  {
+   "component": "grafana",
+   "reference": "docker.io/grafana/grafana:13.3.0",
+   "platform": "linux/arm64",
+   "scope": "squashed",
+   "exitCode": 0,
+   "started": "2026-11-03T23:20:10+00:00",
+   "finished": "2026-11-03T23:21:27+00:00",
+   "file": "grafana.cdx.json",
+   "status": "success",
+   "scanReference": "docker.io/grafana/grafana@sha256:868b6ae6642ec09a71a1273d4c0eb952856c1f421137b33e26038e629ee3c208",
+   "manifestDigest": "sha256:868b6ae6642ec09a71a1273d4c0eb952856c1f421137b33e26038e629ee3c208",
+   "imageID": "sha256:d2bd57647b75782cd681a6cdf42826a5e7a6f95d064aa6195bb9570e4b2bc2c5",
+   "architecture": "arm64",
+   "imageSize": 1362170302,
+   "labels": {
+    "maintainer": "Grafana Labs <hello@grafana.com>",
+    "org.opencontainers.image.source": "https://github.com/grafana/grafana"
+   },
+   "packages": 1878,
+   "files": 837,
+   "operatingSystems": 1,
+   "components": 2716
+  },
+  {
+   "component": "vector",
+   "reference": "docker.io/timberio/vector:0.61.0-debian",
+   "platform": "linux/arm64",
+   "scope": "squashed",
+   "exitCode": 0,
+   "started": "2026-11-03T23:21:27+00:00",
+   "finished": "2026-11-03T23:21:31+00:00",
+   "file": "vector.cdx.json",
+   "status": "success",
+   "scanReference": "docker.io/timberio/vector@sha256:6adda08dd40a5cb961c70d0e96a13fb3a934cfbc476e0e2eea533332917e3eb0",
+   "manifestDigest": "sha256:6adda08dd40a5cb961c70d0e96a13fb3a934cfbc476e0e2eea533332917e3eb0",
+   "imageID": "sha256:a57859537e4904d1585fc32314f8df10eefb0382933412f594947ec10f0c8378",
+   "architecture": "arm64",
+   "imageSize": 274828393,
+   "labels": {
+    "org.opencontainers.image.documentation": "https://vector.dev/docs",
+    "org.opencontainers.image.source": "https://github.com/vectordotdev/vector",
+    "org.opencontainers.image.url": "https://vector.dev"
+   },
+   "packages": 85,
+   "files": 3106,
+   "operatingSystems": 1,
+   "components": 3192
+  }
+ ],
+ "countDefinitions": {
+  "packages": "Detected library/application package occurrences; excludes file and operating-system components. Not deduplicated across images.",
+  "components": "All CycloneDX components, including packages, file evidence and operating-system records.",
+  "files": "CycloneDX file evidence components."
+ }
+}

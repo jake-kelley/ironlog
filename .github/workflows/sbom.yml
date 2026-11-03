@@ -1,0 +1,78 @@
+name: SBOM
+
+# Declared-inventory SBOM (fails on inventory/Compose/Quadlet drift) plus a
+# Syft scan of the repository, uploaded as a workflow artifact. Runs only when
+# image references or the inventory change. Registry image scans take a few
+# minutes, so they run on manual dispatch only. Output is never committed.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docker-compose.yml
+      - quadlets/*.container
+      - k8s/**
+      - sbom/**
+      - scripts/generate-sbom.py
+      - scripts/scan-image-sboms.py
+      - scripts/ami/grafana-clickhouse-plugin.version
+      - .github/workflows/sbom.yml
+  pull_request:
+    paths:
+      - docker-compose.yml
+      - quadlets/*.container
+      - k8s/**
+      - sbom/**
+      - scripts/generate-sbom.py
+      - scripts/scan-image-sboms.py
+      - scripts/ami/grafana-clickhouse-plugin.version
+      - .github/workflows/sbom.yml
+  workflow_dispatch:
+    inputs:
+      scan_images:
+        description: Also scan runtime images from the registry (linux/arm64)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sbom-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sbom:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Declared inventory
+        run: python3 scripts/generate-sbom.py --output-dir out/declared
+
+      - uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        id: syft
+        with:
+          syft-version: v1.56.0
+
+      - name: Repository scan
+        env:
+          SYFT: ${{ steps.syft.outputs.cmd }}
+        # sbom/ holds image scan evidence; Syft would re-catalog those SBOMs.
+        run: '"$SYFT" scan dir:. -q --exclude "./sbom/**" -o cyclonedx-json@1.6=out/repository.cdx.json'
+
+      - name: Image scans
+        if: inputs.scan_images
+        env:
+          SYFT: ${{ steps.syft.outputs.cmd }}
+        run: python3 scripts/scan-image-sboms.py --syft "$SYFT" --output-dir out/registry-snapshot
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-${{ github.sha }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 30

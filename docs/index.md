@@ -4,7 +4,7 @@ okf_version: "0.1"
 
 # SIEM documentation
 
-Operations and compliance knowledge for the self-hosted, license-free SIEM.
+Operations and compliance knowledge for the self-hosted SIEM.
 This directory is an [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
 (OKF v0.1) bundle: each file is a concept with YAML frontmatter; `log.md` records changes.
 
@@ -19,6 +19,8 @@ This directory is an [Open Knowledge Format](https://github.com/GoogleCloudPlatf
 
 # Compliance
 
+* [FOSS and FOCI assessment](foss-foci-assessment.md) · [HTML report](reports/ironlog-supply-chain-report.html) - owner-operated licensing, supplier ownership evidence, exceptions and approval gaps.
+* [Bill of materials](bom.md) - declared components, infrastructure and links to CycloneDX package inventories.
 * [NIST 800-53 control mapping](control-mapping.md) - control-to-artifact map for auditors.
 * [Auditable event catalog (AU-2)](event-catalog.md) - the committed list of captured events.
 * [Log retention policy (AU-11)](retention-policy.md) - retention tiers and the immutability model.

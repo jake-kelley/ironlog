@@ -1,0 +1,1367 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "serialNumber": "urn:uuid:c9dfb6ec-376d-4acc-b2f4-e9e5562586a6",
+  "metadata": {
+    "timestamp": "2026-11-03T23:26:38+00:00",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "ironlog-declared-inventory-generator",
+          "version": "1"
+        }
+      ]
+    },
+    "component": {
+      "bom-ref": "ironlog-declared-inventory",
+      "type": "platform",
+      "name": "Ironlog deployment inventory",
+      "version": "a568b2007242b980df52cbe8d2765e3d855e083e"
+    },
+    "properties": [
+      {
+        "name": "ironlog:scope",
+        "value": "Current repository-declared appliance plus explicitly labeled development/build alternatives; registry snapshot is supplemental, not deployment attestation."
+      },
+      {
+        "name": "ironlog:workingTreeDirty",
+        "value": "true"
+      },
+      {
+        "name": "ironlog:deploymentModel",
+        "value": "owner-operated; non-SaaS"
+      },
+      {
+        "name": "ironlog:inventory:scope",
+        "value": "Constituent software only; Ironlog deployment/configuration bundle excluded as a separate software product"
+      },
+      {
+        "name": "ironlog:license:policy",
+        "value": "Runtime components carry OSI-approved primary licenses (Apache-2.0, AGPL-3.0-only, MPL-2.0). HyperDX and MongoDB (SSPL-1.0) were removed 2026-11-03; no SSPL exception is needed."
+      },
+      {
+        "name": "ironlog:foss:status",
+        "value": "OSI_LICENSED_RUNTIME_ARTIFACT_REVIEW_INCOMPLETE"
+      },
+      {
+        "name": "ironlog:foci:status",
+        "value": "NOT_ESTABLISHED"
+      },
+      {
+        "name": "ironlog:knownGaps",
+        "value": "Exact shipping AMI/RPM/base-system inventory unavailable. | Grafana plugin version pinned (4.23.4) but plugin artifact not scanned. | Transitive license coverage incomplete; image scanners do not establish total FOSS compliance. | No supplier SF-328, ownership/control disclosures or agency FOCI determination. | No vulnerability, malware, reproducible-build or runtime-egress attestation."
+      },
+      {
+        "name": "ironlog:profileSemantics",
+        "value": "Declaration inventory across labeled profiles; RHEL and Rocky are alternatives. Not one installed appliance."
+      }
+    ]
+  },
+  "components": [
+    {
+      "bom-ref": "clickhouse",
+      "type": "application",
+      "name": "ClickHouse Server",
+      "supplier": {
+        "name": "ClickHouse, Inc."
+      },
+      "description": "Exact 26.8 LTS build tag. Upstream Apache license does not license every bundled library. Foreign investment disclosed; no current cap table/control rights supplied.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "runtime"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "docker-compose.yml; quadlets/ironlog-clickhouse.container"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "REVIEW_REQUIRED_FOREIGN_INVESTMENT_DISCLOSED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        },
+        {
+          "name": "ironlog:image:declaredReference",
+          "value": "docker.io/clickhouse/clickhouse-server:26.8.34.13"
+        }
+      ],
+      "version": "26.8.34.13",
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "other",
+          "url": "https://github.com/ClickHouse/ClickHouse/blob/v26.8.34.13-lts/LICENSE"
+        },
+        {
+          "type": "other",
+          "url": "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres"
+        },
+        {
+          "type": "other",
+          "url": "https://nebius.com/newsroom/nebius-participates-in-clickhouse-series-c-crystallizes-value-of-asset-to-fund-hypergrowth-of-core-ai-infrastructure-business"
+        }
+      ]
+    },
+    {
+      "bom-ref": "grafana",
+      "type": "application",
+      "name": "Grafana OSS",
+      "supplier": {
+        "name": "Grafana Labs"
+      },
+      "description": "Image is grafana/grafana (grafana-oss stopped publishing at 13.0.2); default license AGPL-3.0-only per LICENSING.md, with Apache-2.0 directories and third-party licenses. Disclosed GIC investment is historical evidence requiring current ownership review.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "runtime"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "docker-compose.yml; quadlets/ironlog-grafana.container"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "REVIEW_REQUIRED_FOREIGN_INVESTMENT_DISCLOSED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        },
+        {
+          "name": "ironlog:image:declaredReference",
+          "value": "docker.io/grafana/grafana:13.3.0"
+        }
+      ],
+      "version": "13.3.0",
+      "licenses": [
+        {
+          "expression": "AGPL-3.0-only"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "other",
+          "url": "https://github.com/grafana/grafana/blob/v13.3.0/LICENSING.md"
+        },
+        {
+          "type": "other",
+          "url": "https://grafana.com/press/2022/04/06/grafana-labs-announces-240-million-investment-round-led-by-gic-and-welcomes-new-investor-j-p--morgan/"
+        }
+      ]
+    },
+    {
+      "bom-ref": "vector",
+      "type": "application",
+      "name": "Vector",
+      "supplier": {
+        "name": "Datadog, Inc. / Vector contributors"
+      },
+      "description": "One unique appliance image; host collector always present, AWS collector enabled when configured. Agent binaries and the k8s shipper (0.61.0-distroless-libc, not scanned) use 0.61.0. Supplier clearance and bundled/static libraries remain unreviewed.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "runtime"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "docker-compose.yml; quadlets/ironlog-vector-hosts.container; quadlets/ironlog-vector.container; k8s/vector-shipper.yaml"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        },
+        {
+          "name": "ironlog:image:declaredReference",
+          "value": "docker.io/timberio/vector:0.61.0-debian"
+        }
+      ],
+      "version": "0.61.0-debian",
+      "licenses": [
+        {
+          "expression": "MPL-2.0"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "other",
+          "url": "https://github.com/vectordotdev/vector/blob/v0.61.0/LICENSE"
+        },
+        {
+          "type": "other",
+          "url": "https://vector.dev/blog/datadog-acquisition/"
+        }
+      ]
+    },
+    {
+      "bom-ref": "grafana-clickhouse-plugin",
+      "type": "application",
+      "name": "Grafana ClickHouse datasource",
+      "supplier": {
+        "name": "Grafana Labs / upstream contributors"
+      },
+      "description": "Pinned in scripts/ami/grafana-clickhouse-plugin.version; AMI build fails if the baked plugin.json differs, and Compose preinstalls the same version. Plugin artifact and backend dependencies not scanned.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "runtime"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/ami/grafana-clickhouse-plugin.version; scripts/ami/20-container-images.sh; docker-compose.yml"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "REVIEW_REQUIRED_SUPPLIER_AND_VERSION"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ],
+      "version": "4.23.4",
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "other",
+          "url": "https://github.com/grafana/clickhouse-datasource/blob/v4.23.4/LICENSE"
+        }
+      ]
+    },
+    {
+      "bom-ref": "rhel9",
+      "type": "operating-system",
+      "name": "Red Hat Enterprise Linux",
+      "supplier": {
+        "name": "Red Hat, Inc. / IBM"
+      },
+      "description": "Shipping/compliance target; package licenses vary. Exact AMI, RPM versions, firmware, subscription and redistribution terms not verified. Paid subscription does not itself make FOSS packages non-FOSS.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "shipping-platform"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "packer/sources.pkr.hcl; packer/variables.pkr.hcl"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ],
+      "version": "9",
+      "externalReferences": [
+        {
+          "type": "other",
+          "url": "https://www.ibm.com/investor/news/ibm-completes-acquisition-of-red-hat"
+        },
+        {
+          "type": "other",
+          "url": "https://www.redhat.com/en/about/agreements"
+        }
+      ]
+    },
+    {
+      "bom-ref": "rocky9",
+      "type": "operating-system",
+      "name": "Rocky Linux",
+      "supplier": {
+        "name": "Rocky Enterprise Software Foundation / upstream contributors"
+      },
+      "description": "Alternative development platform, not co-installed with RHEL. Not evidence of RHEL FIPS compliance. Exact AMI and RPM inventory unavailable.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "development-platform"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "packer/sources.pkr.hcl"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ],
+      "version": "9",
+      "externalReferences": [
+        {
+          "type": "other",
+          "url": "https://rockylinux.org/about"
+        }
+      ]
+    },
+    {
+      "bom-ref": "podman",
+      "type": "application",
+      "name": "Podman including Quadlet",
+      "supplier": {
+        "name": "OS distribution / Podman contributors"
+      },
+      "description": "Host package version selected by distribution repositories; not scanned.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "host-package"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/ami/10-baseline.sh; quadlets/README.md"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "other",
+          "url": "https://github.com/containers/podman/blob/main/LICENSE"
+        }
+      ]
+    },
+    {
+      "bom-ref": "rpm-podman-plugins",
+      "type": "application",
+      "name": "podman-plugins",
+      "supplier": {
+        "name": "Selected RHEL/Rocky repository"
+      },
+      "description": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "host-package"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/ami/10-baseline.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "rpm-chrony",
+      "type": "application",
+      "name": "chrony",
+      "supplier": {
+        "name": "Selected RHEL/Rocky repository"
+      },
+      "description": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "host-package"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/ami/10-baseline.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "rpm-rsync",
+      "type": "application",
+      "name": "rsync",
+      "supplier": {
+        "name": "Selected RHEL/Rocky repository"
+      },
+      "description": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "host-package"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/ami/10-baseline.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "rpm-lvm2",
+      "type": "application",
+      "name": "lvm2",
+      "supplier": {
+        "name": "Selected RHEL/Rocky repository"
+      },
+      "description": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "host-package"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/ami/10-baseline.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "rpm-parted",
+      "type": "application",
+      "name": "parted",
+      "supplier": {
+        "name": "Selected RHEL/Rocky repository"
+      },
+      "description": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "host-package"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/ami/10-baseline.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "rpm-policycoreutils",
+      "type": "application",
+      "name": "policycoreutils",
+      "supplier": {
+        "name": "Selected RHEL/Rocky repository"
+      },
+      "description": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "host-package"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/ami/10-baseline.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "rpm-audit",
+      "type": "application",
+      "name": "audit",
+      "supplier": {
+        "name": "Selected RHEL/Rocky repository"
+      },
+      "description": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "host-package"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/ami/10-baseline.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "rpm-openssl",
+      "type": "application",
+      "name": "openssl",
+      "supplier": {
+        "name": "Selected RHEL/Rocky repository"
+      },
+      "description": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "host-package"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/ami/10-baseline.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "rpm-file",
+      "type": "application",
+      "name": "file",
+      "supplier": {
+        "name": "Selected RHEL/Rocky repository"
+      },
+      "description": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "host-package"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/ami/10-baseline.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "rpm-crypto-policies-scripts",
+      "type": "application",
+      "name": "crypto-policies-scripts",
+      "supplier": {
+        "name": "Selected RHEL/Rocky repository"
+      },
+      "description": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "host-package"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/ami/10-baseline.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "rpm-util-linux",
+      "type": "application",
+      "name": "util-linux",
+      "supplier": {
+        "name": "Selected RHEL/Rocky repository"
+      },
+      "description": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "host-package"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/ami/05-software-source.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "rpm-gdisk",
+      "type": "application",
+      "name": "gdisk",
+      "supplier": {
+        "name": "Selected RHEL/Rocky repository"
+      },
+      "description": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "host-package"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/ami/05-software-source.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "rpm-openscap-scanner",
+      "type": "application",
+      "name": "openscap-scanner",
+      "supplier": {
+        "name": "Selected RHEL/Rocky repository"
+      },
+      "description": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "host-package"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/ami/30-stig.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "rpm-scap-security-guide",
+      "type": "application",
+      "name": "scap-security-guide",
+      "supplier": {
+        "name": "Selected RHEL/Rocky repository"
+      },
+      "description": "Declared package selection only; exact RPM NEVRA, package license, dependencies and installed presence require target-host inventory. Not a complete base-OS package list.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "host-package"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/ami/30-stig.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "base-kernel",
+      "type": "application",
+      "name": "kernel",
+      "supplier": {
+        "name": "Selected RHEL/Rocky AMI"
+      },
+      "description": "Base-system requirement/dependency, not measured package presence. No exact version or package license asserted.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "base-os-requirement"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "packer/sources.pkr.hcl; scripts/firstboot/ironlog-firstboot.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "base-systemd",
+      "type": "application",
+      "name": "systemd",
+      "supplier": {
+        "name": "Selected RHEL/Rocky AMI"
+      },
+      "description": "Base-system requirement/dependency, not measured package presence. No exact version or package license asserted.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "base-os-requirement"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "packer/sources.pkr.hcl; scripts/firstboot/ironlog-firstboot.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "base-bash",
+      "type": "application",
+      "name": "bash",
+      "supplier": {
+        "name": "Selected RHEL/Rocky AMI"
+      },
+      "description": "Base-system requirement/dependency, not measured package presence. No exact version or package license asserted.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "base-os-requirement"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "packer/sources.pkr.hcl; scripts/firstboot/ironlog-firstboot.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "base-coreutils",
+      "type": "application",
+      "name": "coreutils",
+      "supplier": {
+        "name": "Selected RHEL/Rocky AMI"
+      },
+      "description": "Base-system requirement/dependency, not measured package presence. No exact version or package license asserted.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "base-os-requirement"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "packer/sources.pkr.hcl; scripts/firstboot/ironlog-firstboot.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "base-rpm",
+      "type": "application",
+      "name": "rpm",
+      "supplier": {
+        "name": "Selected RHEL/Rocky AMI"
+      },
+      "description": "Base-system requirement/dependency, not measured package presence. No exact version or package license asserted.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "base-os-requirement"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "packer/sources.pkr.hcl; scripts/firstboot/ironlog-firstboot.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "base-dnf",
+      "type": "application",
+      "name": "dnf",
+      "supplier": {
+        "name": "Selected RHEL/Rocky AMI"
+      },
+      "description": "Base-system requirement/dependency, not measured package presence. No exact version or package license asserted.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "base-os-requirement"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "packer/sources.pkr.hcl; scripts/firstboot/ironlog-firstboot.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "base-cloud-init",
+      "type": "application",
+      "name": "cloud-init",
+      "supplier": {
+        "name": "Selected RHEL/Rocky AMI"
+      },
+      "description": "Base-system requirement/dependency, not measured package presence. No exact version or package license asserted.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "base-os-requirement"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "packer/sources.pkr.hcl; scripts/firstboot/ironlog-firstboot.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "base-curl",
+      "type": "application",
+      "name": "curl",
+      "supplier": {
+        "name": "Selected RHEL/Rocky AMI"
+      },
+      "description": "Base-system requirement/dependency, not measured package presence. No exact version or package license asserted.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "base-os-requirement"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "packer/sources.pkr.hcl; scripts/firstboot/ironlog-firstboot.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "aws-cli",
+      "type": "application",
+      "name": "AWS CLI",
+      "supplier": {
+        "name": "Amazon Web Services"
+      },
+      "description": "Needed for ssm:// and asm:// secrets and some S3 preparation paths. Installation/version not established; upstream and bundled package licensing need artifact review.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "conditional-host-tool"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/firstboot/secret-resolver.sh; scripts/prepare-artifacts.py"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "other",
+          "url": "https://github.com/aws/aws-cli/blob/v2/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "bom-ref": "python",
+      "type": "application",
+      "name": "Python 3 or jq JSON parser",
+      "supplier": {
+        "name": "Operator / OS distribution"
+      },
+      "description": "Alternative JSON parsers for secret extraction; Python also prepares artifacts. Exact interpreter and library inventories unresolved.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "conditional-host-tool"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/firstboot/secret-resolver.sh; scripts/prepare-artifacts.py"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "packer",
+      "type": "application",
+      "name": "HashiCorp Packer",
+      "supplier": {
+        "name": "HashiCorp / IBM"
+      },
+      "description": "Constraint, not installed version. Permits BUSL-1.1 releases, which are not FOSS before their change date. No build-tool FOSS conclusion until exact version/license confirmed. Not deployed as runtime service.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "build-tool"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "packer/ironlog.pkr.hcl"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared constraint"
+        },
+        {
+          "name": "ironlog:version:constraint",
+          "value": ">= 1.9.0"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "other",
+          "url": "https://github.com/hashicorp/packer/blob/v1.16.0/LICENSE"
+        },
+        {
+          "type": "other",
+          "url": "https://www.hashicorp.com/blog/hashicorp-adopts-business-source-license"
+        }
+      ]
+    },
+    {
+      "bom-ref": "packer-amazon",
+      "type": "application",
+      "name": "Packer Amazon plugin",
+      "supplier": {
+        "name": "HashiCorp / IBM"
+      },
+      "description": "Constraint only. Exact plugin version and license unresolved; assess separately from Packer core.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "build-tool"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "packer/ironlog.pkr.hcl"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared constraint"
+        },
+        {
+          "name": "ironlog:version:constraint",
+          "value": ">= 1.3.0"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "other",
+          "url": "https://github.com/hashicorp/packer-plugin-amazon"
+        }
+      ]
+    },
+    {
+      "bom-ref": "compose-provider",
+      "type": "application",
+      "name": "Compose provider",
+      "supplier": {
+        "name": "Operator-selected provider"
+      },
+      "description": "Podman Compose provider not fixed. Docker Engine/Compose optional. Docker Desktop neither required nor declared; do not infer its license from Docker Engine.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "development-tool"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "scripts/container-runtime.sh"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        }
+      ]
+    },
+    {
+      "bom-ref": "k3s",
+      "type": "application",
+      "name": "k3s demo producer",
+      "supplier": {
+        "name": "K3s project / CNCF contributors"
+      },
+      "description": "Optional test producer, not baked into appliance. Image contents and publisher ownership/control not scanned; source upstream license only.",
+      "properties": [
+        {
+          "name": "ironlog:category",
+          "value": "optional-demo"
+        },
+        {
+          "name": "ironlog:evidence:sourcePaths",
+          "value": "docker-compose.yml; k8s/vector-shipper.yaml"
+        },
+        {
+          "name": "ironlog:foci:status",
+          "value": "UNREVIEWED"
+        },
+        {
+          "name": "ironlog:license:scope",
+          "value": "primary upstream project only; not entire container or dependency tree"
+        },
+        {
+          "name": "ironlog:version:status",
+          "value": "declared; not appliance-measured"
+        },
+        {
+          "name": "ironlog:image:declaredReference",
+          "value": "docker.io/rancher/k3s:v1.37.1-k3s1"
+        }
+      ],
+      "version": "v1.37.1-k3s1",
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "other",
+          "url": "https://github.com/k3s-io/k3s/blob/master/LICENSE"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "grafana",
+      "dependsOn": [
+        "clickhouse",
+        "grafana-clickhouse-plugin"
+      ]
+    },
+    {
+      "ref": "vector",
+      "dependsOn": [
+        "clickhouse"
+      ]
+    },
+    {
+      "ref": "grafana-clickhouse-plugin",
+      "dependsOn": [
+        "clickhouse"
+      ]
+    }
+  ],
+  "compositions": [
+    {
+      "aggregate": "incomplete",
+      "assemblies": [
+        "ironlog-declared-inventory"
+      ],
+      "dependencies": [
+        "clickhouse",
+        "grafana",
+        "vector",
+        "grafana-clickhouse-plugin",
+        "rhel9",
+        "rocky9",
+        "podman",
+        "rpm-podman-plugins",
+        "rpm-chrony",
+        "rpm-rsync",
+        "rpm-lvm2",
+        "rpm-parted",
+        "rpm-policycoreutils",
+        "rpm-audit",
+        "rpm-openssl",
+        "rpm-file",
+        "rpm-crypto-policies-scripts",
+        "rpm-util-linux",
+        "rpm-gdisk",
+        "rpm-openscap-scanner",
+        "rpm-scap-security-guide",
+        "base-kernel",
+        "base-systemd",
+        "base-bash",
+        "base-coreutils",
+        "base-rpm",
+        "base-dnf",
+        "base-cloud-init",
+        "base-curl",
+        "aws-cli",
+        "python",
+        "packer",
+        "packer-amazon",
+        "compose-provider",
+        "k3s"
+      ]
+    }
+  ]
+}
