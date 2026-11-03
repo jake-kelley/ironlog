@@ -15,16 +15,43 @@ tags: [architecture, deployment, ingestion]
 [DOT source](images/ironlog-architecture/ironlog-architecture.dot)
 
 Rebuilt through [Drawbridge MCP](https://drawbridge.fortiknight.com/docs/mcp/)
-on 2026-11-03 against current repository configuration (base commit `bfe4892`).
-Drawbridge creates the editable documents, applies presentation edits, routes
-connectors, and exports the SVG and PNG images. Four aligned lanes separate
-sources, ingestion, data, and applications. Purple means event sources or
-people, teal means ingestion, blue means data, and amber means applications;
-colors describe roles, not license findings or operational health.
+on 2026-11-03 against current repository configuration. Five lanes read left
+to right: sources, ingestion, data, applications, people. Every box carries a
+`Role:` caption, image version where useful, host ports, and a short NIST
+800-53 tag only where [control mapping](control-mapping.md) supports it.
+Purple means event sources or people, teal means ingestion, blue means data
+stores and database accounts, amber means applications, grey means not
+deployed. Colors describe roles, not license findings or operational health.
 
-Connections show logical relationships. They do not assert physical cabling,
-link speeds, encrypted transport, a running deployment, or high availability.
-Optional AWS ingestion is not a dependency for on-prem host/Kubernetes logs.
+Connections show logical relationships and carry no arrowheads: labels give
+the protocol, port or database action. They do not assert encrypted transport,
+a running deployment, or high availability. AWS ingestion is optional and is
+not a dependency for on-prem host/Kubernetes logs. S3 tiering is shown grey
+because `clickhouse/config.d/20-storage-s3.xml.disabled` is not active; no
+identity provider or AI/MCP runtime is deployed, so none is drawn.
+
+## Component roles
+
+| Component | Role | Version / ports | Required? | Tags |
+|---|---|---|---|---|
+| Windows hosts (Vector agent) | Ship Security, System and PowerShell/Operational event logs to the aggregator | Native TCP 6000 | Per host | AU-12 |
+| Linux hosts (Vector agent) | Ship journald and auditd (`/var/log/audit/audit.log`) events | Native TCP 6000 | Per host | AU-12 |
+| Kubernetes `vector-shipper` | DaemonSet ships pod logs over token-authenticated HEC; local k3s is a demo producer | `timberio/vector:0.57.0-distroless-libc`, HEC 8088 | Per cluster | AU-12 |
+| AWS logs | CloudTrail, GuardDuty, VPC Flow and S3 access logs in S3; one SQS queue per type | S3 + SQS | Optional | AU-12 |
+| Vector Hosts | Always-on aggregator: routes by source, VRL normalisation, disk buffer, INSERT to ClickHouse | Vector 0.57.0, 6000, 8088 | Yes | AU-3 |
+| Vector AWS | Polls SQS, reads S3, normalises, buffers | Vector 0.57.0; compose profile `aws`, appliance unit ships disabled | Optional | AU-3 |
+| ClickHouse `siem` | Seven event tables: `cloudtrail`, `guardduty`, `vpc_flow`, `s3_access`, `windows_events`, `linux_syslog`, `k8s_logs`; 30-day TTL | ClickHouse 24.8; 8123 HTTP, 9000 native (loopback host ports) | Yes | AU-11 |
+| ClickHouse `audit.query_archive` | Query audit trail filled by `query_archive_mv` from `system.query_log`; 2-year TTL | same server | Yes | AU-9 |
+| `svc_vector` | Write-only account: role `siem_ingest`, INSERT on `siem.*`, no reads | both Vector instances | Yes | AU-9 |
+| `svc_grafana_analyst`, `svc_hyperdx`, `svc_grafana_auditor` | Read-only accounts: analyst roles read `siem.*`; auditor also reads `audit.*`; profile `siem_reader` | roles `siem_analyst`, `siem_auditor` | Yes | AC-6 |
+| S3 tiering | Disabled configuration only; data stays on local disk | not deployed | No | AU-4 |
+| Grafana OSS | Dashboards, SQL explore, seven AU-5 ingestion-silence alerts; native local login | 11.4.0, port 3000 | Yes | AU-5, AU-6 |
+| HyperDX | Log search and investigation over `siem` tables; native local login | 2.19.0, port 8081 | Optional UI (enabled by default in Compose and Quadlets) | AU-6 |
+| MongoDB | HyperDX app state only (users, searches); never events | 7.0, internal 27017 | With HyperDX | n/a |
+| Analysts and auditors | Sign in to each app with its local account; no SSO or MFA | browser to 3000 / 8081 | n/a | n/a |
+
+Database audit attribution is to the shared service accounts, not to
+individual Grafana or HyperDX users.
 
 ## Ingestion paths
 

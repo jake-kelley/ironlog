@@ -4,67 +4,171 @@
       "name": "ironlog_architecture",
       "devices": [
         {
-          "id": "n5",
-          "kind": "server",
-          "label": "Hosts + Kubernetes",
-          "data": {
-            "notes": "Purple: event sources. Windows/Linux agents and Kubernetes HEC shippers."
-          }
-        },
-        {
-          "id": "n6",
-          "kind": "cloud-storage",
-          "label": "AWS logs (optional)",
-          "data": {
-            "notes": "Purple: event sources. S3 objects and SQS notifications."
-          }
-        },
-        {
           "id": "n7",
-          "kind": "container",
-          "label": "Vector Hosts",
+          "kind": "desktop",
+          "label": "Windows hosts - Vector agent [AU-12]\nRole: ship Security, System, PowerShell/Operational\nevent logs to the aggregator",
           "data": {
-            "notes": "Teal: ingestion. Always on; native TCP 6000 and HEC 8088; disk buffers."
+            "notes": "Purple: event source. vector/agent-windows.yaml, windows_event_log source, installed by scripts/install-windows-agent.ps1."
           }
         },
         {
           "id": "n8",
-          "kind": "container",
-          "label": "Vector AWS (optional)",
+          "kind": "server",
+          "label": "Linux hosts - Vector agent [AU-12]\nRole: ship journald and auditd (audit.log) events\nto the aggregator",
           "data": {
-            "notes": "Teal: ingestion. Optional AWS profile; reads SQS messages and S3 objects."
+            "notes": "Purple: event source. vector/agent-linux.yaml."
           }
         },
         {
           "id": "n9",
-          "kind": "database",
-          "label": "ClickHouse",
+          "kind": "container-host",
+          "label": "Kubernetes - vector-shipper [AU-12]\nRole: DaemonSet ships pod logs over HEC;\nlocal k3s demo is an optional test producer",
           "data": {
-            "notes": "Blue: data. Seven SIEM tables and audit.query_archive; local storage; S3 tiering disabled."
+            "notes": "Purple: event source. k8s/vector-shipper.yaml, image timberio/vector 0.57.0-distroless-libc."
           }
         },
         {
           "id": "n10",
-          "kind": "container",
-          "label": "Grafana OSS",
+          "kind": "cloud-storage",
+          "label": "AWS logs - OPTIONAL [AU-12]\nRole: CloudTrail, GuardDuty, VPC Flow, S3 access logs\nin S3; one SQS queue per type announces objects",
           "data": {
-            "notes": "Amber: applications. Dashboards, SQL Explore and pipeline alerting. Local login on 3000."
+            "notes": "Purple: optional event source. docs/aws-ingestion.md."
           }
         },
         {
           "id": "n11",
           "kind": "container",
-          "label": "HyperDX",
+          "label": "Vector Hosts 0.57.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse",
           "data": {
-            "notes": "Amber: applications. Search and investigation UI. Native local login on 8081."
+            "notes": "Teal: ingestion. vector/hosts.yaml; container siem-vector-hosts."
           }
         },
         {
           "id": "n12",
-          "kind": "database",
-          "label": "MongoDB",
+          "kind": "container",
+          "label": "Vector AWS 0.57.0 - OPTIONAL [AU-3]\nRole: poll SQS, read S3, VRL normalise, disk buffer\nOff by default: aws profile; unit ships disabled",
           "data": {
-            "notes": "Blue: data. HyperDX state only; not event storage. Internal 27017."
+            "notes": "Teal: optional ingestion. vector/vector.yaml; container siem-vector."
+          }
+        },
+        {
+          "id": "n13",
+          "kind": "database",
+          "label": "siem database - 30-day TTL [AU-11]\nRole: 7 tables: cloudtrail, guardduty, vpc_flow,\ns3_access, windows_events, linux_syslog, k8s_logs",
+          "data": {
+            "notes": "Blue: data. clickhouse/ddl/010_aws.sql and 020_hosts.sql. Raw column 7 days except guardduty (30 days); vpc_flow has no raw column."
+          }
+        },
+        {
+          "id": "n14",
+          "kind": "database",
+          "label": "audit.query_archive - 2-year TTL [AU-9]\nRole: audit trail of finished queries, filled by\nquery_archive_mv from system.query_log",
+          "data": {
+            "notes": "Blue: data. clickhouse/ddl/030_audit.sql; system.query_log kept 90 days."
+          }
+        },
+        {
+          "id": "n15",
+          "kind": "user",
+          "label": "svc_vector - write-only [AU-9]\nRole: role siem_ingest, INSERT on siem.* only,\nno reads; used by both Vector instances",
+          "data": {
+            "notes": "Blue: access control. clickhouse/ddl/040_rbac.sql, clickhouse/initdb/99-init.sh."
+          }
+        },
+        {
+          "id": "n16",
+          "kind": "user",
+          "label": "Read-only accounts [AC-6]\nsvc_grafana_analyst, svc_hyperdx: SELECT siem.*\nsvc_grafana_auditor: SELECT siem.* and audit.*",
+          "data": {
+            "notes": "Blue: access control. Roles siem_analyst and siem_auditor; settings profile siem_reader (readonly=2). Queries from these shared accounts land in audit.query_archive."
+          }
+        },
+        {
+          "id": "n17",
+          "kind": "cloud-storage",
+          "label": "S3 tiering - NOT DEPLOYED [AU-4]\n20-storage-s3.xml.disabled is not active;\nall data stays on local disk",
+          "data": {
+            "notes": "Grey: not deployed. Disabled configuration only."
+          }
+        },
+        {
+          "id": "n18",
+          "kind": "container",
+          "label": "Grafana OSS 11.4.0 - :3000 [AU-5, AU-6]\nRole: dashboards, SQL explore, 7 AU-5 ingestion-silence\nalerts; native local login",
+          "data": {
+            "notes": "Amber: application. grafana/provisioning; two ClickHouse datasources over native :9000."
+          }
+        },
+        {
+          "id": "n19",
+          "kind": "container",
+          "label": "HyperDX 2.19.0 - :8081 - optional UI [AU-6]\nRole: log search and investigation over siem tables;\nnative local login; not on the ingest path",
+          "data": {
+            "notes": "Amber: application. Enabled by default in compose and the appliance, but nothing depends on it for ingestion."
+          }
+        },
+        {
+          "id": "n20",
+          "kind": "database",
+          "label": "MongoDB 7.0 - internal :27017\nRole: HyperDX app state only (users, searches);\nnever stores events",
+          "data": {
+            "notes": "Blue: data. Not event storage."
+          }
+        },
+        {
+          "id": "n21",
+          "kind": "user",
+          "label": "Analysts and auditors\nRole: sign in to Grafana :3000 or HyperDX :8081\nwith each app's local account; no SSO or MFA",
+          "data": {
+            "notes": "Purple: people. No IdP, SSO or MFA is deployed (docs/local-auth.md)."
+          }
+        },
+        {
+          "id": "n22",
+          "kind": "server",
+          "label": "Purple\nevent sources and people",
+          "data": {
+            "notes": "Legend."
+          }
+        },
+        {
+          "id": "n23",
+          "kind": "container",
+          "label": "Teal\ningestion (Vector)",
+          "data": {
+            "notes": "Legend."
+          }
+        },
+        {
+          "id": "n24",
+          "kind": "database",
+          "label": "Blue\ndata stores and DB accounts",
+          "data": {
+            "notes": "Legend."
+          }
+        },
+        {
+          "id": "n25",
+          "kind": "container",
+          "label": "Amber\napplications",
+          "data": {
+            "notes": "Legend."
+          }
+        },
+        {
+          "id": "n26",
+          "kind": "cloud-storage",
+          "label": "Grey\nNOT DEPLOYED (disabled config only)",
+          "data": {
+            "notes": "Legend."
+          }
+        },
+        {
+          "id": "n27",
+          "kind": "router",
+          "label": "Lines and tags\nLines have no arrowheads: labels give protocol, port and DB account; OPTIONAL or (AWS) marks the AWS path\n[AU-n] = NIST 800-53 control per docs/control-mapping.md",
+          "data": {
+            "notes": "Legend."
           }
         }
       ],
@@ -72,93 +176,153 @@
         {
           "id": "e1",
           "from": {
-            "device": "n5",
-            "label": "Hosts + Kubernetes"
+            "device": "n7",
+            "label": "Windows hosts - Vector agent [AU-12]\nRole: ship Security, System, PowerShell/Operational\nevent logs to the aggregator"
           },
           "to": {
-            "device": "n7",
-            "label": "Vector Hosts"
+            "device": "n11",
+            "label": "Vector Hosts 0.57.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse"
           },
-          "label": "6000 / 8088"
+          "label": "native TCP 6000"
         },
         {
           "id": "e2",
           "from": {
-            "device": "n6",
-            "label": "AWS logs (optional)"
+            "device": "n8",
+            "label": "Linux hosts - Vector agent [AU-12]\nRole: ship journald and auditd (audit.log) events\nto the aggregator"
           },
           "to": {
-            "device": "n8",
-            "label": "Vector AWS (optional)"
+            "device": "n11",
+            "label": "Vector Hosts 0.57.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse"
           },
-          "label": "S3 + SQS"
+          "label": "native TCP 6000"
         },
         {
           "id": "e3",
           "from": {
-            "device": "n7",
-            "label": "Vector Hosts"
+            "device": "n9",
+            "label": "Kubernetes - vector-shipper [AU-12]\nRole: DaemonSet ships pod logs over HEC;\nlocal k3s demo is an optional test producer"
           },
           "to": {
-            "device": "n9",
-            "label": "ClickHouse"
+            "device": "n11",
+            "label": "Vector Hosts 0.57.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse"
           },
-          "label": "INSERT only"
+          "label": "HEC 8088 + token"
         },
         {
           "id": "e4",
           "from": {
-            "device": "n8",
-            "label": "Vector AWS (optional)"
+            "device": "n10",
+            "label": "AWS logs - OPTIONAL [AU-12]\nRole: CloudTrail, GuardDuty, VPC Flow, S3 access logs\nin S3; one SQS queue per type announces objects"
           },
           "to": {
-            "device": "n9",
-            "label": "ClickHouse"
+            "device": "n12",
+            "label": "Vector AWS 0.57.0 - OPTIONAL [AU-3]\nRole: poll SQS, read S3, VRL normalise, disk buffer\nOff by default: aws profile; unit ships disabled"
           },
-          "label": "INSERT only"
+          "label": "OPTIONAL: SQS poll + S3 read"
         },
         {
           "id": "e5",
           "from": {
-            "device": "n10",
-            "label": "Grafana OSS"
+            "device": "n11",
+            "label": "Vector Hosts 0.57.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse"
           },
           "to": {
-            "device": "n9",
-            "label": "ClickHouse"
+            "device": "n13",
+            "label": "siem database - 30-day TTL [AU-11]\nRole: 7 tables: cloudtrail, guardduty, vpc_flow,\ns3_access, windows_events, linux_syslog, k8s_logs"
           },
-          "label": "SQL queries"
+          "label": "HTTP 8123 INSERT"
         },
         {
           "id": "e6",
           "from": {
-            "device": "n11",
-            "label": "HyperDX"
+            "device": "n12",
+            "label": "Vector AWS 0.57.0 - OPTIONAL [AU-3]\nRole: poll SQS, read S3, VRL normalise, disk buffer\nOff by default: aws profile; unit ships disabled"
           },
           "to": {
-            "device": "n9",
-            "label": "ClickHouse"
+            "device": "n13",
+            "label": "siem database - 30-day TTL [AU-11]\nRole: 7 tables: cloudtrail, guardduty, vpc_flow,\ns3_access, windows_events, linux_syslog, k8s_logs"
           },
-          "label": "Read queries"
+          "label": "INSERT (AWS)"
         },
         {
           "id": "e7",
           "from": {
-            "device": "n11",
-            "label": "HyperDX"
+            "device": "n18",
+            "label": "Grafana OSS 11.4.0 - :3000 [AU-5, AU-6]\nRole: dashboards, SQL explore, 7 AU-5 ingestion-silence\nalerts; native local login"
           },
           "to": {
-            "device": "n12",
-            "label": "MongoDB"
+            "device": "n13",
+            "label": "siem database - 30-day TTL [AU-11]\nRole: 7 tables: cloudtrail, guardduty, vpc_flow,\ns3_access, windows_events, linux_syslog, k8s_logs"
           },
-          "label": "App state"
+          "label": "native 9000 SELECT"
+        },
+        {
+          "id": "e8",
+          "from": {
+            "device": "n18",
+            "label": "Grafana OSS 11.4.0 - :3000 [AU-5, AU-6]\nRole: dashboards, SQL explore, 7 AU-5 ingestion-silence\nalerts; native local login"
+          },
+          "to": {
+            "device": "n14",
+            "label": "audit.query_archive - 2-year TTL [AU-9]\nRole: audit trail of finished queries, filled by\nquery_archive_mv from system.query_log"
+          },
+          "label": "native 9000 SELECT"
+        },
+        {
+          "id": "e9",
+          "from": {
+            "device": "n19",
+            "label": "HyperDX 2.19.0 - :8081 - optional UI [AU-6]\nRole: log search and investigation over siem tables;\nnative local login; not on the ingest path"
+          },
+          "to": {
+            "device": "n13",
+            "label": "siem database - 30-day TTL [AU-11]\nRole: 7 tables: cloudtrail, guardduty, vpc_flow,\ns3_access, windows_events, linux_syslog, k8s_logs"
+          },
+          "label": "HTTP 8123 SELECT"
+        },
+        {
+          "id": "e10",
+          "from": {
+            "device": "n19",
+            "label": "HyperDX 2.19.0 - :8081 - optional UI [AU-6]\nRole: log search and investigation over siem tables;\nnative local login; not on the ingest path"
+          },
+          "to": {
+            "device": "n20",
+            "label": "MongoDB 7.0 - internal :27017\nRole: HyperDX app state only (users, searches);\nnever stores events"
+          },
+          "label": "app state"
+        },
+        {
+          "id": "e11",
+          "from": {
+            "device": "n21",
+            "label": "Analysts and auditors\nRole: sign in to Grafana :3000 or HyperDX :8081\nwith each app's local account; no SSO or MFA"
+          },
+          "to": {
+            "device": "n18",
+            "label": "Grafana OSS 11.4.0 - :3000 [AU-5, AU-6]\nRole: dashboards, SQL explore, 7 AU-5 ingestion-silence\nalerts; native local login"
+          },
+          "label": "HTTP 3000"
+        },
+        {
+          "id": "e12",
+          "from": {
+            "device": "n21",
+            "label": "Analysts and auditors\nRole: sign in to Grafana :3000 or HyperDX :8081\nwith each app's local account; no SSO or MFA"
+          },
+          "to": {
+            "device": "n19",
+            "label": "HyperDX 2.19.0 - :8081 - optional UI [AU-6]\nRole: log search and investigation over siem tables;\nnative local login; not on the ingest path"
+          },
+          "label": "HTTP 8081"
         }
       ]
     }
   ],
   "counts": {
     "pages": 1,
-    "devices": 8,
-    "links": 7
+    "devices": 21,
+    "links": 12
   }
 }
