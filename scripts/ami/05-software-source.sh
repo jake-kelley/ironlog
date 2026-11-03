@@ -44,10 +44,16 @@ validate_bundle() {
     bundle_images["$image_ref"]=1; image_line_count=$((image_line_count + 1))
   done < "$artifact_dir/images.tsv"
   [ "$image_line_count" -eq 3 ] || die "images.tsv must contain exactly three image archives"
-  for image_ref in docker.io/clickhouse/clickhouse-server:26.8.34.13 docker.io/grafana/grafana-oss:11.4.0 docker.io/timberio/vector:0.57.0-debian; do
+  for image_ref in docker.io/clickhouse/clickhouse-server:26.8.34.13 docker.io/grafana/grafana:13.3.0 docker.io/timberio/vector:0.57.0-debian; do
     [ -n "${bundle_images[$image_ref]+x}" ] || die "images.tsv missing required image: $image_ref"
   done
   [ -f "$artifact_dir/grafana-plugins/grafana-clickhouse-datasource/plugin.json" ] || die "Grafana ClickHouse plugin.json missing"
+  local pin_file pin_version bundle_plugin_version
+  pin_file="$(dirname "${BASH_SOURCE[0]}")/grafana-clickhouse-plugin.version"
+  pin_version="$(tr -d '[:space:]' < "$pin_file" 2>/dev/null || true)"
+  [ -n "$pin_version" ] || die "Grafana plugin pin missing: $pin_file"
+  bundle_plugin_version="$(sed -nE 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$artifact_dir/grafana-plugins/grafana-clickhouse-datasource/plugin.json" | head -n1)"
+  [ "$bundle_plugin_version" = "$pin_version" ] || die "Grafana plugin version '$bundle_plugin_version' in bundle does not match pin '$pin_version'"
   find "$artifact_dir/grafana-plugins/grafana-clickhouse-datasource" -type f ! -name plugin.json -print -quit | grep -q . || die "Grafana plugin has no unpacked files"
 }
 if [ "$source_mode" = bundle ]; then

@@ -89,7 +89,7 @@ The required appliance references are:
 
 ```text
 docker.io/clickhouse/clickhouse-server:24.8
-docker.io/grafana/grafana-oss:11.4.0
+docker.io/grafana/grafana:13.3.0
 docker.hyperdx.io/hyperdx/hyperdx:2.19.0
 docker.io/library/mongo:7.0
 docker.io/timberio/vector:0.57.0-debian
@@ -115,9 +115,14 @@ the bundle's `keys/*.asc` must match vendor key files already installed under
 `/etc/pki/rpm-gpg` on the approved base AMI. A key supplied only by the bundle
 does not establish trust in itself.
 
-Include an approved Grafana ClickHouse datasource plugin release compatible
-with Grafana 11.4.0 and Linux arm64. Preserve its signature and executable
-backend permissions. Record the chosen plugin version when publishing the release.
+Include the pinned Grafana ClickHouse datasource plugin release, 4.23.4
+(`grafana-clickhouse-datasource`, requires Grafana >=11.6.0-0), for Grafana
+13.3.0 and Linux arm64. The pin lives in `scripts/ami/grafana-clickhouse-plugin.version`;
+`scripts/prepare-artifacts.py` and `scripts/ami/05-software-source.sh` fail when
+the bundle's `plugin.json` `info.version` differs, and `20-container-images.sh`
+re-checks the baked plugin. Preserve its signature and executable backend
+permissions. To change the version, update the pin file and the
+`GF_PLUGINS_PREINSTALL_SYNC` value in `docker-compose.yml` together.
 
 ## Package and stage the bundle
 

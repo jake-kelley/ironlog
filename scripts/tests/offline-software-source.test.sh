@@ -57,10 +57,10 @@ make_bundle() {
   printf '<repomd/>\n' > "$bundle/rpm-repo/repodata/repomd.xml"
   printf 'rpm\n' > "$bundle/rpm-repo/libstdc++-1.0+bundle.aarch64.rpm"
   printf 'vendor-key\n' > "$bundle/keys/vendor.asc"
-  printf '{"id":"grafana-clickhouse-datasource","executable":"plugin"}\n' > "$bundle/grafana-plugins/grafana-clickhouse-datasource/plugin.json"
+  printf '{"id":"grafana-clickhouse-datasource","executable":"plugin","info":{"version":"%s"}}\n' "$(cat "$root/scripts/ami/grafana-clickhouse-plugin.version")" > "$bundle/grafana-plugins/grafana-clickhouse-datasource/plugin.json"
   printf '#!/bin/sh\n' > "$bundle/grafana-plugins/grafana-clickhouse-datasource/plugin"; chmod +x "$bundle/grafana-plugins/grafana-clickhouse-datasource/plugin"
   : > "$bundle/images.tsv"
-  for image in docker.io/clickhouse/clickhouse-server:26.8.34.13 docker.io/grafana/grafana-oss:11.4.0 docker.io/timberio/vector:0.57.0-debian; do
+  for image in docker.io/clickhouse/clickhouse-server:26.8.34.13 docker.io/grafana/grafana:13.3.0 docker.io/timberio/vector:0.57.0-debian; do
     archive="images/${image//[\/:]/_}.tar"; printf '%s\n' "$image" > "$bundle/$archive"; printf '%s\t%s\n' "$image" "$archive" >> "$bundle/images.tsv"
   done
   printf 'obsolete manifest\n' > "$bundle/SHA256SUMS"
@@ -103,6 +103,18 @@ fi
 if env "${base_env[@]}" PODMAN_LOAD_FAIL=1 IRONLOG_ARTIFACT_DIR="$tmp/bundle" IRONLOG_BUILD_SOURCE_CONFIG="$tmp/ironlog/build-source.conf" IRONLOG_GRAFANA_PLUGIN_DIR="$tmp/plugin-stage-load-fail" IRONLOG_QUADLET_DIR="$tmp/no-quadlets" bash "$images_script" >/dev/null 2>&1; then
   echo 'expected image-load failure' >&2; exit 1
 fi
+# A baked plugin that differs from scripts/ami/grafana-clickhouse-plugin.version must fail the build.
+plugin_json="$tmp/bundle/grafana-plugins/grafana-clickhouse-datasource/plugin.json"
+cp "$plugin_json" "$tmp/plugin.json.orig"
+printf '{"id":"grafana-clickhouse-datasource","executable":"plugin","info":{"version":"0.0.1"}}
+' > "$plugin_json"
+if env "${base_env[@]}" IRONLOG_ARTIFACT_DIR="$tmp/bundle" IRONLOG_BUILD_SOURCE_CONFIG="$tmp/ironlog/build-source.conf" IRONLOG_GRAFANA_PLUGIN_DIR="$tmp/plugin-stage-version" IRONLOG_QUADLET_DIR="$root/quadlets" bash "$images_script" >/dev/null 2>&1; then
+  echo 'expected plugin version pin failure (20-container-images.sh)' >&2; exit 1
+fi
+if env "${base_env[@]}" IRONLOG_ARTIFACT_DIR="$tmp/bundle" bash "$source_script" >/dev/null 2>&1; then
+  echo 'expected plugin version pin failure (05-software-source.sh)' >&2; exit 1
+fi
+cp "$tmp/plugin.json.orig" "$plugin_json"
 # Same provisioning entry point accepts RHEL 9, but not a Rocky bundle on RHEL.
 printf 'ID=rhel\nVERSION_ID=9.6\n' > "$tmp/os-release"
 : > "$tmp/calls"

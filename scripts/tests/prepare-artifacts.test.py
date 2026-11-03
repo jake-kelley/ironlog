@@ -29,10 +29,11 @@ class BundleTests(unittest.TestCase):
             "rpm-repo/test.rpm": "test rpm",
             "keys/vendor.asc": "test key",
             "images.tsv": "".join(ref + "\timages/test.tar\n" for ref in (
-                "docker.io/clickhouse/clickhouse-server:26.8.34.13", "docker.io/grafana/grafana-oss:11.4.0",
+                "docker.io/clickhouse/clickhouse-server:26.8.34.13", "docker.io/grafana/grafana:13.3.0",
                 "docker.io/timberio/vector:0.57.0-debian")),
             "images/test.tar": "test archive",
-            "grafana-plugins/grafana-clickhouse-datasource/plugin.json": json.dumps({"id": "grafana-clickhouse-datasource"}),
+            "grafana-plugins/grafana-clickhouse-datasource/plugin.json": json.dumps({"id": "grafana-clickhouse-datasource",
+                                                                                         "info": {"version": artifacts.PLUGIN_PIN_FILE.read_text().strip()}}),
         }
         for name, content in files.items():
             path = self.bundle / name
@@ -51,6 +52,15 @@ class BundleTests(unittest.TestCase):
         artifacts.prepare(self.args())
         self.assertTrue((self.root / "output/images.tsv").is_file())
         with self.assertRaisesRegex(ValueError, "already exists"):
+            artifacts.prepare(self.args())
+
+    def test_plugin_version_must_match_pin(self):
+        path = self.bundle / "grafana-plugins/grafana-clickhouse-datasource/plugin.json"
+        path.write_text(json.dumps({"id": "grafana-clickhouse-datasource", "info": {"version": "0.0.1"}}))
+        with self.assertRaisesRegex(ValueError, "does not match pin"):
+            artifacts.prepare(self.args())
+        path.write_text(json.dumps({"id": "grafana-clickhouse-datasource"}))
+        with self.assertRaisesRegex(ValueError, "does not match pin"):
             artifacts.prepare(self.args())
 
     def test_files_and_old_manifest_do_not_require_checksums(self):
