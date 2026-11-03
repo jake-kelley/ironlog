@@ -30,7 +30,7 @@ class BundleTests(unittest.TestCase):
             "keys/vendor.asc": "test key",
             "images.tsv": "".join(ref + "\timages/test.tar\n" for ref in (
                 "docker.io/clickhouse/clickhouse-server:26.8.34.13", "docker.io/grafana/grafana:13.3.0",
-                "docker.io/timberio/vector:0.57.0-debian")),
+                "docker.io/timberio/vector:0.61.0-debian")),
             "images/test.tar": "test archive",
             "grafana-plugins/grafana-clickhouse-datasource/plugin.json": json.dumps({"id": "grafana-clickhouse-datasource",
                                                                                          "info": {"version": artifacts.PLUGIN_PIN_FILE.read_text().strip()}}),

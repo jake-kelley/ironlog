@@ -23,7 +23,7 @@ die() { echo "[$LOG_TAG] FATAL: $*" >&2; exit 1; }
 #   "Error: short-name resolution enforced but cannot prompt without a TTY"
 # These strings must also match the
 # Image= lines in quadlets/ verbatim -- see the cross-check below.
-DEFAULT_IMAGES="docker.io/clickhouse/clickhouse-server:26.8.34.13 docker.io/grafana/grafana:13.3.0 docker.io/timberio/vector:0.57.0-debian"
+DEFAULT_IMAGES="docker.io/clickhouse/clickhouse-server:26.8.34.13 docker.io/grafana/grafana:13.3.0 docker.io/timberio/vector:0.61.0-debian"
 IMAGES="${IRONLOG_CONTAINER_IMAGES:-$DEFAULT_IMAGES}"
 ARCH="${IRONLOG_PULL_ARCH:-arm64}"
 

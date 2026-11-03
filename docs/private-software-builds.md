@@ -92,7 +92,7 @@ docker.io/clickhouse/clickhouse-server:24.8
 docker.io/grafana/grafana:13.3.0
 docker.hyperdx.io/hyperdx/hyperdx:2.19.0
 docker.io/library/mongo:7.0
-docker.io/timberio/vector:0.57.0-debian
+docker.io/timberio/vector:0.61.0-debian
 ```
 
 On an approved connected preparation host, save each arm64 image with

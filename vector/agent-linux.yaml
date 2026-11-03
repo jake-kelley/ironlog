@@ -39,8 +39,8 @@ sinks:
   aggregator:
     type: vector
     inputs: [journald, tag_auditd]
-    address: "${VECTOR_AGGREGATOR_ADDR}"
-    compression: true
+    address: "http://${VECTOR_AGGREGATOR_ADDR}"
+    compression: "gzip"
     buffer:
       type: disk
       max_size: 268435488

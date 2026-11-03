@@ -18,7 +18,7 @@ After=ironlog-schema.service
 Requires=ironlog-schema.service
 
 [Container]
-Image=docker.io/timberio/vector:0.57.0-debian
+Image=docker.io/timberio/vector:0.61.0-debian
 Pull=never
 ContainerName=ironlog-vector
 Network=ironlog.network

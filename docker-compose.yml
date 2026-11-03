@@ -72,7 +72,7 @@ services:
   # :8088 splunk_hec (K8s clusters push, token in .env)
   # :6000 vector native protocol (Linux agents, vector/agent-linux.yaml)
   vector-hosts:
-    image: docker.io/timberio/vector:0.57.0-debian
+    image: docker.io/timberio/vector:0.61.0-debian
     container_name: siem-vector-hosts
     restart: unless-stopped
     volumes:
@@ -104,7 +104,7 @@ services:
   #     siem-hec --from-literal=token=<SPLUNK_HEC_TOKEN from .env>
   # Not part of the SIEM itself — a producer for testing/demo.
   k3s:
-    image: docker.io/rancher/k3s:v1.35.6-k3s1
+    image: docker.io/rancher/k3s:v1.37.1-k3s1
     container_name: siem-k3s
     restart: unless-stopped
     profiles: ["k3s"]
@@ -127,7 +127,7 @@ services:
   # (or `scripts/compose.sh --profile aws up -d`). Keeps the core stack green
   # before the AWS side is wired up (see docs/aws-ingestion.md).
   vector:
-    image: docker.io/timberio/vector:0.57.0-debian
+    image: docker.io/timberio/vector:0.61.0-debian
     container_name: siem-vector
     restart: unless-stopped
     profiles: ["aws"]

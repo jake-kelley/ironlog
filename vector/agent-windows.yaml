@@ -37,8 +37,8 @@ sinks:
   aggregator:
     type: vector
     inputs: [tag]
-    address: "${VECTOR_AGGREGATOR_ADDR}"
-    compression: true
+    address: "http://${VECTOR_AGGREGATOR_ADDR}"
+    compression: "gzip"
     buffer:
       type: disk
       max_size: 268435488

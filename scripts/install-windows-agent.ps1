@@ -3,13 +3,13 @@
 # Optional: -AggregatorAddr "siem-host:6000" (default localhost:6000, correct
 # when the aggregator's docker host is this machine's WSL).
 #
-# Does: download Vector 0.57.0 -> C:\Program Files\Vector, deploy
+# Does: download Vector 0.61.0 -> C:\Program Files\Vector, deploy
 # vector\agent-windows.yaml -> C:\ProgramData\vector\vector.yaml, set machine
 # env vars, register + start the "vector" Windows service (LocalSystem, which
 # can read the Security channel).
 param(
     [string]$AggregatorAddr = "localhost:6000",
-    [string]$Version = "0.57.0"
+    [string]$Version = "0.61.0"
 )
 $ErrorActionPreference = "Stop"
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {

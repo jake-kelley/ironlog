@@ -18,7 +18,7 @@ locals {
   container_images = join(" ", [
     "docker.io/clickhouse/clickhouse-server:26.8.34.13",
     "docker.io/grafana/grafana:13.3.0",
-    "docker.io/timberio/vector:0.57.0-debian",
+    "docker.io/timberio/vector:0.61.0-debian",
   ])
 }
 

@@ -199,7 +199,7 @@ this is not a second definition to drift):
 `docker.io/clickhouse/clickhouse-server:26.8.34.13`,
 `docker.io/grafana/grafana:13.3.0`,
 `docker.hyperdx.io/hyperdx/hyperdx:2.19.0`, `docker.io/library/mongo:7.0`,
-`docker.io/timberio/vector:0.57.0-debian`.
+`docker.io/timberio/vector:0.61.0-debian`.
 
 ## Multi-cloud extension path (Azure/OCI — not now)
 

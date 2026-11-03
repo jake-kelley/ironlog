@@ -1,6 +1,6 @@
 # Unit tests for the Phase 3 (hosts.yaml) transforms. Run:
 #   docker run --rm -v "$PWD/vector:/cfg:ro" -e SPLUNK_HEC_TOKEN=x -e CH_VECTOR_PASSWORD=x \
-#     timberio/vector:0.57.0-debian test /cfg/hosts.yaml /cfg/tests-hosts.yaml
+#     timberio/vector:0.61.0-debian test /cfg/hosts.yaml /cfg/tests-hosts.yaml
 
 tests:
   - name: k8s_hec_json_object_event

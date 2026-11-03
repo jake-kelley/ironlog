@@ -2,7 +2,7 @@
 # into the container). Run:
 #   docker run --rm -v "$PWD/vector:/cfg:ro" -e AWS_REGION=x -e SQS_URL_CLOUDTRAIL=x \
 #     -e SQS_URL_GUARDDUTY=x -e SQS_URL_VPCFLOW=x -e SQS_URL_S3ACCESS=x -e CH_VECTOR_PASSWORD=x \
-#     timberio/vector:0.57.0-debian test /cfg/vector.yaml /cfg/tests.yaml
+#     timberio/vector:0.61.0-debian test /cfg/vector.yaml /cfg/tests.yaml
 
 tests:
   - name: cloudtrail_fanout_and_mapping
