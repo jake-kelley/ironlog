@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S3 storage tiering — SmartStore vs ClickHouse vs OpenSearch</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --ink: #1d2430; --muted: #5b6575; --line: #dde2ea;
+    --head: #24324a; --ok: #1f7a4d; --ok-bg: #e3f4ea; --warn: #8a5a00; --warn-bg: #fdf1d8;
+    --no: #a12a2a; --no-bg: #fbe5e5; --accent: #2b6cb0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161d; --card: #1a2029; --ink: #e4e8ef; --muted: #9aa5b5; --line: #2c3441;
+      --head: #2a3a55; --ok: #6fd39d; --ok-bg: #173325; --warn: #f1c46b; --warn-bg: #3a2e14;
+      --no: #f19a9a; --no-bg: #3d1b1b; --accent: #7fb2ec;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  main { max-width: 1500px; margin: 0 auto; padding: 28px 24px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 32px 0 10px; }
+  h3 { font-size: 14px; margin: 20px 0 8px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .bottom { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent);
+            border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; }
+  .wrap { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; min-width: 1100px; }
+  table.kv { min-width: 700px; }
+  th, td { padding: 10px 12px; vertical-align: top; text-align: left; border-bottom: 1px solid var(--line); }
+  thead th { background: var(--head); color: #fff; position: sticky; top: 0; font-size: 13px; }
+  thead th small { display: block; font-weight: 400; opacity: .8; }
+  tbody th { width: 170px; color: var(--muted); font-weight: 600; background: var(--card); }
+  tbody tr:nth-child(even) td, tbody tr:nth-child(even) th { background: color-mix(in srgb, var(--card) 94%, var(--ink)); }
+  td.hl { box-shadow: inset 3px 0 0 var(--accent); }
+  .b { display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 10px; margin-right: 4px; }
+  .ok { color: var(--ok); background: var(--ok-bg); }
+  .warn { color: var(--warn); background: var(--warn-bg); }
+  .no { color: var(--no); background: var(--no-bg); }
+  .tag { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  code { font: 12px/1.4 Consolas, "SFMono-Regular", Menlo, monospace; background: color-mix(in srgb, var(--card) 85%, var(--ink));
+         padding: 1px 4px; border-radius: 4px; }
+  ul, ol { margin: 6px 0 0 18px; padding: 0; }
+  li { margin: 2px 0; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; }
+  .card h3 { margin: 0 0 6px; font-size: 14px; }
+  .note { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+  a { color: var(--accent); }
+  footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  @media print { thead th { position: static; } body { background: #fff; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>S3 storage tiering: four approaches compared</h1>
+  <p class="sub">Splunk SmartStore · ClickHouse S3 disk + TTL · OpenSearch searchable snapshots · OpenSearch writable warm — prepared for ironlog, updated 2026-11-03</p>
+
+  <div class="bottom">
+    <strong>Bottom line.</strong> Requirement: data older than ~90 days lives in S3, local disk is only a cache, no full local copy.
+    <ul>
+      <li><strong>SmartStore</strong> and <strong>ClickHouse S3 disk + TTL</strong> meet it today, automatically.</li>
+      <li><strong>OpenSearch writable warm</strong> meets it architecturally (S3 authoritative, local block cache, still writable), but
+        self-managed open source is <span class="b warn">experimental</span> (flag off by default, no docs page) and has
+        <span class="b no">no automation</span>: one manual <code>POST /{index}/_tier/warm</code> per index. Automation via ISM exists only on
+        Amazon OpenSearch Service (GA Dec 2025, OI2 instances, no GovCloud region at launch).</li>
+      <li><strong>Searchable snapshots</strong> meet the cost goal but data becomes read-only.</li>
+      <li>ironlog already runs ClickHouse 24.8; its S3 tier is written but <strong>disabled</strong> (<code>clickhouse/config.d/20-storage-s3.xml.disabled</code>).</li>
+    </ul>
+  </div>
+
+  <div class="wrap">
+  <table>
+    <thead>
+      <tr>
+        <th></th>
+        <th>Splunk SmartStore<small>commercial Splunk Enterprise</small></th>
+        <th>ClickHouse S3 disk + <code style="background:none;color:#fff">TTL … TO VOLUME</code><small>ironlog's planned path</small></th>
+        <th>OpenSearch searchable snapshots<small>open source, GA</small></th>
+        <th>OpenSearch writable warm<small>OSS 3.9.0: experimental · Amazon OpenSearch Service: GA (3.3+)</small></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th>What it is</th>
+        <td>Storage tier; S3 is primary for warm data</td>
+        <td class="hl">Storage tier; S3 disk inside a storage policy</td>
+        <td>Search a backup in place</td>
+        <td>Storage tier; remote store (S3) is authoritative, local disk is a block cache, index stays live</td>
+      </tr>
+      <tr>
+        <th>Cuts EBS cost by itself?</th>
+        <td><span class="b ok">Yes</span></td>
+        <td class="hl"><span class="b ok">Yes</span></td>
+        <td><span class="b ok">Yes</span></td>
+        <td><span class="b ok">Yes</span> addressable data = cache × <code>cluster.filecache.remote_data_ratio</code> (default 5). AWS: 80% of OI2 local NVMe is cache, 5× addressable</td>
+      </tr>
+      <tr>
+        <th>Authoritative copy</th>
+        <td>S3 holds the master copy of every warm bucket</td>
+        <td class="hl">Part data in S3; object map on local disk (<code>metadata_path</code>) unless <code>s3_plain_rewritable</code></td>
+        <td>Snapshot repository; cluster downloads metadata only</td>
+        <td>Remote store segments in S3 (needs remote-backed storage on the index)</td>
+      </tr>
+      <tr>
+        <th>Local disk holds</th>
+        <td>Hot buckets + cache</td>
+        <td class="hl">Hot volume, S3 metadata files, optional cache disk</td>
+        <td>Snapshot metadata + block/segment file cache</td>
+        <td>New files until uploaded, then 8 MiB blocks in an LRU file cache. Replicas download no segments</td>
+      </tr>
+      <tr>
+        <th>How data moves to S3</th>
+        <td><span class="b ok">Automatic</span> bucket uploads on hot → warm roll</td>
+        <td class="hl"><span class="b ok">Automatic</span> TTL moves parts by age; <code>move_factor</code> also moves on disk pressure</td>
+        <td><span class="b warn">Policy</span> ISM <code>snapshot</code> + <code>convert_index_to_remote</code> actions exist; full chain not tested</td>
+        <td><span class="b no">OSS: manual</span> <code>POST /{index}/_tier/warm</code>, one index per call; no ISM action, no age policy in core → external scheduler.
+            <span class="b warn">AWS: ISM</span> automation stated; action name not documented</td>
+      </tr>
+      <tr>
+        <th>Writable after move?</th>
+        <td><span class="b ok">Yes</span> warm buckets stay in the live index</td>
+        <td class="hl"><span class="b ok">Yes</span> inserts + merges; <code>s3_plain_rewritable</code> disallows mutations</td>
+        <td><span class="b no">No</span> read-only; writes return an error</td>
+        <td><span class="b ok">Yes</span> indexing, updates, deletes, merges (OSS integration tests; AWS: "Supports write operations in warm tier")</td>
+      </tr>
+      <tr>
+        <th>Transparent to queries?</th>
+        <td><span class="b ok">Yes</span> same index</td>
+        <td class="hl"><span class="b ok">Yes</span> same table</td>
+        <td><span class="b warn">Partly</span> restored index replaces the original</td>
+        <td><span class="b ok">Yes</span> same index; searches go primary-first, replica serves only if primary is down</td>
+      </tr>
+      <tr>
+        <th>Cache</th>
+        <td>Least-recently-used; bucket or file level; keeps small files (bloom filters, metadata), evicts large ones (raw data, tsidx) first</td>
+        <td class="hl">Optional cache disk wrapping the S3 disk</td>
+        <td>File cache (<code>node.search.cache.size</code>); segment/block level; start at <code>remote_data_ratio</code> 5</td>
+        <td>Same FileCache: segmented LRU weighted by size, ref-counted pins, 8 MiB blocks, read-ahead 4 blocks (doc values). <code>node.search.cache.size</code> defaults to 80% on a dedicated warm node</td>
+      </tr>
+      <tr>
+        <th>Node / cluster needs</th>
+        <td>Same indexers; cluster replicates hot buckets only</td>
+        <td class="hl">Single node works (ironlog); S3 durable, metadata local</td>
+        <td>Nodes with the <code>warm</code> role (3.x)</td>
+        <td>Dedicated <code>warm</code>-role nodes + remote-backed storage + segment replication. AWS: OI2 warm nodes; OR1/OR2/OM2/OI2 hot; encryption + HTTPS enforced</td>
+      </tr>
+      <tr>
+        <th>Weak spot</th>
+        <td>License cost</td>
+        <td class="hl">Losing local metadata with plain <code>s3</code> disk. <code>s3_plain_rewritable</code> (24.4+) stores metadata in S3 but no mutations / replication</td>
+        <td>Two lifecycles (index + snapshot); fixing data means reindexing; S3→Glacier rules break it</td>
+        <td>OSS: experimental, no docs, no automation, open bugs (cache capacity exceeded on merge, block-fetch hang). No shrink/split/clone. AWS: no cold tier, can't coexist with UltraWarm</td>
+      </tr>
+      <tr>
+        <th>Status</th>
+        <td><span class="b ok">GA</span></td>
+        <td class="hl"><span class="b ok">Available</span> in 24.8 · <span class="b warn">disabled in ironlog</span></td>
+        <td><span class="b ok">GA</span></td>
+        <td><span class="b warn">OSS experimental</span> in 3.7.0 release notes, unchanged 3.9.0 → main, no GA date · <span class="b ok">AWS GA</span> 2025-12-17, 12 regions</td>
+      </tr>
+      <tr>
+        <th>ironlog fit</th>
+        <td>Not applicable (paid)</td>
+        <td class="hl"><strong>Best fit:</strong> same table, automatic, already planned</td>
+        <td>OK for frozen audit data; extra moving parts</td>
+        <td>Right architecture, wrong maturity: self-managed needs a feature flag + your own scheduler. Managed version is not self-hosted and GovCloud is unconfirmed</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">Remote-backed storage (GA since 2.10) was dropped as a column: it keeps a full copy on local disk, so it is durability only. It is the prerequisite layer under writable warm.</p>
+
+  <h2>Writable warm, in depth</h2>
+
+  <h3>How it works (open source, 3.9.0 source code)</h3>
+  <div class="card">
+    <ol>
+      <li><strong>Enable:</strong> start every node with <code>opensearch.experimental.feature.writable_warm_index.enabled=true</code>. Without it the <code>_tier</code> REST handlers are not registered (<code>ActionModule.java:1146</code>).</li>
+      <li><strong>Prerequisites:</strong> the index must use remote-backed storage (validator rejects: "does not have remote store enabled"); at least one node with the <code>warm</code> role ("no nodes found with the warm role").</li>
+      <li><strong>Move:</strong> <code>POST /{index}/_tier/warm</code> sets <code>index.warm=true</code>, <code>index.composite_store.type=tiered-storage</code>, <code>index.tiering.state=HOT_TO_WARM</code>, forces replicas to 1, and reroutes. Shards relocate to warm nodes. No data is copied to S3 during the move: it is already there.</li>
+      <li><strong>Complete:</strong> cluster manager watches routing changes; when every shard is on a warm node, state becomes <code>WARM</code>. In-progress moves are rebuilt after a cluster-manager failover.</li>
+      <li><strong>Serve:</strong> <code>TieredDirectory</code> writes new files locally, uploads them to the remote store, then switches them to remote. Reads fetch 8 MiB blocks into the FileCache on a miss.</li>
+      <li><strong>Back:</strong> <code>POST /{index}/_tier/hot</code> reverses it; <code>POST /_tier/_cancel/{index}</code> undoes an in-progress move.</li>
+    </ol>
+  </div>
+
+  <div class="grid" style="margin-top:16px">
+    <div class="wrap">
+      <table class="kv">
+        <thead><tr><th>REST API (OSS and AWS share these)</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>POST /{index}/_tier/warm</code></td><td>Hot → warm. One index, no wildcards. Returns <code>acknowledged</code> at start, not completion</td></tr>
+          <tr><td><code>POST /{index}/_tier/hot</code></td><td>Warm → hot</td></tr>
+          <tr><td><code>POST /_tier/_cancel/{index}</code></td><td>Cancel an in-progress move (OSS)</td></tr>
+          <tr><td><code>GET /{index}/_tier?detailed=true</code></td><td>Status of one index</td></tr>
+          <tr><td><code>GET /_tier/all?target=_warm</code></td><td>Status of all moves (cat-style table)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="wrap">
+      <table class="kv">
+        <thead><tr><th>Setting (OSS)</th><th>Default</th></tr></thead>
+        <tbody>
+          <tr><td><code>node.search.cache.size</code></td><td>80% on dedicated warm node, else 0</td></tr>
+          <tr><td><code>cluster.filecache.remote_data_ratio</code></td><td>5.0 (min 1.0, dynamic)</td></tr>
+          <tr><td><code>cluster.tiering.max_concurrent_hot_to_warm_requests</code></td><td>200 (0 blocks tiering)</td></tr>
+          <tr><td><code>cluster.tiering.max_concurrent_warm_to_hot_requests</code></td><td>10</td></tr>
+          <tr><td><code>cluster.tiering.jvm_usage_threshold_percent</code></td><td>95</td></tr>
+          <tr><td><code>tiering.service.prefetch.read_ahead.block_count</code></td><td>4</td></tr>
+          <tr><td><code>cluster.routing.allocation.disk.warm_threshold_enabled</code></td><td>true</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <h3>Open source vs Amazon OpenSearch Service</h3>
+  <div class="wrap">
+    <table class="kv">
+      <thead><tr><th></th><th>Open source (self-managed, 3.9.0)</th><th>Amazon OpenSearch Service</th></tr></thead>
+      <tbody>
+        <tr><th>Status</th><td><span class="b warn">Experimental</span> flag, default off. No docs page. No stated GA release</td><td><span class="b ok">GA</span> 2025-12-17, engine 3.3+</td></tr>
+        <tr><th>Automation</th><td><span class="b no">None</span> — no ISM action; open request index-management #1228</td><td><span class="b ok">ISM</span> "automate rotating data from hot to warm"; action name not documented</td></tr>
+        <tr><th>Hardware</th><td>Any node with <code>warm</code> role + local disk for cache</td><td>Warm: OI2 (large–8xlarge per docs); hot: OR1, OR2, OM2 or OI2</td></tr>
+        <tr><th>Capacity</th><td>cache × ratio (default 5)</td><td>e.g. <code>oi2.large</code>: 375 GB cache → 1,875 GB warm; <code>oi2.8xlarge</code>: 6,000 GB → 30,000 GB</td></tr>
+        <tr><th>Billing</th><td>Your S3 + instances</td><td>OI2 hourly + "Standard Managed Storage charges" for warm data (per-GB rate not verified)</td></tr>
+        <tr><th>Regions</th><td>Anywhere</td><td>12 commercial regions at launch; <span class="b warn">no GovCloud</span> in launch list</td></tr>
+        <tr><th>Limits</th><td>No resize; open bugs #22565, #22763</td><td>No shrink/split/clone; CCR hot only; no cold tier; not with UltraWarm</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>History</h3>
+  <div class="wrap">
+    <table class="kv">
+      <thead><tr><th>When</th><th>What</th></tr></thead>
+      <tbody>
+        <tr><td>2023-05 / 2023-07</td><td>#7804 "Writable Remote Index", #8446 "[Meta] Remote store-based warm index" (proof of concept)</td></tr>
+        <tr><td>2024-03 / 2024-04</td><td>RFC #12809 "Support for writable warm indices" (still open); META tracker #13149 (open, all sub-issues checked)</td></tr>
+        <tr><td>3.0.0-alpha1 (2025)</td><td>Composite directory + FileCache (#12782); node role <code>search</code> renamed <code>warm</code> (#17573)</td></tr>
+        <tr><td>3.1 – 3.2</td><td>Warm disk threshold decider; FileCache init on boot; warm node FS stats</td></tr>
+        <tr><td>3.7.0 (2026-04/05)</td><td>Release notes list it: directory/IndexInput layers (#21178), hot↔warm + cancel APIs (#21295), prefetch, metrics, module wiring</td></tr>
+        <tr><td>3.8.0</td><td>Hardened hot-to-warm tiering (#22103)</td></tr>
+        <tr><td>3.9.0 → main (2026-11-03)</td><td>No changes in the <code>storage/</code> package; flag still experimental</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Contributors whose GitHub profiles list an employer mostly list AWS. No maintainer statement says the OSS code is what Amazon OpenSearch Service runs.</p>
+
+  <h2>Evidence</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>Verified</h3>
+      <ul>
+        <li>SmartStore model — Splunk docs</li>
+        <li>Searchable snapshot behaviour — OpenSearch docs</li>
+        <li>Writable warm flag, REST routes, <code>TARGET_TIER</code> = <code>warm</code>/<code>hot</code>, 8 MiB blocks, setting names and defaults, validator messages, "cannot resize warm index" — read in OpenSearch source @ 3.9.0</li>
+        <li>Writable warm in 3.7.0 release notes (#21178, #21285, #21332, #21427)</li>
+        <li>ISM 3.9.0.0 actions: no warm or <code>_tier</code> action — index-management source</li>
+        <li>AWS: S3 + local storage, writes in warm, background merges, primary-first search, 3.3+, OI2 warm, no shrink/split/clone, no cold tier, 80% cache / 5× addressable — AWS docs</li>
+        <li>ClickHouse <code>metadata_path</code>, <code>s3_plain_rewritable</code> limits — ClickHouse docs</li>
+        <li>ironlog S3 config disabled; tables use 30-day DELETE TTLs — repo</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Not verified</h3>
+      <ul>
+        <li>Any writable warm cluster actually run (nothing was deployed or tested)</li>
+        <li>Warm translog handling; whether creating an index with <code>index.warm=true</code> enforces remote store</li>
+        <li>AWS ISM action name for writable warm; AWS warm managed-storage $/GB; GovCloud availability</li>
+        <li>That AWS runs the same code as open source</li>
+        <li>ISM <code>snapshot</code> → <code>convert_index_to_remote</code> chain end to end</li>
+        <li>Whether ClickHouse's filesystem cache survives a restart</li>
+        <li>Whether ironlog's 7-day <code>raw</code> column TTL needs mutations (would rule out <code>s3_plain_rewritable</code>)</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Sources</h2>
+  <ul>
+    <li><a href="https://help.splunk.com/en/splunk-enterprise/administer/manage-indexers-and-indexer-clusters/10.4/implement-smartstore-to-reduce-local-storage-requirements/smartstore-architecture-overview">SmartStore architecture overview</a> ·
+        <a href="https://help.splunk.com/en/splunk-enterprise/administer/manage-indexers-and-indexer-clusters/10.4/how-smartstore-works">SmartStore cache manager</a></li>
+    <li><a href="https://clickhouse.com/docs/operations/storing-data">ClickHouse external disks</a> ·
+        <a href="https://pulse.support/kb/clickhouse-s3-cache-configuration">ClickHouse S3 cache guide</a></li>
+    <li><a href="https://docs.opensearch.org/docs/tuning-your-cluster/availability-and-recovery/snapshots/searchable_snapshot">OpenSearch searchable snapshots</a> ·
+        <a href="https://opensearch.org/blog/searchable-snapshots/">searchable snapshots blog</a> ·
+        <a href="https://go2docs.graylog.org/current/setting_up_graylog/create_warm_tier_on_self-managed_opensearch.htm">Graylog warm tier (Glacier warning)</a></li>
+    <li><a href="https://github.com/opensearch-project/OpenSearch/blob/3.9.0/server/src/main/java/org/opensearch/common/util/FeatureFlags.java">FeatureFlags.java @ 3.9.0</a> ·
+        <a href="https://github.com/opensearch-project/OpenSearch/tree/3.9.0/server/src/main/java/org/opensearch/storage">storage/ package @ 3.9.0</a> ·
+        <a href="https://github.com/opensearch-project/OpenSearch/releases/tag/3.7.0">3.7.0 release notes</a></li>
+    <li><a href="https://github.com/opensearch-project/OpenSearch/issues/12809">RFC #12809</a> ·
+        <a href="https://github.com/opensearch-project/OpenSearch/issues/13149">META #13149</a> ·
+        <a href="https://github.com/opensearch-project/OpenSearch/issues/21016">hot-to-warm migration #21016</a> ·
+        <a href="https://github.com/opensearch-project/index-management/issues/1228">ISM tiering request #1228</a></li>
+    <li><a href="https://docs.aws.amazon.com/opensearch-service/latest/developerguide/multi-tier-storage.html">Amazon OpenSearch multi-tier storage</a> ·
+        <a href="https://docs.aws.amazon.com/opensearch-service/latest/developerguide/limits.html">limits</a> ·
+        <a href="https://aws.amazon.com/about-aws/whats-new/2025/12/writeable-warm-tier-opensearch-optimized-instances/">What's New (2025-12-17)</a> ·
+        <a href="https://aws.amazon.com/blogs/big-data/cut-costs-and-simplify-operations-with-writable-warm-storage-in-amazon-opensearch-service/">AWS writable warm blog</a></li>
+  </ul>
+
+  <footer>ironlog · docs/reports/s3-tiering-comparison.html · updated 2026-11-03</footer>
+</main>
+</body>
+</html>

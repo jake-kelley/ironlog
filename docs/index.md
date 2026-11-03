@@ -25,4 +25,4 @@ This directory is an [Open Knowledge Format](https://github.com/GoogleCloudPlatf
 
 # Analyst
 
-* [Querying the SIEM](query-guide.md) - how to search in HyperDX and Grafana.
+* [Querying the SIEM](query-guide.md) - how to search in Grafana (Log Search dashboard and SQL).

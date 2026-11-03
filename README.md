@@ -1,9 +1,9 @@
 # ironlog — self-hosted SIEM
 
 A NIST 800-53-oriented SIEM built from self-hosted components:
-**ClickHouse** for storage and SQL, **Vector** for all collection, **Grafana
-OSS** for dashboards and alerting, **HyperDX** for log search, with native
-local accounts in each app. Keycloak integration is deferred; ironlog does
+**ClickHouse** for storage, SQL and full-text search, **Vector** for all
+collection, and **Grafana OSS** as the single UI for log search, dashboards
+and alerting, with native local accounts. Keycloak integration is deferred; ironlog does
 not deploy an identity provider. No ingest caps, no license keys, no
 phone-home, no per-seat pricing.
 
@@ -32,7 +32,7 @@ each panel tagged with its control ID. Querying: [docs/query-guide.md](docs/quer
 [Ingestion paths](docs/images/ironlog-ingestion/ironlog-ingestion.svg) ·
 [User access and audit flow](docs/images/ironlog-access-audit/ironlog-access-audit.svg)
 
-Each UI authenticates its own local users. Finished queries and processing
+Grafana authenticates its own local users. Finished queries and processing
 errors are captured in `audit.query_archive` under shared database service
 accounts, not individual app identities. Ingest happens through the write-only
 `svc_vector` account; analysts can never write, auditors can also read the
@@ -42,16 +42,19 @@ analyst-activity trail.
 
 | Service | Image (pinned) | License | Role |
 |---|---|---|---|
-| clickhouse | clickhouse/clickhouse-server:24.8 | Apache-2.0 | storage, SQL, RBAC, audit trail |
-| grafana | grafana/grafana-oss:11.4.0 | AGPL-3.0 | dashboards, AU-5 alerting |
-| hyperdx (+mongo 7.0) | docker.hyperdx.io/hyperdx/hyperdx:2.19.0 | MIT | log search / investigations UI |
-| vector-hosts | timberio/vector:0.57.0-debian | MPL-2.0 | host/K8s ingestion (always on) |
-| vector | timberio/vector:0.57.0-debian | MPL-2.0 | AWS ingestion (profile `aws`) |
-| k3s (demo) | rancher/k3s:v1.35.6-k3s1 | Apache-2.0 | local test cluster (profile `k3s`) |
+| clickhouse | clickhouse/clickhouse-server:26.8.34.13 (LTS) | Apache-2.0 | storage, SQL, full-text (text index), RBAC, audit trail |
+| grafana | grafana/grafana:13.3.0 + ClickHouse plugin 4.23.4 | AGPL-3.0 | log search, dashboards, AU-5 alerting |
+| vector-hosts | timberio/vector:0.61.0-debian | MPL-2.0 | host/K8s ingestion (always on) |
+| vector | timberio/vector:0.61.0-debian | MPL-2.0 | AWS ingestion (profile `aws`) |
+| k3s (demo) | rancher/k3s:v1.37.1-k3s1 | Apache-2.0 | local test cluster (profile `k3s`) |
 
-License note: MongoDB (HyperDX app-state only — no audit data) is SSPL: free
-to self-host, no caps or keys, not OSI-approved; accepted and documented in
-control-mapping.
+Grafana ships as `grafana/grafana`: the `grafana-oss` repository stopped
+publishing at 13.0.2. The plugin version is pinned in
+`scripts/ami/grafana-clickhouse-plugin.version`.
+
+License status: HyperDX and its MongoDB (SSPL) were removed; the remaining
+component licenses in this table (Apache-2.0, AGPL-3.0, MPL-2.0) are
+OSI-approved.
 
 ## Repository layout
 
@@ -96,20 +99,23 @@ can be staged from local media or an accessible S3 bucket.
 
 | URL | What | Auth |
 |---|---|---|
-| http://localhost:3000 | Grafana — dashboards, SQL (Explore), alerts | Local `admin` / `IronlogDev123!` |
-| http://localhost:8081 | HyperDX — log search, investigations | Local `admin@ironlog.local` / `IronlogDev123!` |
+| http://localhost:3000 | Grafana — log search, dashboards, SQL (Explore), alerts | Local `admin` / `IronlogDev123!` |
 
 These are generic development credentials for fresh installs. Existing app
 accounts are preserved. See [local authentication](docs/local-auth.md) for
 configuration and upgrade instructions; no hosts-file entry is needed.
 
-On the **appliance**, connect to `http://<appliance-host>:3000` and
-`http://<appliance-host>:8081` when `APPLIANCE_TLS=false`. HTTPS URLs require
+On the **appliance**, connect to `http://<appliance-host>:3000` when
+`APPLIANCE_TLS=false`. HTTPS URLs require
 a configured TLS terminator; setting `APPLIANCE_TLS=true` does not install one.
 ClickHouse (`:8123`/`:9000`) stays bound to
 loopback in both deployments and is never published.
 
 Dashboards (Grafana -> SIEM folder):
+- **Log Search**: free-text search across Linux, Windows, Kubernetes,
+  CloudTrail and GuardDuty events via the `siem.log_search` view, using ClickHouse text indexes
+  (`hasAllTokens` / `hasAnyTokens`), with source/host/user filters, log
+  volume, and a logs panel with context. Linked from AWS Security Overview.
 - **800-53 Logging Evidence — Weekly ISSO Review**: the weekly audit pass —
   at-a-glance posture stats (tampering, root usage, failed auth, GuardDuty),
   then Windows / Linux / AWS sections with every AU-2-committed event family,
@@ -127,13 +133,9 @@ Run these commands from the repository root in a Bash shell.
 1. Prereqs: Podman with a working Compose provider, Bash, and OpenSSL.
    Docker Engine with Compose v2 is also supported.
 2. `./bootstrap.sh` — generates `.env` with generic app logins and random
-   backend credentials, starts the stack, provisions the HyperDX local
-   account, and verifies RBAC. An optional email argument replaces the
-   default HyperDX email.
+   backend credentials, starts the stack, and verifies RBAC.
 3. Open http://localhost:3000 and log in as `admin` / `IronlogDev123!`.
-4. Open http://localhost:8081 and log in as `admin@ironlog.local` /
-   `IronlogDev123!`. The first account seeds its ClickHouse sources.
-5. Onboard data sources (next section).
+4. Onboard data sources (next section).
 
 Podman is the default. For Docker, run
 `IRONLOG_CONTAINER_RUNTIME=docker ./bootstrap.sh`. Bootstrap records the
@@ -190,16 +192,16 @@ layout, S3 staging, and private-network configuration.
    appliance refuses to start rather than come up with default credentials.
 3. Every value is a literal, or `ssm://`, `asm://`, `file:///` (air-gapped
    enclaves), or `generate:<bytes>`. Nothing secret is baked into the AMI.
-4. Use the local logins above. Account bootstrap runs after HyperDX starts;
-   check its separate service result before declaring the appliance ready.
+4. Use the Grafana local login above.
 
-What first boot does: resolves secrets, derives the Grafana/HyperDX URLs from
+What first boot does: resolves secrets, derives the Grafana URL from
 `APPLIANCE_FQDN` + `APPLIANCE_TLS`, mounts the data volume at
 `/var/lib/ironlog`, then reconciles the ClickHouse schema and service accounts
 **on every boot** (`ironlog-schema.service`) — all DDL is
-`CREATE ... IF NOT EXISTS`, and the unit fails loudly with recovery
-instructions if the 7 `siem.*` tables, `audit.query_archive` and 4 service
-accounts aren't all present afterwards.
+`CREATE ... IF NOT EXISTS` (existing installs get the text indexes added and
+materialized, and the old `tokenbf_v1` message indexes dropped), and the unit
+fails loudly with recovery instructions if the 7 `siem.*` tables,
+`audit.query_archive` and 3 service accounts aren't all present afterwards.
 
 Disk layout is STIG-shaped: separate LVs for `/home`, `/var`, `/var/log`,
 `/var/log/audit`, `/var/tmp`, `/tmp`, with SIEM data on its own EBS volume at
@@ -225,7 +227,7 @@ Phase 2 block in `.env`, uncomment `COMPOSE_PROFILES=aws`, `scripts/compose.sh u
 
 ## Security model
 
-- **Authentication**: Grafana and HyperDX use separate native local accounts.
+- **Authentication**: Grafana uses native local accounts.
   Anonymous access is not enabled. No SSO or mandatory MFA is provided in
   this mode. Future OIDC integration will use an existing external Keycloak;
   ironlog will not deploy Keycloak or its Postgres database.
@@ -234,7 +236,7 @@ Phase 2 block in `.env`, uncomment `COMPOSE_PROFILES=aws`, `scripts/compose.sh u
   | Account | Can | Cannot |
   |---|---|---|
   | svc_vector | INSERT siem.* | read anything |
-  | svc_grafana_analyst / svc_hyperdx | SELECT siem.* | write; read audit.* |
+  | svc_grafana_analyst | SELECT siem.* | write; read audit.* |
   | svc_grafana_auditor | SELECT siem.* + audit.* | write |
   | siem_admin (bootstrap) | everything | — |
 
@@ -243,7 +245,7 @@ Phase 2 block in `.env`, uncomment `COMPOSE_PROFILES=aws`, `scripts/compose.sh u
   8 GB / 120 s / 20B-rows per query.
 - **Audit trail (AU-9)**: an incremental MV copies every finished query from
   system.query_log into append-only `audit.query_archive` (2-year TTL) —
-  including every query Grafana and HyperDX run on anyone's behalf.
+  including every query Grafana runs on anyone's behalf.
 - **Network**: ClickHouse/native+HTTP bound to localhost on the host; the
   in-container `default` user is loopback-confined; ingest listeners (:6000,
   :8088) are token/marker-validated at the aggregator and write-only at the DB.
@@ -261,7 +263,7 @@ The `docs/` directory is an [Open Knowledge Format](https://github.com/GoogleClo
 - [docs/control-mapping.md](docs/control-mapping.md) — control -> artifact map (auditor-facing)
 - [docs/event-catalog.md](docs/event-catalog.md) — the AU-2 commitment; VRL implements exactly this
 - [docs/retention-policy.md](docs/retention-policy.md) — AU-11 numbers (DRAFT: total-retention needs confirmation)
-- [docs/query-guide.md](docs/query-guide.md) — analyst quick-start for HyperDX + Grafana
+- [docs/query-guide.md](docs/query-guide.md) — analyst quick-start for Grafana search and SQL
 - AU-5: provisioned alert rules fire on source silence (per-table thresholds),
   and on ClickHouse being unreachable (NoData/Error -> alerting). Notifications
   route to the `siem-oncall` contact point — set a real address + SMTP.
@@ -279,12 +281,12 @@ The `docs/` directory is an [Open Knowledge Format](https://github.com/GoogleClo
       podman run --rm -v "$PWD/vector:/cfg:ro,z" -e AWS_REGION=x \
         -e SQS_URL_CLOUDTRAIL=x -e SQS_URL_GUARDDUTY=x -e SQS_URL_VPCFLOW=x \
         -e SQS_URL_S3ACCESS=x -e CH_VECTOR_PASSWORD=x \
-        docker.io/timberio/vector:0.57.0-debian test /cfg/vector.yaml /cfg/tests.yaml
+        docker.io/timberio/vector:0.61.0-debian test /cfg/vector.yaml /cfg/tests.yaml
       podman run --rm -v "$PWD/vector:/cfg:ro,z" -e SPLUNK_HEC_TOKEN=x \
         -e CH_VECTOR_PASSWORD=x \
-        docker.io/timberio/vector:0.57.0-debian test /cfg/hosts.yaml /cfg/tests-hosts.yaml
+        docker.io/timberio/vector:0.61.0-debian test /cfg/hosts.yaml /cfg/tests-hosts.yaml
 
-- **Account recovery**: local app accounts persist in Grafana/MongoDB data.
+- **Account recovery**: local app accounts persist in Grafana data.
   Changing initial-account environment values does not reset existing users.
   See [local authentication](docs/local-auth.md).
 - **Version bumps**: images are pinned; bump deliberately, one at a time, and
@@ -319,16 +321,18 @@ Hard-won lessons encoded in this repo — check here before debugging:
 - **Pods inside in-docker k3s can't resolve docker DNS names** (k3s swaps
   loopback resolvers for a public one) — `k8s/k3s-demo-up.sh` patches the
   shipper endpoint to the aggregator IP.
-- **HyperDX DEFAULT_CONNECTIONS/DEFAULT_SOURCES seed only when the first user
-  registers**, and malformed JSON is skipped silently.
+- **Vector 0.61 agent sinks**: `compression: true` was removed in 0.59 (use
+  `"gzip"`), and since 0.61 a scheme-less sink address defaults to https, so
+  agents prefix `http://` to reach the plaintext aggregator on :6000.
 - **ClickHouse's docker entrypoint runs `/docker-entrypoint-initdb.d` only when
   the data directory is empty.** A container that dies partway through init
   leaves a non-empty `metadata/` and the DDL is then skipped *forever* on every
   subsequent start — a healthy-looking server with no schema. `SELECT 1`
   healthchecks pass against an empty database, so nothing downstream notices;
   this is why the appliance reconciles the schema as a separate gated unit.
-- **ClickHouse 24.8 rejects `REFRESH ... APPEND` MVs** (newer + experimental);
-  the audit trail uses a standard incremental MV instead. `system.query_log`
+- **The audit trail uses a standard incremental MV**, chosen on ClickHouse
+  24.8 where `REFRESH ... APPEND` was experimental, and kept on 26.8.
+  `system.query_log`
   doesn't exist until first flush — DDL runs `SYSTEM FLUSH LOGS` first.
 - WSL idle-shutdown stops the stack between sessions; the boot task (or any
   open WSL shell) keeps it alive.
