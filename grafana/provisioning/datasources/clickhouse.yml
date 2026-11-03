@@ -10,6 +10,12 @@ datasources:
       protocol: native
       username: svc_grafana_analyst
       defaultDatabase: siem
+      # "Show context" in the Log Search dashboard's Logs panel pins the
+      # surrounding lines to the same source + host (plugin: logs.contextColumns).
+      logs:
+        contextColumns:
+          - source
+          - host
     secureJsonData:
       password: $CH_GRAFANA_ANALYST_PASSWORD
   - name: SIEM (audit trail)
