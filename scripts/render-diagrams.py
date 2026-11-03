@@ -50,13 +50,14 @@ def render(name, output_root):
             raise RuntimeError(item["text"][:1500])
     document = text_document(content, "<mxfile")
     description = json.loads(text_document(call("describe", {"document": document}), "{"))
-    ids = {device["label"]: device["id"]
+    # Layout keys use the first line of a multi-line label (role captions follow).
+    ids = {device["label"].split(chr(10))[0]: device["id"]
            for page in description["pages"] for device in page["devices"]}
     # Zones are annotations, so describe omits them. Read their ids from XML;
     # all mutations still go through Drawbridge's public edit tool.
     for cell in ET.fromstring(document).iter("mxCell"):
         if "drawbridge=zone;" in cell.get("style", ""):
-            ids[cell.get("value")] = cell.get("id")
+            ids[cell.get("value").split(chr(10))[0]] = cell.get("id")
     ops = [{"op": "update_node", "id": ids[label], **properties}
            for label, properties in layout.items()]
     document = text_document(call("edit_diagram", {

@@ -1,78 +1,170 @@
 {
-  "01  SOURCES": {
-    "x": 80,
+  "01  SOURCES - what produces events": {
+    "x": 40,
     "y": 80,
-    "w": 220,
-    "h": 700,
+    "w": 440,
+    "h": 1050,
     "color": "#7C3AED"
   },
-  "02  INGESTION": {
-    "x": 440,
+  "02  INGESTION - collect, normalise, buffer": {
+    "x": 640,
     "y": 80,
-    "w": 220,
-    "h": 700,
+    "w": 440,
+    "h": 1050,
     "color": "#0D9488"
   },
-  "03  DATA": {
-    "x": 800,
+  "03  DATA - ClickHouse 24.8 (event store, SQL, RBAC)": {
+    "x": 1240,
     "y": 80,
-    "w": 220,
-    "h": 700,
+    "w": 440,
+    "h": 1050,
     "color": "#2563EB"
   },
-  "04  APPLICATIONS": {
-    "x": 1160,
+  "04  APPLICATIONS - search and alert": {
+    "x": 1840,
     "y": 80,
-    "w": 220,
-    "h": 700,
+    "w": 440,
+    "h": 1050,
     "color": "#D97706"
   },
-  "Hosts + Kubernetes": {
-    "x": 116,
-    "y": 160,
-    "w": 148,
-    "h": 108
+  "05  PEOPLE": {
+    "x": 2440,
+    "y": 80,
+    "w": 440,
+    "h": 1050,
+    "color": "#7C3AED"
   },
-  "AWS logs (optional)": {
-    "x": 116,
-    "y": 420,
-    "w": 148,
-    "h": 108
+  "Windows hosts - Vector agent [AU-12]": {
+    "x": 50,
+    "y": 140,
+    "w": 420,
+    "h": 170
   },
-  "Vector Hosts": {
-    "x": 476,
-    "y": 160,
-    "w": 148,
-    "h": 108
+  "Linux hosts - Vector agent [AU-12]": {
+    "x": 50,
+    "y": 340,
+    "w": 420,
+    "h": 170
   },
-  "Vector AWS (optional)": {
-    "x": 476,
-    "y": 420,
-    "w": 148,
-    "h": 108
+  "Kubernetes - vector-shipper [AU-12]": {
+    "x": 50,
+    "y": 540,
+    "w": 420,
+    "h": 170
   },
-  "ClickHouse": {
-    "x": 836,
-    "y": 290,
-    "w": 148,
-    "h": 108
+  "AWS logs - OPTIONAL [AU-12]": {
+    "x": 50,
+    "y": 860,
+    "w": 420,
+    "h": 170
   },
-  "Grafana OSS": {
-    "x": 1196,
-    "y": 160,
-    "w": 148,
-    "h": 108
+  "Vector Hosts 0.57.0 - always on [AU-3]": {
+    "x": 650,
+    "y": 340,
+    "w": 420,
+    "h": 170
   },
-  "HyperDX": {
-    "x": 1196,
-    "y": 420,
-    "w": 148,
-    "h": 108
+  "Vector AWS 0.57.0 - OPTIONAL [AU-3]": {
+    "x": 650,
+    "y": 860,
+    "w": 420,
+    "h": 170
   },
-  "MongoDB": {
-    "x": 1196,
-    "y": 630,
-    "w": 148,
-    "h": 108
+  "siem database - 30-day TTL [AU-11]": {
+    "x": 1250,
+    "y": 140,
+    "w": 420,
+    "h": 170
+  },
+  "audit.query_archive - 2-year TTL [AU-9]": {
+    "x": 1250,
+    "y": 340,
+    "w": 420,
+    "h": 170
+  },
+  "svc_vector - write-only [AU-9]": {
+    "x": 1250,
+    "y": 540,
+    "w": 420,
+    "h": 170
+  },
+  "Read-only accounts [AC-6]": {
+    "x": 1250,
+    "y": 740,
+    "w": 420,
+    "h": 170
+  },
+  "S3 tiering - NOT DEPLOYED [AU-4]": {
+    "x": 1250,
+    "y": 940,
+    "w": 420,
+    "h": 170
+  },
+  "Grafana OSS 11.4.0 - :3000 [AU-5, AU-6]": {
+    "x": 1850,
+    "y": 140,
+    "w": 420,
+    "h": 170
+  },
+  "HyperDX 2.19.0 - :8081 - optional UI [AU-6]": {
+    "x": 1850,
+    "y": 540,
+    "w": 420,
+    "h": 170
+  },
+  "MongoDB 7.0 - internal :27017": {
+    "x": 1850,
+    "y": 860,
+    "w": 420,
+    "h": 170
+  },
+  "Analysts and auditors": {
+    "x": 2450,
+    "y": 390,
+    "w": 420,
+    "h": 170
+  },
+  "LEGEND - colours, lines and tags": {
+    "x": 40,
+    "y": 1200,
+    "w": 2840,
+    "h": 260,
+    "color": "#6B7280"
+  },
+  "Purple": {
+    "x": 65,
+    "y": 1270,
+    "w": 300,
+    "h": 150
+  },
+  "Teal": {
+    "x": 395,
+    "y": 1270,
+    "w": 300,
+    "h": 150
+  },
+  "Blue": {
+    "x": 725,
+    "y": 1270,
+    "w": 300,
+    "h": 150
+  },
+  "Amber": {
+    "x": 1055,
+    "y": 1270,
+    "w": 300,
+    "h": 150
+  },
+  "Grey": {
+    "x": 1385,
+    "y": 1270,
+    "w": 300,
+    "h": 150
+  },
+  "Lines and tags": {
+    "x": 1715,
+    "y": 1270,
+    "w": 1140,
+    "h": 150
   }
 }
