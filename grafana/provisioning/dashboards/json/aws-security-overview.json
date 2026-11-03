@@ -9,6 +9,7 @@
   "time": { "from": "now-24h", "to": "now" },
   "editable": false,
   "graphTooltip": 1,
+  "links": [ { "title": "Log Search", "type": "link", "url": "/d/log-search/log-search", "icon": "search", "keepTime": true } ],
   "panels": [
     {
       "id": 1,
@@ -71,7 +72,12 @@
       "description": "Any use of the AWS root principal. Expected: none. Investigate every row (CIS 1.7 / IA-2).",
       "gridPos": { "x": 0, "y": 8, "w": 12, "h": 9 },
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "siem-analyst" },
-      "fieldConfig": { "defaults": { "custom": { "filterable": true } }, "overrides": [] },
+      "fieldConfig": {
+        "defaults": { "custom": { "filterable": true } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "event_name" }, "properties": [ { "id": "links", "value": [ { "title": "Search this event in Log Search", "url": "/d/log-search/log-search?${__url_time_range}&var-source=cloudtrail&var-search=${__data.fields.event_name:percentencode}" } ] } ] }
+        ]
+      },
       "targets": [
         {
           "refId": "A",
@@ -90,7 +96,12 @@
       "description": "Non-read-only calls to iam.amazonaws.com: user/role/policy create, delete, attach, key rotation. Review daily (AC-2).",
       "gridPos": { "x": 12, "y": 8, "w": 12, "h": 9 },
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "siem-analyst" },
-      "fieldConfig": { "defaults": { "custom": { "filterable": true } }, "overrides": [] },
+      "fieldConfig": {
+        "defaults": { "custom": { "filterable": true } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "event_name" }, "properties": [ { "id": "links", "value": [ { "title": "Search this event in Log Search", "url": "/d/log-search/log-search?${__url_time_range}&var-source=cloudtrail&var-search=${__data.fields.event_name:percentencode}" } ] } ] }
+        ]
+      },
       "targets": [
         {
           "refId": "A",
