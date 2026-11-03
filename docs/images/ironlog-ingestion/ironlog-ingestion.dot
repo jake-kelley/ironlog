@@ -8,12 +8,12 @@ digraph ironlog_ingestion {
  }
  subgraph cluster_ingestion {
   kind=zone; label="02  INGESTION";
-  hosts [kind=container label="Vector Hosts" color="#0D9488" notes="Teal: always-on collector. Native TCP 6000; HEC 8088. VRL normalization; per-sink disk buffers."];
-  awsCollector [kind=container label="Vector AWS (optional)" color="#0D9488" notes="Teal: optional AWS collector. Reads SQS notifications and fetches S3 objects; VRL transforms and disk buffers."];
+  hosts [kind=container label="Vector Hosts 0.61.0" color="#0D9488" notes="Teal: always-on collector. Native TCP 6000; HEC 8088. VRL normalization; per-sink disk buffers."];
+  awsCollector [kind=container label="Vector AWS 0.61.0 (optional)" color="#0D9488" notes="Teal: optional AWS collector. Reads SQS notifications and fetches S3 objects; VRL transforms and disk buffers."];
  }
  subgraph cluster_database {
   kind=zone; label="03  EVENT STORAGE";
-  ch [kind=database label="ClickHouse" color="#2563EB" notes="Blue: event storage. Seven typed tables: cloudtrail, guardduty, vpc_flow, s3_access, windows_events, linux_syslog, k8s_logs. INSERT-only svc_vector. Current table retention: 30 days; selected raw fields: 7 days."];
+  ch [kind=database label="ClickHouse 26.8" color="#2563EB" notes="Blue: event storage. ClickHouse 26.8.34.13 LTS. Seven typed tables: cloudtrail, guardduty, vpc_flow, s3_access, windows_events, linux_syslog, k8s_logs (text index on message for the last three). INSERT-only svc_vector. Current table retention: 30 days; selected raw fields: 7 days."];
  }
  windows -> hosts [label="Native TCP 6000"];
  linux -> hosts [label="Native TCP 6000"];

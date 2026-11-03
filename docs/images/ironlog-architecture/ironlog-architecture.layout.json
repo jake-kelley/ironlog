@@ -13,14 +13,14 @@
     "h": 1050,
     "color": "#0D9488"
   },
-  "03  DATA - ClickHouse 24.8 (event store, SQL, RBAC)": {
+  "03  DATA - ClickHouse 26.8.34.13 LTS (event store, SQL, RBAC)": {
     "x": 1240,
     "y": 80,
     "w": 440,
     "h": 1050,
     "color": "#2563EB"
   },
-  "04  APPLICATIONS - search and alert": {
+  "04  APPLICATIONS - Grafana, the only UI": {
     "x": 1840,
     "y": 80,
     "w": 440,
@@ -58,13 +58,13 @@
     "w": 420,
     "h": 170
   },
-  "Vector Hosts 0.57.0 - always on [AU-3]": {
+  "Vector Hosts 0.61.0 - always on [AU-3]": {
     "x": 650,
     "y": 340,
     "w": 420,
     "h": 170
   },
-  "Vector AWS 0.57.0 - OPTIONAL [AU-3]": {
+  "Vector AWS 0.61.0 - OPTIONAL [AU-3]": {
     "x": 650,
     "y": 860,
     "w": 420,
@@ -100,21 +100,9 @@
     "w": 420,
     "h": 170
   },
-  "Grafana OSS 11.4.0 - :3000 [AU-5, AU-6]": {
+  "Grafana 13.3.0 - :3000 [AU-5, AU-6]": {
     "x": 1850,
-    "y": 140,
-    "w": 420,
-    "h": 170
-  },
-  "HyperDX 2.19.0 - :8081 - optional UI [AU-6]": {
-    "x": 1850,
-    "y": 540,
-    "w": 420,
-    "h": 170
-  },
-  "MongoDB 7.0 - internal :27017": {
-    "x": 1850,
-    "y": 860,
+    "y": 390,
     "w": 420,
     "h": 170
   },

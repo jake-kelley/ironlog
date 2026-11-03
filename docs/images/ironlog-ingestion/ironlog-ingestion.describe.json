@@ -38,7 +38,7 @@
         {
           "id": "n8",
           "kind": "container",
-          "label": "Vector Hosts",
+          "label": "Vector Hosts 0.61.0",
           "data": {
             "notes": "Teal: always-on collector. Native TCP 6000; HEC 8088. VRL normalization; per-sink disk buffers."
           }
@@ -46,7 +46,7 @@
         {
           "id": "n9",
           "kind": "container",
-          "label": "Vector AWS (optional)",
+          "label": "Vector AWS 0.61.0 (optional)",
           "data": {
             "notes": "Teal: optional AWS collector. Reads SQS notifications and fetches S3 objects; VRL transforms and disk buffers."
           }
@@ -54,9 +54,9 @@
         {
           "id": "n10",
           "kind": "database",
-          "label": "ClickHouse",
+          "label": "ClickHouse 26.8",
           "data": {
-            "notes": "Blue: event storage. Seven typed tables: cloudtrail, guardduty, vpc_flow, s3_access, windows_events, linux_syslog, k8s_logs. INSERT-only svc_vector. Current table retention: 30 days; selected raw fields: 7 days."
+            "notes": "Blue: event storage. ClickHouse 26.8.34.13 LTS. Seven typed tables: cloudtrail, guardduty, vpc_flow, s3_access, windows_events, linux_syslog, k8s_logs (text index on message for the last three). INSERT-only svc_vector. Current table retention: 30 days; selected raw fields: 7 days."
           }
         }
       ],
@@ -69,7 +69,7 @@
           },
           "to": {
             "device": "n8",
-            "label": "Vector Hosts"
+            "label": "Vector Hosts 0.61.0"
           },
           "label": "Native TCP 6000"
         },
@@ -81,7 +81,7 @@
           },
           "to": {
             "device": "n8",
-            "label": "Vector Hosts"
+            "label": "Vector Hosts 0.61.0"
           },
           "label": "Native TCP 6000"
         },
@@ -93,7 +93,7 @@
           },
           "to": {
             "device": "n8",
-            "label": "Vector Hosts"
+            "label": "Vector Hosts 0.61.0"
           },
           "label": "HEC 8088 + token"
         },
@@ -105,7 +105,7 @@
           },
           "to": {
             "device": "n9",
-            "label": "Vector AWS (optional)"
+            "label": "Vector AWS 0.61.0 (optional)"
           },
           "label": "Notifications + objects"
         },
@@ -113,11 +113,11 @@
           "id": "e5",
           "from": {
             "device": "n8",
-            "label": "Vector Hosts"
+            "label": "Vector Hosts 0.61.0"
           },
           "to": {
             "device": "n10",
-            "label": "ClickHouse"
+            "label": "ClickHouse 26.8"
           },
           "label": "svc_vector / INSERT"
         },
@@ -125,11 +125,11 @@
           "id": "e6",
           "from": {
             "device": "n9",
-            "label": "Vector AWS (optional)"
+            "label": "Vector AWS 0.61.0 (optional)"
           },
           "to": {
             "device": "n10",
-            "label": "ClickHouse"
+            "label": "ClickHouse 26.8"
           },
           "label": "svc_vector / INSERT"
         }

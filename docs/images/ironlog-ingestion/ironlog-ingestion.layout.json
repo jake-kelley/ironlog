@@ -44,19 +44,19 @@
     "w": 148,
     "h": 108
   },
-  "Vector Hosts": {
+  "Vector Hosts 0.61.0": {
     "x": 606,
     "y": 330,
     "w": 148,
     "h": 108
   },
-  "Vector AWS (optional)": {
+  "Vector AWS 0.61.0 (optional)": {
     "x": 606,
     "y": 730,
     "w": 148,
     "h": 108
   },
-  "ClickHouse": {
+  "ClickHouse 26.8": {
     "x": 1086,
     "y": 530,
     "w": 148,

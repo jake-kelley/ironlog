@@ -1,58 +1,98 @@
 ---
 type: Guide
 title: Querying the SIEM
-description: Analyst quick-start for interactive search in HyperDX and SQL/dashboards in Grafana over the siem.* tables.
-tags: [au-6, querying, hyperdx, grafana]
-timestamp: 2026-07-16T00:00:00Z
+description: Analyst quick-start for free-text search (Log Search dashboard, siem.log_search, hasAllTokens/hasAnyTokens) and SQL/dashboards in Grafana over the siem.* tables.
+tags: [au-6, querying, grafana]
+timestamp: 2026-11-03T00:00:00Z
 ---
 
 # Querying the SIEM — analyst quick-start (AU-6)
 
-Two UIs, one database. **HyperDX** (`http://APPLIANCE_FQDN:8081`) is for
-interactive search and investigations — fast filtering, log tailing,
-drill-down. **Grafana** (`http://APPLIANCE_FQDN:3000`) is for SQL,
-dashboards, and alerting. Replace `APPLIANCE_FQDN` with `localhost` for
-connected development. Both read the
-same `siem.*` tables, and every query either tool runs is itself recorded in
-`audit.query_archive` (that's the AU-9 analyst audit trail working).
+One UI, one database. **Grafana** (`http://APPLIANCE_FQDN:3000`) is for
+free-text log search, SQL, dashboards, and alerting. Replace `APPLIANCE_FQDN`
+with `localhost` for connected development. Every query Grafana runs is
+recorded in `audit.query_archive` under the datasource's service account
+(`svc_grafana_analyst` or `svc_grafana_auditor`), not under your Grafana user.
+HyperDX is no longer part of the stack.
 
-## HyperDX: search
+## Log Search dashboard
 
-1. Log in with your local HyperDX account. Fresh development default:
-   `admin@ironlog.local` / `IronlogDev123!` (see [local authentication](local-auth.md)).
-2. Left sidebar -> **Search**. Top of the page has three controls that matter:
-   - **Source dropdown** (top-left): pick the table — `linux_syslog`,
-     `k8s_logs`, `CloudTrail`, `windows_events`, ...
-   - **Search box**: Lucene-style filters (below).
-   - **Time range picker** (top-right): defaults short — widen it if you see
-     nothing ("Last 1 day" is a good start).
-3. Click any result row to open the full event with every column.
+1. Log in at http://localhost:3000 (see [local authentication](local-auth.md)).
+2. **Dashboards -> SIEM folder -> Log Search**.
+3. Set the controls at the top:
+   - **Search**: words to find in the message. Matching is token-based and
+     case-insensitive; leave empty to list everything in range.
+   - **Mode**: `all` (every word must appear) or `any` (at least one).
+   - **Source**: `linux`, `windows`, `k8s`, `cloudtrail`, `guardduty`.
+   - **Host** and **User**: filter lists built from the current time range.
+   - Time range picker (top-right): widen it if you see nothing.
+4. Panels: *Log volume by source*, *Matching logs* (Logs panel; context
+   columns `source` and `host`) and *Matching events (table)*. Each lists at
+   most 200 rows, newest first.
 
-Search syntax (Lucene-style; column names = the ClickHouse columns):
+The dashboard reads the `SIEM (analyst)` datasource. The AWS Security Overview
+dashboard links to it.
 
-    sudo                          bare word: full-text over the message/body
-    identifier:sshd               column equals value
-    identifier:sudo OR identifier:su
-    host:jdesktop AND priority:3
-    namespace:kube-system         (k8s_logs source)
-    pod:vector-shipper*           trailing wildcard
-    level:stderr                  k8s: container stderr lines
-    -identifier:kernel            minus = NOT
-    "Failed password"             quoted phrase
+## The `siem.log_search` view
 
-There is also a SQL mode toggle in the search bar if you'd rather write a raw
-WHERE clause. Saved searches (Save button) become the basis for HyperDX alerts.
+One relation over every free-text log table (`clickhouse/ddl/050_search.sql`):
+`linux_syslog`, `windows_events`, `k8s_logs`, `cloudtrail`, `guardduty`.
+`vpc_flow` and `s3_access` are not in it; query them directly.
 
-After a source is onboarded, try a source-specific query such as
-`identifier:sudo` in `linux_syslog` or `namespace:kube-system` in `k8s_logs`.
-No live data flow is asserted by this guide.
+| Column | Meaning |
+|---|---|
+| `event_time` | event time |
+| `source` | `linux`, `windows`, `k8s`, `cloudtrail`, `guardduty` |
+| `origin` | journald/auditd + identifier, Windows channel, `namespace/container`, CloudTrail event source, GuardDuty finding type |
+| `host`, `user` | host / computer / node / AWS account; user name or principal ARN (`''` for k8s and GuardDuty) |
+| `level` | `critical`, `error`, `warning`, `info`, `debug` |
+| `message` | text to display |
+| `search_text` | text to match; always search this column, not `message` |
+
+The view is `SQL SECURITY INVOKER`: you only see what your ClickHouse account
+may read from the base tables.
+
+## Token search: hasAllTokens / hasAnyTokens
+
+`linux_syslog`, `windows_events` and `k8s_logs` carry a text index
+`idx_msg_text` on `message` (tokenizer `splitByNonAlpha`, lower-cased on both
+sides). Use `hasAllTokens` / `hasAnyTokens`; they use the index and are
+case-insensitive there. `LIKE '%x%'` is not accelerated. Do not wrap the column
+in `lower()`: that switches the index off.
+
+    -- every word must appear (AND)
+    SELECT event_time, host, identifier, message
+    FROM siem.linux_syslog
+    WHERE event_time > now() - INTERVAL 1 DAY
+      AND hasAllTokens(message, 'failed password')
+    ORDER BY event_time DESC LIMIT 100
+
+    -- any word may appear (OR)
+    SELECT event_time, computer, message
+    FROM siem.windows_events
+    WHERE event_time > now() - INTERVAL 1 DAY
+      AND hasAnyTokens(message, 'denied refused')
+    ORDER BY event_time DESC LIMIT 100
+
+    -- across every source at once
+    SELECT event_time, source, origin, host, user, level, message
+    FROM siem.log_search
+    WHERE event_time > now() - INTERVAL 1 HOUR
+      AND hasAllTokens(search_text, 'sudo')
+    ORDER BY event_time DESC LIMIT 100
+
+The CloudTrail and GuardDuty branches have no text index; their `search_text`
+is built from descriptive columns and lower-cased, so search them with
+lower-case words (the dashboard lower-cases your input) and expect a
+partition-pruned scan rather than an index lookup.
 
 ## Grafana: SQL + dashboards
 
 1. Log in locally at http://localhost:3000. Fresh development default:
    `admin` / `IronlogDev123!`. Existing accounts retain their passwords.
-2. **Dashboards -> SIEM folder -> AWS Security Overview** — provisioned from
-   git; populates once AWS ingestion is live.
+2. **Dashboards -> SIEM folder** — *Log Search*, *AWS Security Overview*
+   (populates once AWS ingestion is live), the weekly NIST evidence dashboard
+   and pipeline health; all provisioned from git.
 3. For ad-hoc SQL: **Explore** (compass icon) -> datasource **SIEM (analyst)**
    -> switch the editor to **SQL Editor** mode -> paste, then Run query.
 

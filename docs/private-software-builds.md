@@ -9,7 +9,7 @@ timestamp: 2026-09-15T00:00:00Z
 # RHEL 9 and private software builds
 
 RHEL 9 is the shipping target; Rocky 9 remains the development option. Both
-use the same appliance provisioners and local Grafana/HyperDX authentication.
+use the same appliance provisioners and local Grafana authentication.
 The architecture remains **arm64**. This change does not add x86_64 support
 or establish RHEL FIPS/STIG compliance through Rocky testing.
 
@@ -65,8 +65,6 @@ images.tsv
 images/
   clickhouse.tar
   grafana.tar
-  hyperdx.tar
-  mongo.tar
   vector.tar
 grafana-plugins/
   grafana-clickhouse-datasource/
@@ -88,10 +86,8 @@ a literal tab. Use LF line endings for `bundle.env` and `images.tsv`.
 The required appliance references are:
 
 ```text
-docker.io/clickhouse/clickhouse-server:24.8
+docker.io/clickhouse/clickhouse-server:26.8.34.13
 docker.io/grafana/grafana:13.3.0
-docker.hyperdx.io/hyperdx/hyperdx:2.19.0
-docker.io/library/mongo:7.0
 docker.io/timberio/vector:0.61.0-debian
 ```
 

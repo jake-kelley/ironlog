@@ -17,9 +17,9 @@ rebuild independent of the container runtime state.
 
 ## Local authentication
 
-Grafana and HyperDX expose native local login, using the development
-credentials in [local authentication](../docs/local-auth.md). No Keycloak,
-Postgres or oauth2-proxy unit is shipped. External Keycloak integration is
+Grafana is the only UI and exposes native local login, using the development
+credentials in [local authentication](../docs/local-auth.md). No HyperDX,
+MongoDB, Keycloak, Postgres or oauth2-proxy unit is shipped. External Keycloak integration is
 deferred; no IdP will be installed on the appliance.
 
 ## Files
@@ -28,12 +28,9 @@ deferred; no IdP will be installed on the appliance.
 |---|---|---|
 | `ironlog.network` | `ironlog-network.service` | Podman network `ironlog-siem`; every container joins it and gets a `NetworkAlias=` matching its original compose service name |
 | `ironlog-clickhouse.container` | `ironlog-clickhouse.service` | ClickHouse storage/query engine |
-| `ironlog-grafana.container` | `ironlog-grafana.service` | Grafana OSS dashboards/alerts, local login |
-| `ironlog-hyperdx-db.container` | `ironlog-hyperdx-db.service` | MongoDB — HyperDX app state only (users/dashboards/searches, no audit data) |
-| `ironlog-hyperdx.container` | `ironlog-hyperdx.service` | HyperDX search/investigation UI, native local login on :8081 |
+| `ironlog-grafana.container` | `ironlog-grafana.service` | Grafana 13.3.0 dashboards/alerts/Log Search, local login |
 | `ironlog-vector-hosts.container` | `ironlog-vector-hosts.service` | Vector aggregator: Linux agents (:6000) + K8s splunk_hec (:8088), always on |
 | `ironlog-vector.container` | `ironlog-vector.service` | Vector aggregator: AWS ingestion (CloudTrail/GuardDuty/VPC Flow/S3 Access via SQS+S3) — **ships disabled**, see below |
-| `hyperdx/default-sources.env` | (baked file, not a unit) | Static, non-secret `DEFAULT_SOURCES` value for HyperDX — deploy to `/opt/ironlog/hyperdx/default-sources.env` |
 
 ## Compose → quadlet diff table
 
@@ -44,20 +41,18 @@ Use this to check nothing was silently dropped, side by side with
 |---|---|---|---|---|---|
 | clickhouse | ironlog-clickhouse.container | clickhouse-data; config.d; users.d/00-lockdown.xml (file); initdb; ddl | /var/lib/ironlog/clickhouse:Z; /opt/ironlog/clickhouse/{config.d,ddl,initdb}:ro,Z; users.d/00-lockdown.xml individually :ro,Z | 127.0.0.1:8123:8123, 127.0.0.1:9000:9000 | same, unchanged (loopback preserved) |
 | grafana | ironlog-grafana.container | grafana-data; provisioning | /var/lib/ironlog/grafana:Z; /opt/ironlog/grafana/provisioning:ro,Z | 3000:3000 | 3000:3000 |
-| hyperdx | ironlog-hyperdx.container | (none) | (none, config via env) | 8081:8080 | 8081:8080 |
-| hyperdx-db | ironlog-hyperdx-db.container | hyperdx-db-data | /var/lib/ironlog/hyperdx-db:Z | (none) | (none) |
 | vector-hosts | ironlog-vector-hosts.container | vector-hosts-buffer; hosts.yaml | /var/lib/ironlog/vector-hosts-buffer:Z; /opt/ironlog/vector/hosts.yaml:ro,Z | 8088:8088, 6000:6000 | 8088:8088, 6000:6000 |
 | vector | ironlog-vector.container | vector-buffer; vector.yaml | /var/lib/ironlog/vector-buffer:Z; /opt/ironlog/vector/vector.yaml:ro,Z | (none published) | (none published) |
 | k3s | — excluded — | k3s-data | — | — | — |
 
 Network aliases (all required — config/env reference these DNS names
-literally): `clickhouse, grafana, hyperdx, hyperdx-db, vector-hosts, vector`. All on `ironlog-siem` (via
+literally): `clickhouse, grafana, vector-hosts, vector`. All on `ironlog-siem` (via
 `ironlog.network`).
 
 ## Ordering: `depends_on condition: service_healthy/service_started` → systemd
 
-Compose only had real healthchecks on **clickhouse and hyperdx-db**.
-Those two quadlets set `HealthCmd=`/`HealthInterval=`/`HealthRetries=` (the
+Compose only has a real healthcheck on **clickhouse**.
+That quadlet sets `HealthCmd=`/`HealthInterval=`/`HealthRetries=` (the
 same probes compose used) plus `Notify=healthy`. `Notify=healthy` makes podman
 send `READY=1` to systemd only once podman's own healthcheck reports
 `healthy`, not just once the process has started — so a plain
@@ -71,8 +66,6 @@ guarantee.
 Current dependency edges:
 - schema reconciliation waits for healthy ClickHouse.
 - Grafana and both Vector units require schema reconciliation.
-- HyperDX requires schema reconciliation and healthy MongoDB.
-- HyperDX local-account bootstrap runs after HyperDX starts.
 
 `vector-hosts` also had a compose healthcheck (bash `/dev/tcp` probe against
 Vector's internal `:8686` API), but nothing in compose's dependency graph
@@ -85,11 +78,11 @@ on it — matching compose's actual behavior, not just its healthcheck block.
 `EnvironmentFile=/etc/ironlog/ironlog.env` (the ONE secrets file, generated
 by the appliance's first-boot secret resolver, using the `.env.example`
 variable names verbatim: `CH_ADMIN_USER`, `CH_VECTOR_PASSWORD`,
-`GRAFANA_ADMIN_PASSWORD`, `HYPERDX_LOCAL_PASSWORD`, etc.) only loads a file's variables
+`GRAFANA_ADMIN_PASSWORD`, etc.) only loads a file's variables
 under their own literal names into a container's environment — it cannot
 rename or interpolate them, and compose did **both**: `CLICKHOUSE_USER:
-${CH_ADMIN_USER}` renames; `MONGO_URI: mongodb://hyperdx:${HYPERDX_DB_PASSWORD}@...`
-interpolates a secret into a larger static string.
+${CH_ADMIN_USER}` renames, and a secret can be interpolated into a larger static
+string.
 
 Fix used throughout: put `EnvironmentFile=/etc/ironlog/ironlog.env` under
 **`[Service]`** (loads the vars into the *unit's own* systemd environment,
@@ -104,19 +97,9 @@ quadlet-specific. Where compose kept the same name in both places (e.g.
 `Environment=CH_VECTOR_PASSWORD=$CH_VECTOR_PASSWORD` for a self-documenting,
 auditable list of exactly which secrets each container consumes.
 
-Two values needed extra care because of systemd's own unit-file quoting
+One value needs extra care because of systemd's own unit-file quoting
 (not `EnvironmentFile=`'s — this is `Environment=` written inline in the
 unit):
-- `DEFAULT_CONNECTIONS` (hyperdx) contains spaces and/or quotes, so the whole
-  `KEY=VALUE` is wrapped in outer `"..."` with internal `"` escaped as `\"`,
-  per systemd's ExecStart quoting rules.
-- `DEFAULT_SOURCES` (hyperdx) is a much larger JSON blob with embedded
-  doubled single-quotes (`'':''`, SQL-string escaping nested inside JSON
-  string values) but **no secrets** — rather than fight that quoting inline,
-  it's baked verbatim as `quadlets/hyperdx/default-sources.env` (deploy to
-  `/opt/ironlog/hyperdx/default-sources.env`), loaded via a second
-  `EnvironmentFile=` in `ironlog-hyperdx.container`'s `[Container]` section.
-  See the comment header in that file for the full reasoning.
 - `ironlog-clickhouse.container`'s `HealthCmd=` needs the opposite: it
   references `$$CLICKHOUSE_USER`/`$$CLICKHOUSE_PASSWORD` (systemd-escaped
   literal `$`, per systemd's "use `$$` for a literal dollar sign") so the
@@ -196,8 +179,6 @@ evidence of a RHEL build, boot, STIG result, or compliance validation.
 ```bash
 # 1. Copy the network file + all *.container files into place (flat, as-is):
 sudo cp quadlets/ironlog.network quadlets/*.container /etc/containers/systemd/
-sudo mkdir -p /opt/ironlog/hyperdx
-sudo cp quadlets/hyperdx/default-sources.env /opt/ironlog/hyperdx/
 
 # 2. Make systemd (re-)run the quadlet generator over the new unit files:
 sudo systemctl daemon-reload
@@ -210,13 +191,12 @@ sudo systemctl daemon-reload
 # 4. Bring the always-on services up (ironlog-vector.service is intentionally
 #    excluded — see "Enabling ironlog-vector.service" above):
 sudo systemctl start ironlog-network.service
-sudo systemctl start ironlog-clickhouse.service ironlog-hyperdx-db.service
+sudo systemctl start ironlog-clickhouse.service
 sudo systemctl start ironlog-schema.service ironlog-vector-hosts.service
-sudo systemctl start ironlog-grafana.service ironlog-hyperdx.service
-sudo systemctl start ironlog-bootstrap-hyperdx-local.service
+sudo systemctl start ironlog-grafana.service
 
-# 5. Confirm everything is actually running and (for the 3 healthchecked
-#    services) healthy:
+# 5. Confirm everything is actually running and (for the healthchecked
+#    service) healthy:
 podman ps
 systemctl status 'ironlog-*.service'
 ```

@@ -1,16 +1,16 @@
 ---
 type: Guide
 title: Local app authentication
-description: Native Grafana and HyperDX logins, development credentials, and the boundary for deferred external identity integration.
-tags: [authentication, deployment, grafana, hyperdx]
+description: Native Grafana login, development credentials, and the boundary for deferred external identity integration.
+tags: [authentication, deployment, grafana]
 timestamp: 2026-09-14T00:00:00Z
 ---
 
 # Local app authentication
 
-Ironlog currently uses each app's native username/password authentication.
+Ironlog currently uses Grafana's native username/password authentication; Grafana is the only UI.
 Keycloak integration is paused. Ironlog does not deploy Keycloak, its
-Postgres database, or oauth2-proxy. Future identity integration will use an
+Postgres database, HyperDX, MongoDB, or oauth2-proxy. Future identity integration will use an
 existing environment-managed Keycloak; it is not enabled by this change.
 
 ## Fresh development installs
@@ -18,11 +18,10 @@ existing environment-managed Keycloak; it is not enabled by this change.
 | App | URL | Username | Password |
 |---|---|---|---|
 | Grafana | http://localhost:3000 | `admin` | `IronlogDev123!` |
-| HyperDX | http://localhost:8081 | `admin@ironlog.local` | `IronlogDev123!` |
 
 On an appliance, replace `localhost` with `APPLIANCE_FQDN`. These shared
 development credentials are intentional defaults, not production secrets.
-Both apps still authenticate users; anonymous query access is not enabled.
+Grafana still authenticates users; anonymous query access is not enabled.
 There is no Keycloak redirect, hosts-file prerequisite, SSO, or enforced MFA.
 
 From the repository root, run `./bootstrap.sh` in a Bash shell. Podman is the
@@ -32,29 +31,20 @@ provider, and its service or machine are ready; only then does it write `.env`.
 The selected runtime is persisted as `IRONLOG_CONTAINER_RUNTIME` in `.env`.
 Existing Docker installs should set `IRONLOG_CONTAINER_RUNTIME=docker` there
 before using `scripts/compose.sh`.
-An optional email argument selects the initial HyperDX user's email.
-Bootstrap generates random database/service credentials, starts the stack,
-and calls `scripts/bootstrap-hyperdx-local.sh podman siem-hyperdx`
-(use `docker` for a Docker deployment) to create
-and verify the HyperDX account. Grafana creates its administrator from its
-initial configuration. HyperDX's first team seeds the configured ClickHouse
-connection and source definitions.
+Bootstrap generates random database/service credentials and starts the
+stack. Grafana creates its administrator from its initial configuration and
+provisions its ClickHouse datasources and dashboards from `grafana/provisioning`.
 
 To choose other credentials in Compose, copy `.env.example` to `.env`,
-set its backend secrets and `GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD`,
-`HYPERDX_LOCAL_EMAIL`, and `HYPERDX_LOCAL_PASSWORD`, then run
-`scripts/compose.sh up -d` from the repository root. Next run the HyperDX
-helper with runtime selected in `.env`: `scripts/bootstrap-hyperdx-local.sh podman siem-hyperdx`
-for Podman, or `scripts/bootstrap-hyperdx-local.sh docker siem-hyperdx` for Docker.
-Set `HYPERDX_SESSION_SECRET` to a random value (`openssl rand -hex 32`);
-it signs native sessions and is independent of the generic login password.
+set its backend secrets and `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD`,
+then run `scripts/compose.sh up -d` from the repository root.
 For an appliance, set overrides in its input config;
 `APPLIANCE_MODE=local` is the supported default. `oidc` and `ldap` are
 deferred and rejected rather than silently producing a different auth mode.
 
 ## Existing deployments
 
-Preserve Grafana, MongoDB, ClickHouse and Vector data. Do not use
+Preserve Grafana, ClickHouse and Vector data. Do not use
 `scripts/compose.sh down -v` to change authentication. Bootstrap refuses to
 overwrite an existing `.env`; update that file with the local auth variables
 from `.env.example` instead.
@@ -63,18 +53,19 @@ Switching from Docker to Podman does not automatically migrate existing Docker
 volumes. Keep `IRONLOG_CONTAINER_RUNTIME=docker` to continue using those
 volumes, or plan and perform a separate data migration before changing runtime.
 
-Before recreating the Compose stack, stop the old `siem-hyperdx-auth`,
-`siem-keycloak` and `siem-keycloak-db` containers if present. The old proxy
-owns port 8081. Preserve their volumes until you decide their data is no
-longer needed. Recreate Grafana and HyperDX using the updated Compose file,
-then run the HyperDX bootstrap helper with the configured existing account.
+Before recreating the Compose stack, stop any old `siem-hyperdx`, `siem-hyperdx-auth`,
+`siem-hyperdx-db`, `siem-keycloak` and `siem-keycloak-db` containers if present;
+they are no longer part of the stack. HyperDX and MongoDB were removed: keep their
+volumes only until you decide the data (HyperDX users and saved searches, which
+are not audit data) is no longer needed. Remove the orphans with
+`scripts/compose.sh up -d --remove-orphans` once you have decided.
+The ClickHouse user `svc_hyperdx` is no longer created; an existing install keeps
+it until an administrator drops it (`DROP USER IF EXISTS svc_hyperdx`).
 
 Default Grafana admin settings only initialize a fresh Grafana database.
 They do not reset the password of an existing administrator. Use that
-administrator's current local credentials. The HyperDX helper verifies an
-existing matching local account; it must not reset users or destroy teams
-when supplied credentials do not match. Such failures need account recovery
-or configuration correction, not deletion of MongoDB data.
+administrator's current local credentials. A mismatch needs account recovery
+or configuration correction, not deletion of the Grafana data volume.
 
 AMI changes apply to new builds. Reusing an existing data volume retains
 app accounts, so configure their actual credentials. Upgrading an already
@@ -83,8 +74,8 @@ running appliance requires installing the new units and scripts; changing
 
 ## Authorization and audit boundaries
 
-ClickHouse's write-only ingest and read-only UI service accounts are
-unchanged. App accounts remain separate from database service accounts.
+ClickHouse's write-only ingest (`svc_vector`) and read-only Grafana accounts
+(`svc_grafana_analyst`, `svc_grafana_auditor`) are unchanged. The Grafana login is separate from database service accounts.
 Queries are archived under shared service usernames, not individual app
 users. Grafana's shared datasources do not enforce separate human analyst
 and auditor access. Generic shared app logins also do not provide individual
@@ -93,6 +84,6 @@ accountability. Local mode does not satisfy an enforced-MFA requirement.
 ## Future external identity integration
 
 When resumed, configure Ironlog as a client of an existing Keycloak.
-Client registration, claim/role mapping, TLS, redirects, and HyperDX's SSO
+Client registration, claim/role mapping, TLS, redirects, and Grafana's SSO
 boundary must be implemented and tested together. Never add an on-box
 Keycloak/Postgres deployment to satisfy that integration.
