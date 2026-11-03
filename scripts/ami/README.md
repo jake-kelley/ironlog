@@ -14,7 +14,7 @@ not rename.
 | `05-software-source.sh` | Runs before partitioning: validates OS and bundle, selects software source, and installs partition prerequisites |
 | `00-partition.sh` | Mounts the data EBS volume at `/var/lib/ironlog`; carves `/home /tmp /var /var/log /var/log/audit /var/tmp` out of the root volume as LVM logical volumes with STIG mount options |
 | `10-baseline.sh` | `dnf update`, installs podman + supporting packages, creates `/opt/ironlog` `/etc/ironlog` `/var/lib/ironlog`, configures container storage, disables podman auto-update, enables chronyd |
-| `20-container-images.sh` | Loads bundle image archives or pulls the five appliance images, verifies arm64 and Quadlet references, and stages the Grafana plugin at build time |
+| `20-container-images.sh` | Loads bundle image archives or pulls the three appliance images, verifies arm64 and Quadlet references, and stages the Grafana plugin at build time |
 | `30-stig.sh` | `oscap xccdf eval --remediate` against `ssg-rhel9-ds.xml`, tailored to skip container-incompatible rules, then a second evidence-only scan; reports land in `/var/log/ironlog-build/` inside the image |
 | `40-fips.sh` | `fips-mode-setup --enable`; logs the RHEL-validated module cert numbers or the Rocky-not-validated warning; documents the outstanding reboot requirement |
 | `90-cleanup.sh` | SSH host keys, cloud-init state, logs, dnf caches, credentials, bash history, machine-id, `fstrim` — preserves `/var/log/ironlog-build/` |
@@ -97,7 +97,7 @@ block); summary here for anyone who doesn't want to read the script:
 2. **Firewalld default-deny** — a real, wanted control, NOT tailored out.
    SSG's remediation turns firewalld on with a default-deny zone but knows
    nothing about ironlog's published ports; `30-stig.sh` opens
-   `8080,3000,8081,8088,6000/tcp` explicitly afterward. **Cross-team
+   `3000,8088,6000/tcp` explicitly afterward. **Cross-team
    follow-up, not fixed here:** none of the quadlet units declare
    `After=`/`Wants=firewalld.service`, so there's a boot-order race between
    firewalld loading these rules and a quadlet publishing its ports — flag

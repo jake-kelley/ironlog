@@ -4,31 +4,29 @@ digraph ironlog_architecture {
     kind=zone; label="01  SOURCES - what produces events";
     win [kind=desktop label="Windows hosts - Vector agent [AU-12]\nRole: ship Security, System, PowerShell/Operational\nevent logs to the aggregator" color="#7C3AED" notes="Purple: event source. vector/agent-windows.yaml, windows_event_log source, installed by scripts/install-windows-agent.ps1."];
     lin [kind=server label="Linux hosts - Vector agent [AU-12]\nRole: ship journald and auditd (audit.log) events\nto the aggregator" color="#7C3AED" notes="Purple: event source. vector/agent-linux.yaml."];
-    k8s [kind=container-host label="Kubernetes - vector-shipper [AU-12]\nRole: DaemonSet ships pod logs over HEC;\nlocal k3s demo is an optional test producer" color="#7C3AED" notes="Purple: event source. k8s/vector-shipper.yaml, image timberio/vector 0.57.0-distroless-libc."];
+    k8s [kind=container-host label="Kubernetes - vector-shipper [AU-12]\nRole: DaemonSet ships pod logs over HEC;\nlocal k3s demo is an optional test producer" color="#7C3AED" notes="Purple: event source. k8s/vector-shipper.yaml, image timberio/vector 0.61.0-distroless-libc."];
     aws [kind=cloud-storage label="AWS logs - OPTIONAL [AU-12]\nRole: CloudTrail, GuardDuty, VPC Flow, S3 access logs\nin S3; one SQS queue per type announces objects" color="#7C3AED" notes="Purple: optional event source. docs/aws-ingestion.md."];
   }
   subgraph cluster_ingestion {
     kind=zone; label="02  INGESTION - collect, normalise, buffer";
-    vh [kind=container label="Vector Hosts 0.57.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse" color="#0D9488" notes="Teal: ingestion. vector/hosts.yaml; container siem-vector-hosts."];
-    va [kind=container label="Vector AWS 0.57.0 - OPTIONAL [AU-3]\nRole: poll SQS, read S3, VRL normalise, disk buffer\nOff by default: aws profile; unit ships disabled" color="#0D9488" notes="Teal: optional ingestion. vector/vector.yaml; container siem-vector."];
+    vh [kind=container label="Vector Hosts 0.61.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse" color="#0D9488" notes="Teal: ingestion. vector/hosts.yaml; container siem-vector-hosts."];
+    va [kind=container label="Vector AWS 0.61.0 - OPTIONAL [AU-3]\nRole: poll SQS, read S3, VRL normalise, disk buffer\nOff by default: aws profile; unit ships disabled" color="#0D9488" notes="Teal: optional ingestion. vector/vector.yaml; container siem-vector."];
   }
   subgraph cluster_data {
-    kind=zone; label="03  DATA - ClickHouse 24.8 (event store, SQL, RBAC)";
-    siem [kind=database label="siem database - 30-day TTL [AU-11]\nRole: 7 tables: cloudtrail, guardduty, vpc_flow,\ns3_access, windows_events, linux_syslog, k8s_logs" color="#2563EB" notes="Blue: data. clickhouse/ddl/010_aws.sql and 020_hosts.sql. Raw column 7 days except guardduty (30 days); vpc_flow has no raw column."];
+    kind=zone; label="03  DATA - ClickHouse 26.8.34.13 LTS (event store, SQL, RBAC)";
+    siem [kind=database label="siem database - 30-day TTL [AU-11]\nRole: 7 tables: cloudtrail, guardduty, vpc_flow,\ns3_access, windows_events, linux_syslog, k8s_logs" color="#2563EB" notes="Blue: data. clickhouse/ddl/010_aws.sql and 020_hosts.sql. Text index idx_msg_text on windows_events, linux_syslog, k8s_logs; The siem.log_search view over linux, windows, k8s, cloudtrail and guardduty is clickhouse/ddl/050_search.sql. Raw column 7 days except guardduty (30 days); vpc_flow has no raw column."];
     audit [kind=database label="audit.query_archive - 2-year TTL [AU-9]\nRole: audit trail of finished queries, filled by\nquery_archive_mv from system.query_log" color="#2563EB" notes="Blue: data. clickhouse/ddl/030_audit.sql; system.query_log kept 90 days."];
     accw [kind=user label="svc_vector - write-only [AU-9]\nRole: role siem_ingest, INSERT on siem.* only,\nno reads; used by both Vector instances" color="#2563EB" notes="Blue: access control. clickhouse/ddl/040_rbac.sql, clickhouse/initdb/99-init.sh."];
-    accr [kind=user label="Read-only accounts [AC-6]\nsvc_grafana_analyst, svc_hyperdx: SELECT siem.*\nsvc_grafana_auditor: SELECT siem.* and audit.*" color="#2563EB" notes="Blue: access control. Roles siem_analyst and siem_auditor; settings profile siem_reader (readonly=2). Queries from these shared accounts land in audit.query_archive."];
+    accr [kind=user label="Read-only accounts [AC-6]\nsvc_grafana_analyst: SELECT siem.* and log_search\nsvc_grafana_auditor: SELECT siem.* and audit.*" color="#2563EB" notes="Blue: access control. Roles siem_analyst and siem_auditor; settings profile siem_reader (readonly=2). Queries from these shared accounts (one per Grafana datasource) land in audit.query_archive."];
     tier [kind=cloud-storage label="S3 tiering - NOT DEPLOYED [AU-4]\n20-storage-s3.xml.disabled is not active;\nall data stays on local disk" color="#9CA3AF" notes="Grey: not deployed. Disabled configuration only."];
   }
   subgraph cluster_apps {
-    kind=zone; label="04  APPLICATIONS - search and alert";
-    grafana [kind=container label="Grafana OSS 11.4.0 - :3000 [AU-5, AU-6]\nRole: dashboards, SQL explore, 7 AU-5 ingestion-silence\nalerts; native local login" color="#D97706" notes="Amber: application. grafana/provisioning; two ClickHouse datasources over native :9000."];
-    hdx [kind=container label="HyperDX 2.19.0 - :8081 - optional UI [AU-6]\nRole: log search and investigation over siem tables;\nnative local login; not on the ingest path" color="#D97706" notes="Amber: application. Enabled by default in compose and the appliance, but nothing depends on it for ingestion."];
-    mongo [kind=database label="MongoDB 7.0 - internal :27017\nRole: HyperDX app state only (users, searches);\nnever stores events" color="#2563EB" notes="Blue: data. Not event storage."];
+    kind=zone; label="04  APPLICATIONS - Grafana, the only UI";
+    grafana [kind=container label="Grafana 13.3.0 - :3000 [AU-5, AU-6]\nRole: the only UI - dashboards, Log Search, SQL explore,\n7 AU-5 ingestion-silence alerts; native local login" color="#D97706" notes="Amber: application. grafana/grafana image 13.3.0 (Open Source edition), ClickHouse plugin 4.23.4. grafana/provisioning: two ClickHouse datasources over native :9000; Log Search dashboard queries siem.log_search."];
   }
   subgraph cluster_people {
     kind=zone; label="05  PEOPLE";
-    users [kind=user label="Analysts and auditors\nRole: sign in to Grafana :3000 or HyperDX :8081\nwith each app's local account; no SSO or MFA" color="#7C3AED" notes="Purple: people. No IdP, SSO or MFA is deployed (docs/local-auth.md)."];
+    users [kind=user label="Analysts and auditors\nRole: sign in to Grafana :3000 with its\nlocal account; no SSO or MFA" color="#7C3AED" notes="Purple: people. No IdP, SSO or MFA is deployed (docs/local-auth.md)."];
   }
   subgraph cluster_legend {
     kind=zone; label="LEGEND - colours, lines and tags";
@@ -47,8 +45,5 @@ digraph ironlog_architecture {
   va -> siem [label="INSERT (AWS)"];
   grafana -> siem [label="native 9000 SELECT"];
   grafana -> audit [label="native 9000 SELECT"];
-  hdx -> siem [label="HTTP 8123 SELECT"];
-  hdx -> mongo [label="app state"];
   users -> grafana [label="HTTP 3000"];
-  users -> hdx [label="HTTP 8081"];
 }

@@ -15,7 +15,7 @@ for anything compliance-touching). This is an operator decision already
 made; this template does not relitigate it.
 
 Local app authentication is the default. The image contains no Keycloak,
-Postgres, or oauth2-proxy. Future Keycloak integration uses an existing
+Postgres, HyperDX, MongoDB or oauth2-proxy. Future Keycloak integration uses an existing
 external provider and is deferred. See [local authentication](../docs/local-auth.md).
 
 ## Files
@@ -139,7 +139,7 @@ aws ec2 describe-images --owners 792107900819   --filters "Name=name,Values=Rock
 - **Root EBS volume** (`/dev/sda1`, default 60 GiB gp3): the OS, with
   STIG-required separate partitions carved out by
   `scripts/ami/00-partition.sh`. The STIG LV layout alone carves ~26 GiB,
-  before the base OS, baked `/opt/ironlog` config, five pre-loaded container
+  before the base OS, baked `/opt/ironlog` config, three pre-loaded container
   images plus the Grafana plugin, and the STIG scan evidence written into the
   image — so
   30 GiB is not enough and 60 is the working default.
@@ -175,7 +175,7 @@ The remaining major steps run in this order:
 3. file provisioner: `clickhouse/`, `grafana/`, `vector/` → `/opt/ironlog/...`
 4. file provisioner: `quadlets/*.container`, `quadlets/*.network` → `/etc/containers/systemd/`
 5. file provisioner: `scripts/firstboot/` → `/usr/local/lib/ironlog/`
-6. `scripts/ami/20-container-images.sh` — load/pull five arm64 container
+6. `scripts/ami/20-container-images.sh` — load/pull three arm64 container
    images and bake the Grafana ClickHouse plugin for offline runtime
 7. `scripts/ami/30-stig.sh` — STIG hardening
 8. `scripts/ami/40-fips.sh` — enable FIPS, reboot, then verify the running kernel
@@ -188,7 +188,7 @@ ownership, and cleans up the staging dir. Steps 3–5 upload whole
 directories (not just the files named in the contract) because Packer's
 `file` provisioner doesn't glob — step 4's follow-up shell provisioner then
 `find`s and copies only `*.container`/`*.network` out of the staged
-`quadlets/` tree, so `quadlets/README.md` and `quadlets/hyperdx/` do NOT
+`quadlets/` tree, so `quadlets/README.md` does NOT
 land in `/etc/containers/systemd/`.
 
 Container image list (baked into `scripts/ami/20-container-images.sh`,
@@ -197,8 +197,7 @@ documentation/single-source-of-truth purposes — the script is authoritative,
 this is not a second definition to drift):
 
 `docker.io/clickhouse/clickhouse-server:26.8.34.13`,
-`docker.io/grafana/grafana:13.3.0`,
-`docker.hyperdx.io/hyperdx/hyperdx:2.19.0`, `docker.io/library/mongo:7.0`,
+`docker.io/grafana/grafana:13.3.0` and
 `docker.io/timberio/vector:0.61.0-debian`.
 
 ## Multi-cloud extension path (Azure/OCI — not now)

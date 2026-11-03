@@ -19,7 +19,7 @@ docs/event-catalog.md (Linux + Kubernetes sections).
 
 ## Linux agents
 
-1. Install Vector (>= 0.57) from the official apt/yum repo on each in-scope host.
+1. Install Vector 0.61.0 (agent configs use `compression: gzip`, which needs >= 0.59) from the official apt/yum repo on each in-scope host.
 2. Deploy `vector/agent-linux.yaml` to `/etc/vector/vector.yaml`.
 3. Set environment for the service (e.g. systemd drop-in
    `/etc/systemd/system/vector.service.d/siem.conf`):
@@ -97,7 +97,7 @@ From an elevated PowerShell in the repo root:
 
     powershell -ExecutionPolicy Bypass -File scripts\install-windows-agent.ps1
 
-Installs Vector 0.57.0 to `C:\Program Files\Vector`, deploys
+Installs Vector 0.61.0 to `C:\Program Files\Vector`, deploys
 `vector\agent-windows.yaml` to `C:\ProgramData\vector\vector.yaml`, and runs
 the `vector` service as LocalSystem (required to read the Security channel).
 Ships Security, System, and Microsoft-Windows-PowerShell/Operational to the

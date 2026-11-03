@@ -24,7 +24,7 @@
           "kind": "container-host",
           "label": "Kubernetes - vector-shipper [AU-12]\nRole: DaemonSet ships pod logs over HEC;\nlocal k3s demo is an optional test producer",
           "data": {
-            "notes": "Purple: event source. k8s/vector-shipper.yaml, image timberio/vector 0.57.0-distroless-libc."
+            "notes": "Purple: event source. k8s/vector-shipper.yaml, image timberio/vector 0.61.0-distroless-libc."
           }
         },
         {
@@ -38,7 +38,7 @@
         {
           "id": "n11",
           "kind": "container",
-          "label": "Vector Hosts 0.57.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse",
+          "label": "Vector Hosts 0.61.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse",
           "data": {
             "notes": "Teal: ingestion. vector/hosts.yaml; container siem-vector-hosts."
           }
@@ -46,7 +46,7 @@
         {
           "id": "n12",
           "kind": "container",
-          "label": "Vector AWS 0.57.0 - OPTIONAL [AU-3]\nRole: poll SQS, read S3, VRL normalise, disk buffer\nOff by default: aws profile; unit ships disabled",
+          "label": "Vector AWS 0.61.0 - OPTIONAL [AU-3]\nRole: poll SQS, read S3, VRL normalise, disk buffer\nOff by default: aws profile; unit ships disabled",
           "data": {
             "notes": "Teal: optional ingestion. vector/vector.yaml; container siem-vector."
           }
@@ -56,7 +56,7 @@
           "kind": "database",
           "label": "siem database - 30-day TTL [AU-11]\nRole: 7 tables: cloudtrail, guardduty, vpc_flow,\ns3_access, windows_events, linux_syslog, k8s_logs",
           "data": {
-            "notes": "Blue: data. clickhouse/ddl/010_aws.sql and 020_hosts.sql. Raw column 7 days except guardduty (30 days); vpc_flow has no raw column."
+            "notes": "Blue: data. clickhouse/ddl/010_aws.sql and 020_hosts.sql. Text index idx_msg_text on windows_events, linux_syslog, k8s_logs; The siem.log_search view over linux, windows, k8s, cloudtrail and guardduty is clickhouse/ddl/050_search.sql. Raw column 7 days except guardduty (30 days); vpc_flow has no raw column."
           }
         },
         {
@@ -78,9 +78,9 @@
         {
           "id": "n16",
           "kind": "user",
-          "label": "Read-only accounts [AC-6]\nsvc_grafana_analyst, svc_hyperdx: SELECT siem.*\nsvc_grafana_auditor: SELECT siem.* and audit.*",
+          "label": "Read-only accounts [AC-6]\nsvc_grafana_analyst: SELECT siem.* and log_search\nsvc_grafana_auditor: SELECT siem.* and audit.*",
           "data": {
-            "notes": "Blue: access control. Roles siem_analyst and siem_auditor; settings profile siem_reader (readonly=2). Queries from these shared accounts land in audit.query_archive."
+            "notes": "Blue: access control. Roles siem_analyst and siem_auditor; settings profile siem_reader (readonly=2). Queries from these shared accounts (one per Grafana datasource) land in audit.query_archive."
           }
         },
         {
@@ -94,37 +94,21 @@
         {
           "id": "n18",
           "kind": "container",
-          "label": "Grafana OSS 11.4.0 - :3000 [AU-5, AU-6]\nRole: dashboards, SQL explore, 7 AU-5 ingestion-silence\nalerts; native local login",
+          "label": "Grafana 13.3.0 - :3000 [AU-5, AU-6]\nRole: the only UI - dashboards, Log Search, SQL explore,\n7 AU-5 ingestion-silence alerts; native local login",
           "data": {
-            "notes": "Amber: application. grafana/provisioning; two ClickHouse datasources over native :9000."
+            "notes": "Amber: application. grafana/grafana image 13.3.0 (Open Source edition), ClickHouse plugin 4.23.4. grafana/provisioning: two ClickHouse datasources over native :9000; Log Search dashboard queries siem.log_search."
           }
         },
         {
           "id": "n19",
-          "kind": "container",
-          "label": "HyperDX 2.19.0 - :8081 - optional UI [AU-6]\nRole: log search and investigation over siem tables;\nnative local login; not on the ingest path",
-          "data": {
-            "notes": "Amber: application. Enabled by default in compose and the appliance, but nothing depends on it for ingestion."
-          }
-        },
-        {
-          "id": "n20",
-          "kind": "database",
-          "label": "MongoDB 7.0 - internal :27017\nRole: HyperDX app state only (users, searches);\nnever stores events",
-          "data": {
-            "notes": "Blue: data. Not event storage."
-          }
-        },
-        {
-          "id": "n21",
           "kind": "user",
-          "label": "Analysts and auditors\nRole: sign in to Grafana :3000 or HyperDX :8081\nwith each app's local account; no SSO or MFA",
+          "label": "Analysts and auditors\nRole: sign in to Grafana :3000 with its\nlocal account; no SSO or MFA",
           "data": {
             "notes": "Purple: people. No IdP, SSO or MFA is deployed (docs/local-auth.md)."
           }
         },
         {
-          "id": "n22",
+          "id": "n20",
           "kind": "server",
           "label": "Purple\nevent sources and people",
           "data": {
@@ -132,7 +116,7 @@
           }
         },
         {
-          "id": "n23",
+          "id": "n21",
           "kind": "container",
           "label": "Teal\ningestion (Vector)",
           "data": {
@@ -140,7 +124,7 @@
           }
         },
         {
-          "id": "n24",
+          "id": "n22",
           "kind": "database",
           "label": "Blue\ndata stores and DB accounts",
           "data": {
@@ -148,7 +132,7 @@
           }
         },
         {
-          "id": "n25",
+          "id": "n23",
           "kind": "container",
           "label": "Amber\napplications",
           "data": {
@@ -156,7 +140,7 @@
           }
         },
         {
-          "id": "n26",
+          "id": "n24",
           "kind": "cloud-storage",
           "label": "Grey\nNOT DEPLOYED (disabled config only)",
           "data": {
@@ -164,7 +148,7 @@
           }
         },
         {
-          "id": "n27",
+          "id": "n25",
           "kind": "router",
           "label": "Lines and tags\nLines have no arrowheads: labels give protocol, port and DB account; OPTIONAL or (AWS) marks the AWS path\n[AU-n] = NIST 800-53 control per docs/control-mapping.md",
           "data": {
@@ -181,7 +165,7 @@
           },
           "to": {
             "device": "n11",
-            "label": "Vector Hosts 0.57.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse"
+            "label": "Vector Hosts 0.61.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse"
           },
           "label": "native TCP 6000"
         },
@@ -193,7 +177,7 @@
           },
           "to": {
             "device": "n11",
-            "label": "Vector Hosts 0.57.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse"
+            "label": "Vector Hosts 0.61.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse"
           },
           "label": "native TCP 6000"
         },
@@ -205,7 +189,7 @@
           },
           "to": {
             "device": "n11",
-            "label": "Vector Hosts 0.57.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse"
+            "label": "Vector Hosts 0.61.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse"
           },
           "label": "HEC 8088 + token"
         },
@@ -217,7 +201,7 @@
           },
           "to": {
             "device": "n12",
-            "label": "Vector AWS 0.57.0 - OPTIONAL [AU-3]\nRole: poll SQS, read S3, VRL normalise, disk buffer\nOff by default: aws profile; unit ships disabled"
+            "label": "Vector AWS 0.61.0 - OPTIONAL [AU-3]\nRole: poll SQS, read S3, VRL normalise, disk buffer\nOff by default: aws profile; unit ships disabled"
           },
           "label": "OPTIONAL: SQS poll + S3 read"
         },
@@ -225,7 +209,7 @@
           "id": "e5",
           "from": {
             "device": "n11",
-            "label": "Vector Hosts 0.57.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse"
+            "label": "Vector Hosts 0.61.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse"
           },
           "to": {
             "device": "n13",
@@ -237,7 +221,7 @@
           "id": "e6",
           "from": {
             "device": "n12",
-            "label": "Vector AWS 0.57.0 - OPTIONAL [AU-3]\nRole: poll SQS, read S3, VRL normalise, disk buffer\nOff by default: aws profile; unit ships disabled"
+            "label": "Vector AWS 0.61.0 - OPTIONAL [AU-3]\nRole: poll SQS, read S3, VRL normalise, disk buffer\nOff by default: aws profile; unit ships disabled"
           },
           "to": {
             "device": "n13",
@@ -249,7 +233,7 @@
           "id": "e7",
           "from": {
             "device": "n18",
-            "label": "Grafana OSS 11.4.0 - :3000 [AU-5, AU-6]\nRole: dashboards, SQL explore, 7 AU-5 ingestion-silence\nalerts; native local login"
+            "label": "Grafana 13.3.0 - :3000 [AU-5, AU-6]\nRole: the only UI - dashboards, Log Search, SQL explore,\n7 AU-5 ingestion-silence alerts; native local login"
           },
           "to": {
             "device": "n13",
@@ -261,7 +245,7 @@
           "id": "e8",
           "from": {
             "device": "n18",
-            "label": "Grafana OSS 11.4.0 - :3000 [AU-5, AU-6]\nRole: dashboards, SQL explore, 7 AU-5 ingestion-silence\nalerts; native local login"
+            "label": "Grafana 13.3.0 - :3000 [AU-5, AU-6]\nRole: the only UI - dashboards, Log Search, SQL explore,\n7 AU-5 ingestion-silence alerts; native local login"
           },
           "to": {
             "device": "n14",
@@ -273,56 +257,20 @@
           "id": "e9",
           "from": {
             "device": "n19",
-            "label": "HyperDX 2.19.0 - :8081 - optional UI [AU-6]\nRole: log search and investigation over siem tables;\nnative local login; not on the ingest path"
-          },
-          "to": {
-            "device": "n13",
-            "label": "siem database - 30-day TTL [AU-11]\nRole: 7 tables: cloudtrail, guardduty, vpc_flow,\ns3_access, windows_events, linux_syslog, k8s_logs"
-          },
-          "label": "HTTP 8123 SELECT"
-        },
-        {
-          "id": "e10",
-          "from": {
-            "device": "n19",
-            "label": "HyperDX 2.19.0 - :8081 - optional UI [AU-6]\nRole: log search and investigation over siem tables;\nnative local login; not on the ingest path"
-          },
-          "to": {
-            "device": "n20",
-            "label": "MongoDB 7.0 - internal :27017\nRole: HyperDX app state only (users, searches);\nnever stores events"
-          },
-          "label": "app state"
-        },
-        {
-          "id": "e11",
-          "from": {
-            "device": "n21",
-            "label": "Analysts and auditors\nRole: sign in to Grafana :3000 or HyperDX :8081\nwith each app's local account; no SSO or MFA"
+            "label": "Analysts and auditors\nRole: sign in to Grafana :3000 with its\nlocal account; no SSO or MFA"
           },
           "to": {
             "device": "n18",
-            "label": "Grafana OSS 11.4.0 - :3000 [AU-5, AU-6]\nRole: dashboards, SQL explore, 7 AU-5 ingestion-silence\nalerts; native local login"
+            "label": "Grafana 13.3.0 - :3000 [AU-5, AU-6]\nRole: the only UI - dashboards, Log Search, SQL explore,\n7 AU-5 ingestion-silence alerts; native local login"
           },
           "label": "HTTP 3000"
-        },
-        {
-          "id": "e12",
-          "from": {
-            "device": "n21",
-            "label": "Analysts and auditors\nRole: sign in to Grafana :3000 or HyperDX :8081\nwith each app's local account; no SSO or MFA"
-          },
-          "to": {
-            "device": "n19",
-            "label": "HyperDX 2.19.0 - :8081 - optional UI [AU-6]\nRole: log search and investigation over siem tables;\nnative local login; not on the ingest path"
-          },
-          "label": "HTTP 8081"
         }
       ]
     }
   ],
   "counts": {
     "pages": 1,
-    "devices": 21,
-    "links": 12
+    "devices": 19,
+    "links": 9
   }
 }

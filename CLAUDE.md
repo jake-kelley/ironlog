@@ -2,7 +2,7 @@
 
 ## Current auth decision — 2026-09-14
 
-Local Grafana and HyperDX accounts are the current default. Keycloak IdP
+The local Grafana account is the current default (Grafana is the only UI). Keycloak IdP
 integration is paused; future integration uses an existing external Keycloak.
 Never deploy an on-box Keycloak or its Postgres. Generic development logins
 and upgrade behavior are documented in docs/local-auth.md. Historical SSO,
@@ -11,9 +11,13 @@ and are not the current contract. Database RBAC remains unchanged.
 
 ## Current build and deployment contract
 
-Ironlog uses ClickHouse, Vector, Grafana OSS, HyperDX and MongoDB. Grafana
-and HyperDX authenticate local users independently. MongoDB holds HyperDX
-app state; no Keycloak, Postgres or oauth2-proxy is deployed.
+Ironlog uses ClickHouse 26.8.34.13 (LTS), Vector 0.61.0 and Grafana 13.3.0
+(`grafana/grafana`, Open Source edition; ClickHouse plugin pinned to 4.23.4 in
+`scripts/ami/grafana-clickhouse-plugin.version`). Grafana is the only UI and
+authenticates local users itself; HyperDX, MongoDB, oauth2-proxy, Keycloak and
+Postgres are not deployed. Free-text search is the `siem.log_search` view
+(`clickhouse/ddl/050_search.sql`) behind the Grafana "Log Search" dashboard,
+backed by `idx_msg_text` text indexes (`hasAllTokens`/`hasAnyTokens`).
 
 - RHEL 9 is the shipping/compliance target; Rocky 9 is for development.
   Both builders currently use arm64. Select exactly one with
@@ -82,7 +86,7 @@ Bugs fixed during first deploy (all committed to the artifacts):
 - config.d/10-query-log.xml: base config.xml ships an uncommented <partition_by>;
   a full <engine> string can't coexist with it. Node now uses replace="replace".
 - ddl/030_audit.sql: the AU-9 archive was a refreshable MV (REFRESH ... APPEND),
-  which 24.8 can't parse and which is experimental. Rewritten as a standard
+  which ClickHouse 24.8 (the version then) can't parse and which is experimental. Rewritten as a standard
   INCREMENTAL MV (system.query_log -> audit.query_archive), continuous not hourly.
   Also added `SYSTEM FLUSH LOGS` before the MV (query_log doesn't exist yet at
   initdb time) and fixed the source column `client_address` -> `address`.
@@ -102,7 +106,7 @@ operator (needs real AWS account wiring — docs/aws-ingestion.md is the runbook
   8/8 unit tests pass (vector/tests.yaml); every sink's exact JSONEachRow shape
   insert-tested against live tables AS svc_vector over HTTP.
 - vector service in compose behind the "aws" profile (image pinned
-  timberio/vector:0.57.0-debian): stack stays green until COMPOSE_PROFILES=aws.
+  timberio/vector, now 0.61.0-debian): stack stays green until COMPOSE_PROFILES=aws.
 - siem.vpc_flow action enum gained 'NONE'=0 (NODATA/SKIPDATA rows have no
   action) — DDL + live table both updated.
 - Grafana: provisioned dashboard "AWS Security Overview" (console logins,
@@ -111,14 +115,14 @@ operator (needs real AWS account wiring — docs/aws-ingestion.md is the runbook
 
 Phase 3 state (2026-07-14): DEPLOYED and E2E-verified locally, INCLUDING two
 real producers now live:
-- The WSL Ubuntu host itself runs the Linux agent (vector 0.57.0 .deb,
+- The WSL Ubuntu host itself runs the Linux agent (vector .deb, 0.57.0 when installed,
   /etc/vector/vector.yaml from vector/agent-linux.yaml, drop-in
   /etc/systemd/system/vector.service.d/siem.conf: aggregator localhost:6000,
   interpolation flag, User=root). Journald flows (host 'jdesktop'); WSL kernel
   has no audit subsystem so the auditd tail idles harmlessly. NB: WSL agent
   only ships while the WSL VM is up.
 - A single-node k3s demo cluster (compose profile "k3s", rancher/k3s
-  v1.35.6-k3s1, manifest auto-applied) ships pod logs via the
+  now v1.37.1-k3s1, manifest auto-applied) ships pod logs via the
   k8s/vector-shipper.yaml DaemonSet -> HEC :8088. Bring-up:
   k8s/k3s-demo-up.sh (creates HEC secret + patches SIEM_ENDPOINT to the
   aggregator container IP — pods in in-docker k3s can't resolve docker DNS
@@ -145,7 +149,7 @@ Real fleet hosts/clusters onboard per docs/host-ingestion.md.
 Phase 4 state (2026-07-15): DEPLOYED and E2E-verified on THIS machine (pilot
 host for the idle-freeze watch).
 - Aggregator: agent_route routes .source=="wineventlog" -> windows_map ->
-  siem.windows_events (field names taken from a live 0.57.0 windows_event_log
+  siem.windows_events (field names taken from a live 0.57.0 windows_event_log (historical)
   sample; 8/8 unit tests). Linux and Windows agents share :6000.
 - This machine runs the "vector" Windows service (LocalSystem, reads
   Security/System/PowerShell-Operational; installed by
@@ -164,26 +168,10 @@ host for the idle-freeze watch).
   PowerShell 5.1 parsing (BOM-less UTF-8 read as ANSI turns the dash into a
   smart quote).
 
-HyperDX added (2026-07-14), deployed and verified:
-- hyperdx 2.19.0 (ClickStack, MIT) at http://localhost:8081 as the log-search /
-  investigation UI over siem.*. NOT published directly — oauth2-proxy v7.15.3
-  (hyperdx-auth) enforces Keycloak OIDC+MFA first (OSS HyperDX has no native
-  SSO), allowed realm roles: siem_admin/analyst/auditor. Keycloak client
-  "hyperdx" (in realm-export + created live; secret rotated by bootstrap.sh).
-- Reads ClickHouse as svc_hyperdx (siem_analyst role + siem_reader profile,
-  in initdb 99-init.sh + created live) so its queries are captured in
-  audit.query_archive. Verified: reads siem.*, denied audit.*.
-- App state in mongo:7.0 (hyperdx-db, auth enabled). MongoDB is SSPL (not OSI;
-  free self-hosted, no caps/keys) — accepted + documented in control-mapping.
-  Upstream pins EOL mongo:5.0; 7.0 verified working (connects, collections
-  created).
-- DEFAULT_CONNECTIONS/DEFAULT_SOURCES env provision the ClickHouse connection
-  + 4 sources (CloudTrail/GuardDuty/VPC Flow/S3 Access). IMPORTANT: these seed
-  only when the FIRST user registers (setupTeamDefaults on team creation), and
-  malformed JSON is silently ignored (validated in-container with node).
-  Operator still needs to: visit http://localhost:8081, pass Keycloak, create
-  the HyperDX local account (first visit), confirm sources appear.
-
+HyperDX (added 2026-07-14) was REMOVED 2026-11-03 (commit 5e4ca7f) together with
+MongoDB, the oauth2-proxy hyperdx-auth, the Keycloak "hyperdx" client, svc_hyperdx
+and port 8081. Decision: Grafana is the only UI; single platform = ClickHouse.
+Search now lives in Grafana (Log Search dashboard over siem.log_search).
 
 ## Conventions (do not violate)
 - Schema density rules: ORDER BY low-cardinality-first + timestamp last;

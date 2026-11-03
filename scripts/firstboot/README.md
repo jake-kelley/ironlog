@@ -17,7 +17,6 @@ placing it and enabling it at build time).
 | `ironlog-firstboot.service` | systemd oneshot unit, ordered before every `ironlog-*.service` |
 | `appliance.conf.example` | Local-mode config and credential overrides |
 | `ironlog-apply-schema.sh` | Reconciles the ClickHouse SIEM schema/service accounts and **verifies** the result — runs on EVERY boot, not just the first |
-| `ironlog-bootstrap-hyperdx-local.service` | Runs the shared native-account helper after HyperDX starts |
 | `ironlog-schema.service` | systemd oneshot unit for the above, ordered after `ironlog-clickhouse.service` |
 | `README.md` | This file |
 
@@ -42,9 +41,9 @@ dependent unit started successfully, because the ClickHouse healthcheck is
 So the schema is now *reconciled* rather than *initialised*. Every statement in
 `clickhouse/ddl/*.sql` is `CREATE ... IF NOT EXISTS` and ClickHouse `GRANT` is a
 no-op when already granted, so re-applying on each boot is safe. The script
-then asserts 7 `siem` tables, `audit.query_archive`, and 4 service accounts, and
+then asserts 7 `siem` tables, `audit.query_archive`, and 3 service accounts, and
 exits non-zero otherwise. Every unit that queries ClickHouse (`vector-hosts`,
-`vector`, `grafana`, `hyperdx`) has been repointed from
+`vector`, `grafana`) has been repointed from
 `Requires=ironlog-clickhouse.service` to `Requires=ironlog-schema.service`, so
 an incomplete schema now blocks them instead of letting them start against
 nothing.
@@ -96,19 +95,16 @@ a literal used as-is. Scheme matching is by exact prefix, not a generic
 ## Authentication mode
 
 `APPLIANCE_MODE=local` is the default and currently supported mode. Grafana
-and HyperDX run with native local authentication. No Keycloak, Postgres, or
-oauth2-proxy is deployed. `oidc` and `ldap` are deferred and rejected; future
+(the only UI) runs with native local authentication. No HyperDX, MongoDB,
+Keycloak, Postgres, or oauth2-proxy is deployed. `oidc` and `ldap` are deferred and rejected; future
 OIDC integration will use an existing external Keycloak.
 
-Fresh app defaults are Grafana `admin` and HyperDX `admin@ironlog.local`,
-both with password `IronlogDev123!`. Override `GRAFANA_ADMIN_USER`,
-`GRAFANA_ADMIN_PASSWORD`, `HYPERDX_LOCAL_EMAIL`, and
-`HYPERDX_LOCAL_PASSWORD` in appliance config. Backend secrets remain
+The fresh Grafana default is `admin` with password `IronlogDev123!`.
+Override `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` in appliance config. Backend secrets remain
 required and are resolved independently. Existing app databases retain their
 accounts; these settings do not reset existing passwords.
 
-HyperDX native account initialization is `ironlog-bootstrap-hyperdx-local.service` after the app
-starts, using `/usr/local/lib/ironlog/bootstrap-hyperdx-local.sh`. Firstboot
+Firstboot
 completion means configuration and jobs were queued, not that browser login
 was verified. See [local authentication](../../docs/local-auth.md).
 
@@ -125,8 +121,7 @@ directory) rather than a silent security gap, but it will block first boot.
 |---|---|---|---|
 | `/var/lib/ironlog/clickhouse` | `clickhouse/clickhouse-server:26.8.34.13` | `101:101` | official image's "clickhouse" system user |
 | `/var/lib/ironlog/grafana` | `grafana/grafana:13.3.0` | `472:472` | Grafana's well-known conventional uid/gid |
-| `/var/lib/ironlog/hyperdx-db` | `mongo:7.0` (debian-based) | `999:999` | official image's "mongodb" user |
-| `/var/lib/ironlog/vector-hosts-buffer`, `/var/lib/ironlog/vector-buffer` | `timberio/vector:0.61.0-debian` | `0:0` | Vector's debian image runs as root by default (least confidence of the five — please verify first) |
+| `/var/lib/ironlog/vector-hosts-buffer`, `/var/lib/ironlog/vector-buffer` | `timberio/vector:0.61.0-debian` | `0:0` | Vector's debian image runs as root by default (least confidence of the set — please verify first) |
 
 SELinux: every writable `Volume=` line in the quadlets already carries the
 `:Z` relabel flag, which podman applies automatically at container start.
@@ -238,7 +233,6 @@ Local mode does not enforce MFA or provide per-human ClickHouse attribution.
 bash -n scripts/firstboot/ironlog-firstboot.sh
 bash -n scripts/firstboot/secret-resolver.sh
 bash scripts/tests/firstboot-local.test.sh
-bash scripts/tests/bootstrap-hyperdx-local.test.sh
 shellcheck scripts/firstboot/*.sh   # if installed
 ```
 

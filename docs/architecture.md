@@ -36,22 +36,20 @@ identity provider or AI/MCP runtime is deployed, so none is drawn.
 |---|---|---|---|---|
 | Windows hosts (Vector agent) | Ship Security, System and PowerShell/Operational event logs to the aggregator | Native TCP 6000 | Per host | AU-12 |
 | Linux hosts (Vector agent) | Ship journald and auditd (`/var/log/audit/audit.log`) events | Native TCP 6000 | Per host | AU-12 |
-| Kubernetes `vector-shipper` | DaemonSet ships pod logs over token-authenticated HEC; local k3s is a demo producer | `timberio/vector:0.57.0-distroless-libc`, HEC 8088 | Per cluster | AU-12 |
+| Kubernetes `vector-shipper` | DaemonSet ships pod logs over token-authenticated HEC; local k3s is a demo producer | `timberio/vector:0.61.0-distroless-libc`, HEC 8088 | Per cluster | AU-12 |
 | AWS logs | CloudTrail, GuardDuty, VPC Flow and S3 access logs in S3; one SQS queue per type | S3 + SQS | Optional | AU-12 |
-| Vector Hosts | Always-on aggregator: routes by source, VRL normalisation, disk buffer, INSERT to ClickHouse | Vector 0.57.0, 6000, 8088 | Yes | AU-3 |
-| Vector AWS | Polls SQS, reads S3, normalises, buffers | Vector 0.57.0; compose profile `aws`, appliance unit ships disabled | Optional | AU-3 |
-| ClickHouse `siem` | Seven event tables: `cloudtrail`, `guardduty`, `vpc_flow`, `s3_access`, `windows_events`, `linux_syslog`, `k8s_logs`; 30-day TTL | ClickHouse 24.8; 8123 HTTP, 9000 native (loopback host ports) | Yes | AU-11 |
+| Vector Hosts | Always-on aggregator: routes by source, VRL normalisation, disk buffer, INSERT to ClickHouse | Vector 0.61.0, 6000, 8088 | Yes | AU-3 |
+| Vector AWS | Polls SQS, reads S3, normalises, buffers | Vector 0.61.0; compose profile `aws`, appliance unit ships disabled | Optional | AU-3 |
+| ClickHouse `siem` | Seven event tables: `cloudtrail`, `guardduty`, `vpc_flow`, `s3_access`, `windows_events`, `linux_syslog`, `k8s_logs`; 30-day TTL | ClickHouse 26.8.34.13 (LTS); 8123 HTTP, 9000 native (loopback host ports) | Yes | AU-11 |
 | ClickHouse `audit.query_archive` | Query audit trail filled by `query_archive_mv` from `system.query_log`; 2-year TTL | same server | Yes | AU-9 |
 | `svc_vector` | Write-only account: role `siem_ingest`, INSERT on `siem.*`, no reads | both Vector instances | Yes | AU-9 |
-| `svc_grafana_analyst`, `svc_hyperdx`, `svc_grafana_auditor` | Read-only accounts: analyst roles read `siem.*`; auditor also reads `audit.*`; profile `siem_reader` | roles `siem_analyst`, `siem_auditor` | Yes | AC-6 |
+| `svc_grafana_analyst`, `svc_grafana_auditor` | Read-only accounts: analyst roles read `siem.*`; auditor also reads `audit.*`; profile `siem_reader` | roles `siem_analyst`, `siem_auditor` | Yes | AC-6 |
 | S3 tiering | Disabled configuration only; data stays on local disk | not deployed | No | AU-4 |
-| Grafana OSS | Dashboards, SQL explore, seven AU-5 ingestion-silence alerts; native local login | 11.4.0, port 3000 | Yes | AU-5, AU-6 |
-| HyperDX | Log search and investigation over `siem` tables; native local login | 2.19.0, port 8081 | Optional UI (enabled by default in Compose and Quadlets) | AU-6 |
-| MongoDB | HyperDX app state only (users, searches); never events | 7.0, internal 27017 | With HyperDX | n/a |
-| Analysts and auditors | Sign in to each app with its local account; no SSO or MFA | browser to 3000 / 8081 | n/a | n/a |
+| Grafana | The only UI: dashboards, SQL explore, Log Search dashboard over `siem.log_search`, seven AU-5 ingestion-silence alerts; native local login | `grafana/grafana` 13.3.0 (Open Source edition), ClickHouse plugin 4.23.4, port 3000 | Yes | AU-5, AU-6 |
+| Analysts and auditors | Sign in to Grafana with its local account; no SSO or MFA | browser to 3000 | n/a | n/a |
 
 Database audit attribution is to the shared service accounts, not to
-individual Grafana or HyperDX users.
+individual Grafana users.
 
 ## Ingestion paths
 
@@ -78,7 +76,7 @@ The audit-evidence lane is a logical view of `audit.query_archive` inside
 ClickHouse, not another server. The incremental materialized view captures
 finished queries and processing errors from `system.query_log`; it does not
 provide immutable external storage or individual browser-user attribution.
-MongoDB stores HyperDX application state, not SIEM events.
+Grafana is the only UI; no search or application-state database is deployed besides Grafana's own.
 
 ## Implementation details
 
@@ -88,14 +86,13 @@ MongoDB stores HyperDX application state, not SIEM events.
   GuardDuty, VPC Flow and S3 access logs.
 - Both collectors insert through `svc_vector`. ClickHouse holds seven SIEM
   tables and `audit.query_archive`, populated from its query log. Grafana
-  uses shared analyst and auditor service identities; HyperDX uses
-  `svc_hyperdx`. Database audit attribution is to these shared identities,
-  not individual app users.
-- Grafana and HyperDX authenticate local accounts on host ports 3000 and
-  8081. HyperDX uses MongoDB on internal port 27017 for app state. ClickHouse
+  uses shared analyst and auditor service identities (`svc_grafana_analyst`,
+  `svc_grafana_auditor`). Database audit attribution is to these shared
+  identities, not individual Grafana users.
+- Grafana authenticates local accounts on host port 3000. ClickHouse
   host ports 8123 and 9000 bind to loopback. HTTPS requires an appropriate
   separately configured TLS terminator.
-- Persistent storage applies to ClickHouse, Grafana, MongoDB and Vector
+- Persistent storage applies to ClickHouse, Grafana and Vector
   buffers. Compose uses named volumes; the appliance uses its separate data
   volume under `/var/lib/ironlog`. Storage connectors are omitted for clarity.
 - Local deployment defaults to Podman with a Compose provider; Docker remains
