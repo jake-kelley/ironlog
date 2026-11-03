@@ -11,7 +11,7 @@ After=ironlog-schema.service
 Requires=ironlog-schema.service
 
 [Container]
-Image=docker.io/grafana/grafana-oss:11.4.0
+Image=docker.io/grafana/grafana:13.3.0
 Pull=never
 ContainerName=ironlog-grafana
 Network=ironlog.network
@@ -22,6 +22,12 @@ Environment=GF_AUTH_BASIC_ENABLED=true
 Environment=GF_AUTH_ANONYMOUS_ENABLED=false
 Environment=GF_USERS_ALLOW_SIGN_UP=false
 Environment=GF_AUTH_GENERIC_OAUTH_ENABLED=false
+# [security]x_xss_protection is deprecated (browsers dropped it).
+Environment=GF_SECURITY_X_XSS_PROTECTION=false
+# Grafana 13 background-installs a default plugin set into the plugins dir at
+# startup. Here it is read-only and the appliance is air-gapped, so every
+# install fails with "read-only file system". The ClickHouse plugin is baked.
+Environment=GF_PLUGINS_PREINSTALL_DISABLED=true
 
 # Renames / URL-composition from ironlog.env's .env.example names:
 Environment=GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL}

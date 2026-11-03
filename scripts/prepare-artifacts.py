@@ -12,6 +12,9 @@ import tempfile
 from urllib.parse import urlsplit
 
 
+PLUGIN_PIN_FILE = Path(__file__).resolve().parent / "ami" / "grafana-clickhouse-plugin.version"
+
+
 def fail(message):
     raise ValueError(message)
 
@@ -68,6 +71,10 @@ def verify_bundle(root, expected_os):
     plugin = json.loads((root / required[-1]).read_text(encoding="utf-8"))
     if plugin.get("id") != "grafana-clickhouse-datasource":
         fail("Wrong Grafana plugin id")
+    pin = PLUGIN_PIN_FILE.read_text(encoding="ascii").strip()
+    version = (plugin.get("info") or {}).get("version")
+    if not re.fullmatch(r"\d+\.\d+\.\d+", pin) or version != pin:
+        fail(f"Grafana plugin version {version!r} does not match pin {pin!r} ({PLUGIN_PIN_FILE.name})")
     return len(files)
 
 

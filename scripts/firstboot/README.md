@@ -124,7 +124,7 @@ directory) rather than a silent security gap, but it will block first boot.
 | Directory | Image | uid:gid used | Basis |
 |---|---|---|---|
 | `/var/lib/ironlog/clickhouse` | `clickhouse/clickhouse-server:24.8` | `101:101` | official image's "clickhouse" system user |
-| `/var/lib/ironlog/grafana` | `grafana/grafana-oss:11.4.0` | `472:472` | Grafana's well-known conventional uid/gid |
+| `/var/lib/ironlog/grafana` | `grafana/grafana:13.3.0` | `472:472` | Grafana's well-known conventional uid/gid |
 | `/var/lib/ironlog/hyperdx-db` | `mongo:7.0` (debian-based) | `999:999` | official image's "mongodb" user |
 | `/var/lib/ironlog/vector-hosts-buffer`, `/var/lib/ironlog/vector-buffer` | `timberio/vector:0.57.0-debian` | `0:0` | Vector's debian image runs as root by default (least confidence of the five — please verify first) |
 

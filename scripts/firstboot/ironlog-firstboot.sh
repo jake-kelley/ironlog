@@ -250,7 +250,7 @@ fi
 # issue, so it fails loud rather than fails open.
 declare -A SVC_OWNER=(
 	[clickhouse]="101:101"          # clickhouse/clickhouse-server: user "clickhouse"
-	[grafana]="472:472"             # grafana/grafana-oss: well-known "grafana" uid/gid
+	[grafana]="472:472"             # grafana/grafana: well-known "grafana" uid/gid
 	[hyperdx-db]="999:999"          # mongo:7.0 (debian-based): user "mongodb"
 	[vector-hosts-buffer]="0:0"     # timberio/vector debian image: runs as root by default
 	[vector-buffer]="0:0"           # same image as vector-hosts

@@ -38,11 +38,13 @@ services:
       retries: 10
 
   grafana:
-    image: docker.io/grafana/grafana-oss:11.4.0
+    image: docker.io/grafana/grafana:13.3.0
     container_name: siem-grafana
     restart: unless-stopped
     environment:
-      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      # Pinned; keep equal to scripts/ami/grafana-clickhouse-plugin.version
+      # (GF_INSTALL_PLUGINS is deprecated since Grafana 12; use PREINSTALL_SYNC).
+      GF_PLUGINS_PREINSTALL_SYNC: grafana-clickhouse-datasource@4.23.4
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL}
       # --- Native local authentication ---
       GF_AUTH_DISABLE_LOGIN_FORM: "false"
@@ -52,6 +54,8 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
       GF_AUTH_GENERIC_OAUTH_ENABLED: "false"
+      # [security]x_xss_protection is deprecated (browsers dropped it).
+      GF_SECURITY_X_XSS_PROTECTION: "false"
       # --- ClickHouse datasource credentials (referenced by provisioning yaml) ---
       CH_GRAFANA_ANALYST_PASSWORD: ${CH_GRAFANA_ANALYST_PASSWORD}
       CH_GRAFANA_AUDITOR_PASSWORD: ${CH_GRAFANA_AUDITOR_PASSWORD}

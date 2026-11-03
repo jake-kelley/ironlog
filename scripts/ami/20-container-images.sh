@@ -24,27 +24,36 @@ die() { echo "[$LOG_TAG] FATAL: $*" >&2; exit 1; }
 # The quay.io/ and docker.hyperdx.io/ entries always worked precisely
 # because they were already qualified. These strings must also match the
 # Image= lines in quadlets/ verbatim -- see the cross-check below.
-DEFAULT_IMAGES="docker.io/clickhouse/clickhouse-server:24.8 docker.io/grafana/grafana-oss:11.4.0 docker.hyperdx.io/hyperdx/hyperdx:2.19.0 docker.io/library/mongo:7.0 docker.io/timberio/vector:0.57.0-debian"
+DEFAULT_IMAGES="docker.io/clickhouse/clickhouse-server:24.8 docker.io/grafana/grafana:13.3.0 docker.hyperdx.io/hyperdx/hyperdx:2.19.0 docker.io/library/mongo:7.0 docker.io/timberio/vector:0.57.0-debian"
 IMAGES="${IRONLOG_CONTAINER_IMAGES:-$DEFAULT_IMAGES}"
 ARCH="${IRONLOG_PULL_ARCH:-arm64}"
 
 command -v podman >/dev/null || die "podman not installed — run scripts/ami/10-baseline.sh first"
 
+# Exact Grafana ClickHouse plugin release. One line, read by this script,
+# 05-software-source.sh and scripts/prepare-artifacts.py; keep docker-compose.yml
+# (GF_PLUGINS_PREINSTALL_SYNC) equal to it.
+PLUGIN_PIN_FILE="$(dirname "$0")/grafana-clickhouse-plugin.version"
+PLUGIN_VERSION="$(tr -d '[:space:]' < "$PLUGIN_PIN_FILE" 2>/dev/null || true)"
+[[ "$PLUGIN_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "missing or invalid Grafana plugin pin: $PLUGIN_PIN_FILE"
+
 install_plugin() {
-  local plugin_dir="${IRONLOG_GRAFANA_PLUGIN_DIR:-/opt/ironlog/grafana-plugins}" plugin_json executable
+  local plugin_dir="${IRONLOG_GRAFANA_PLUGIN_DIR:-/opt/ironlog/grafana-plugins}" plugin_json executable plugin_version
   rm -rf "$plugin_dir"
   install -d -m 0755 -o 472 -g 472 "$plugin_dir"
   if [ "$IRONLOG_SOFTWARE_SOURCE" = bundle ]; then
     cp -a "$IRONLOG_ARTIFACT_DIR/grafana-plugins/." "$plugin_dir/"
   else
-    # Grafana 11.4.0 image ENTRYPOINT is /run.sh, which starts server after
+    # The Grafana image ENTRYPOINT is /run.sh, which starts server after
     # processing arguments. Invoke binary directly so this is CLI, not server.
-    podman run --rm --pull=never --entrypoint /usr/share/grafana/bin/grafana -v "$plugin_dir:/var/lib/grafana/plugins:Z" docker.io/grafana/grafana-oss:11.4.0 cli --pluginsDir /var/lib/grafana/plugins plugins install grafana-clickhouse-datasource
+    podman run --rm --pull=never --entrypoint /usr/share/grafana/bin/grafana -v "$plugin_dir:/var/lib/grafana/plugins:Z" docker.io/grafana/grafana:13.3.0 cli --pluginsDir /var/lib/grafana/plugins plugins install grafana-clickhouse-datasource "$PLUGIN_VERSION"
   fi
   chown -R root:root "$plugin_dir"
   plugin_json="$plugin_dir/grafana-clickhouse-datasource/plugin.json"
   [ -f "$plugin_json" ] || die "Grafana ClickHouse plugin.json absent after install"
   grep -Eq '"id"[[:space:]]*:[[:space:]]*"grafana-clickhouse-datasource"' "$plugin_json" || die "Grafana plugin ID is not grafana-clickhouse-datasource"
+  plugin_version="$(sed -nE 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$plugin_json" | head -n1)"
+  [ "$plugin_version" = "$PLUGIN_VERSION" ] || die "Grafana plugin version '$plugin_version' does not match pin '$PLUGIN_VERSION'"
   executable="$(sed -nE 's/.*"executable"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$plugin_json" | head -n1)"
   if [ -n "$executable" ]; then
     [[ "$executable" =~ ^[A-Za-z0-9_.-]+$ ]] || die "invalid Grafana plugin executable name"
