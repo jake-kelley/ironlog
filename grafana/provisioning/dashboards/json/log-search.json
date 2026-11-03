@@ -1,0 +1,418 @@
+{
+  "uid": "log-search",
+  "title": "Log Search",
+  "tags": [
+    "siem",
+    "search",
+    "AU-6"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "editable": false,
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "type": "textbox",
+        "name": "search",
+        "label": "Search",
+        "description": "Whitespace/punctuation-separated words, matched case-insensitively against the message text (e.g. failed password). Empty = no text filter.",
+        "query": "",
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "hide": 0
+      },
+      {
+        "type": "custom",
+        "name": "mode",
+        "label": "Match",
+        "description": "all words must appear (hasAllTokens) or any one word (hasAnyTokens).",
+        "query": "all,any",
+        "multi": false,
+        "includeAll": false,
+        "allowCustomValue": false,
+        "current": {
+          "selected": true,
+          "text": "all",
+          "value": "all"
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": "all",
+            "value": "all"
+          },
+          {
+            "selected": false,
+            "text": "any",
+            "value": "any"
+          }
+        ],
+        "hide": 0
+      },
+      {
+        "type": "custom",
+        "name": "source",
+        "label": "Source",
+        "query": "linux,windows,k8s,cloudtrail,guardduty",
+        "multi": true,
+        "includeAll": true,
+        "allowCustomValue": false,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          {
+            "selected": false,
+            "text": "linux",
+            "value": "linux"
+          },
+          {
+            "selected": false,
+            "text": "windows",
+            "value": "windows"
+          },
+          {
+            "selected": false,
+            "text": "k8s",
+            "value": "k8s"
+          },
+          {
+            "selected": false,
+            "text": "cloudtrail",
+            "value": "cloudtrail"
+          },
+          {
+            "selected": false,
+            "text": "guardduty",
+            "value": "guardduty"
+          }
+        ],
+        "hide": 0
+      },
+      {
+        "type": "query",
+        "name": "host",
+        "label": "Host",
+        "description": "Linux host, Windows computer, Kubernetes node or AWS account id. Values are hex-encoded so any name is safe to splice into SQL.",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "siem-analyst"
+        },
+        "definition": "SELECT hex(host) AS value, host AS text FROM siem.log_search WHERE $__timeFilter(event_time) AND $__conditionalAll(has(splitByChar(',', trim(BOTH '{}' FROM decodeURLComponent('${source:percentencode}'))), source), $source) GROUP BY host ORDER BY host LIMIT 1000",
+        "query": {
+          "editorType": "sql",
+          "rawSql": "SELECT hex(host) AS value, host AS text FROM siem.log_search WHERE $__timeFilter(event_time) AND $__conditionalAll(has(splitByChar(',', trim(BOTH '{}' FROM decodeURLComponent('${source:percentencode}'))), source), $source) GROUP BY host ORDER BY host LIMIT 1000"
+        },
+        "refresh": 2,
+        "sort": 0,
+        "multi": true,
+        "includeAll": true,
+        "allowCustomValue": false,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "regex": "",
+        "hide": 0
+      },
+      {
+        "type": "query",
+        "name": "user",
+        "label": "User",
+        "description": "Linux/Windows user name or CloudTrail principal ARN (top 1000 by volume). Kubernetes and GuardDuty rows have no user and only match when User is All.",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "siem-analyst"
+        },
+        "definition": "SELECT hex(user) AS value, user AS text FROM siem.log_search WHERE user != '' AND $__timeFilter(event_time) AND $__conditionalAll(has(splitByChar(',', trim(BOTH '{}' FROM decodeURLComponent('${source:percentencode}'))), source), $source) GROUP BY user ORDER BY count() DESC LIMIT 1000",
+        "query": {
+          "editorType": "sql",
+          "rawSql": "SELECT hex(user) AS value, user AS text FROM siem.log_search WHERE user != '' AND $__timeFilter(event_time) AND $__conditionalAll(has(splitByChar(',', trim(BOTH '{}' FROM decodeURLComponent('${source:percentencode}'))), source), $source) GROUP BY user ORDER BY count() DESC LIMIT 1000"
+        },
+        "refresh": 2,
+        "sort": 0,
+        "multi": true,
+        "includeAll": true,
+        "allowCustomValue": false,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "regex": "",
+        "hide": 0
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "AWS Security Overview",
+      "type": "link",
+      "url": "/d/aws-security-overview",
+      "icon": "dashboard",
+      "keepTime": true
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Log volume by source",
+      "description": "Events matching the filters above, bucketed to the panel width. Searches are one query over siem.log_search (clickhouse/ddl/050_search.sql).",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 7
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "siem-analyst"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "siem-analyst"
+          },
+          "editorType": "sql",
+          "queryType": "timeseries",
+          "format": 0,
+          "rawSql": "SELECT $__timeInterval(event_time) AS time, source, count() AS events FROM siem.log_search WHERE $__timeFilter(event_time) AND $__conditionalAll(has(splitByChar(',', trim(BOTH '{}' FROM decodeURLComponent('${source:percentencode}'))), source), $source) AND $__conditionalAll(has(arrayMap(x -> unhex(x), splitByChar(',', trim(BOTH '{}' FROM decodeURLComponent('${host:percentencode}')))), host), $host) AND $__conditionalAll(has(arrayMap(x -> unhex(x), splitByChar(',', trim(BOTH '{}' FROM decodeURLComponent('${user:percentencode}')))), user), $user) AND (decodeURLComponent('${search:percentencode}') = '' OR (hasAnyTokens(search_text, lower(decodeURLComponent('${search:percentencode}'))) AND (decodeURLComponent('${mode:percentencode}') = 'any' OR hasAllTokens(search_text, lower(decodeURLComponent('${search:percentencode}')))))) GROUP BY time, source ORDER BY time"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "logs",
+      "title": "Matching logs",
+      "description": "Newest 500 matches. Expand a row and use Show context for the surrounding lines from the same source and host.",
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 24,
+        "h": 13
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "siem-analyst"
+      },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "siem-analyst"
+          },
+          "editorType": "builder",
+          "queryType": "logs",
+          "format": 2,
+          "rawSql": "SELECT event_time AS timestamp, message AS body, level, source, host, user, origin FROM siem.log_search WHERE $__timeFilter(event_time) AND $__conditionalAll(has(splitByChar(',', trim(BOTH '{}' FROM decodeURLComponent('${source:percentencode}'))), source), $source) AND $__conditionalAll(has(arrayMap(x -> unhex(x), splitByChar(',', trim(BOTH '{}' FROM decodeURLComponent('${host:percentencode}')))), host), $host) AND $__conditionalAll(has(arrayMap(x -> unhex(x), splitByChar(',', trim(BOTH '{}' FROM decodeURLComponent('${user:percentencode}')))), user), $user) AND (decodeURLComponent('${search:percentencode}') = '' OR (hasAnyTokens(search_text, lower(decodeURLComponent('${search:percentencode}'))) AND (decodeURLComponent('${mode:percentencode}') = 'any' OR hasAllTokens(search_text, lower(decodeURLComponent('${search:percentencode}')))))) ORDER BY event_time DESC LIMIT 500",
+          "builderOptions": {
+            "database": "siem",
+            "table": "log_search",
+            "queryType": "logs",
+            "mode": "list",
+            "limit": 500,
+            "columns": [
+              {
+                "name": "event_time",
+                "type": "DateTime",
+                "hint": "time"
+              },
+              {
+                "name": "message",
+                "type": "String",
+                "hint": "log_message"
+              },
+              {
+                "name": "level",
+                "type": "String",
+                "hint": "log_level"
+              },
+              {
+                "name": "source",
+                "type": "String"
+              },
+              {
+                "name": "host",
+                "type": "String"
+              },
+              {
+                "name": "user",
+                "type": "String"
+              },
+              {
+                "name": "origin",
+                "type": "String"
+              }
+            ],
+            "filters": [
+              {
+                "type": "datetime",
+                "operator": "WITH IN DASHBOARD TIME RANGE",
+                "filterType": "custom",
+                "key": "",
+                "hint": "time",
+                "condition": "AND"
+              }
+            ],
+            "orderBy": [
+              {
+                "name": "",
+                "hint": "time",
+                "dir": "DESC",
+                "default": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "Matching events (table)",
+      "description": "Newest 200 matches with every common column. Column filters apply to this table only.",
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "siem-analyst"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "level"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "critical": {
+                        "color": "dark-red",
+                        "index": 0
+                      },
+                      "error": {
+                        "color": "red",
+                        "index": 1
+                      },
+                      "warning": {
+                        "color": "orange",
+                        "index": 2
+                      },
+                      "info": {
+                        "color": "green",
+                        "index": 3
+                      },
+                      "debug": {
+                        "color": "blue",
+                        "index": 4
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "siem-analyst"
+          },
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT event_time, source, origin, host, user, level, message FROM siem.log_search WHERE $__timeFilter(event_time) AND $__conditionalAll(has(splitByChar(',', trim(BOTH '{}' FROM decodeURLComponent('${source:percentencode}'))), source), $source) AND $__conditionalAll(has(arrayMap(x -> unhex(x), splitByChar(',', trim(BOTH '{}' FROM decodeURLComponent('${host:percentencode}')))), host), $host) AND $__conditionalAll(has(arrayMap(x -> unhex(x), splitByChar(',', trim(BOTH '{}' FROM decodeURLComponent('${user:percentencode}')))), user), $user) AND (decodeURLComponent('${search:percentencode}') = '' OR (hasAnyTokens(search_text, lower(decodeURLComponent('${search:percentencode}'))) AND (decodeURLComponent('${mode:percentencode}') = 'any' OR hasAllTokens(search_text, lower(decodeURLComponent('${search:percentencode}')))))) ORDER BY event_time DESC LIMIT 200"
+        }
+      ]
+    }
+  ]
+}
