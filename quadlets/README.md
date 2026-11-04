@@ -204,9 +204,23 @@ sudo firewall-cmd --permanent --add-rich-rule='rule family=ipv4 source address=1
 sudo firewall-cmd --reload
 ```
 
-Verify the result with a connection test from a third host: podman-published
-ports go through its own netfilter rules, so confirm firewalld actually blocks
-them (not tested here).
+The rich rules above only filter traffic *to the host*. Published container
+ports are DNATed and then forwarded, and firewalld's forward chain starts with
+`ct status dnat accept`, so **rich rules alone do not block them**: from a third
+host `curl http://10.0.1.10:8123/ping` still returned `Ok.` (measured
+2026-11-04, OL9, podman 5.8.2, netavark). Drop before the DNAT as well:
+
+```bash
+for p in 8123 9000; do
+  sudo firewall-cmd --permanent --direct --add-rule ipv4 raw PREROUTING 0     -p tcp -d 10.0.1.10 --dport $p ! -s 10.0.1.20/32 -j DROP
+done
+sudo firewall-cmd --reload
+sudo podman network reload --all   # a firewalld reload drops netavark's forward rules
+```
+
+Skipping the last line left B connecting but getting no reply (measured). With that, the same curl from a third host times out and from `10.0.1.20`
+returns `Ok.`. (A firewalld *policy* with ingress zone `public` and egress
+`ANY` was tried and did not block it.)
 
 ### Two-host example
 
@@ -250,6 +264,9 @@ SPLUNK_HEC_TOKEN=...
 ```
 
 ```bash
+# data directories (the units bind-mount them; they are not created for you)
+sudo install -d -m 2770 -o 10001 -g 0 /var/lib/ironlog/vector-hosts-buffer
+sudo install -d -m 0750 -o 472   -g 0 /var/lib/ironlog/grafana
 sudo cp quadlets/ironlog.network quadlets/ironlog-schema.container \
         quadlets/ironlog-grafana.container quadlets/ironlog-vector-hosts.container \
         /etc/containers/systemd/
@@ -260,6 +277,15 @@ sudo systemctl start ironlog-schema.service ironlog-grafana.service ironlog-vect
 `ironlog-schema.service` on B runs `ironlog-schema` against `10.0.1.10:9000`
 (that is why B needs the admin credentials), and Grafana and Vector start only
 after it passes. A variant without the admin password on host B is not provided.
+
+**Verified 2026-11-04** on two Oracle Linux 9 VMs (podman 5.8.2, SELinux
+enforcing, firewalld): ClickHouse + schema on A (`10.10.10.237`, bound to that
+address), Grafana + `vector-hosts` on B (`10.10.10.236`). Schema one-shot on B
+passed against A; HEC events on B landed in A's `siem.k8s_logs`; both Grafana
+datasources reported OK; `svc_grafana_analyst` could read from B; the built-in
+`default` user was refused; `:8123/ping` from a third host timed out and from B
+returned `Ok.`; both hosts rebooted (A, then B) and B reconnected without
+action. Not tested: TLS, IPv6, podman 4.9, a firewall-less A.
 
 Other splits follow from the variable: Vector alone, or Grafana alone, on a
 host is the same recipe with only that unit plus `ironlog-schema.container`.
