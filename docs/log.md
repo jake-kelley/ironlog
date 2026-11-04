@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+* **SBOM vulnerability report**: The SBOM workflow now runs Grype 0.121.1 on the image SBOMs (report-only, plus a weekly run). First pass against the committed snapshot with the 2026-11-03 database: Grafana 23 critical and 101 high, mostly Go `stdlib` go1.26.7 and `golang.org/x/net` with fixes available; Vector 61 high; ClickHouse no high or critical. Untriaged and not deduplicated.
 * **BOM/SBOM regenerated**: Declared inventory, [BOM](bom.md), CycloneDX bundle, [FOSS/FOCI review](foss-foci-assessment.md) and [HTML report](reports/ironlog-supply-chain-report.html) now cover ClickHouse 26.8.34.13, Grafana 13.3.0 with plugin 4.23.4, and Vector 0.61.0; HyperDX and MongoDB removed. Syft 1.56.0 ARM64 scans of the three runtime images: 2,074 packages, 10,483 components. Added `scripts/scan-image-sboms.py` and a GitHub Actions SBOM workflow. FOCI remains not established.
 * **Grafana-only UI**: Removed HyperDX, its MongoDB app-state store, the `svc_hyperdx` ClickHouse account and the HyperDX Keycloak client. Grafana is the single UI; the new Log Search dashboard and `siem.log_search` view replace HyperDX search.
 * **Upgrades**: ClickHouse 24.8 -> 26.8.34.13 LTS with text (inverted) indexes on free-text `message` columns, migrated in place on existing installs; Grafana 11.4.0 -> `grafana/grafana:13.3.0` with the ClickHouse plugin pinned at 4.23.4; Vector 0.57.0 -> 0.61.0; k3s demo v1.35.6 -> v1.37.1. Vector was re-evaluated against OpenTelemetry Collector and alternatives and retained.

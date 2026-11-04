@@ -89,11 +89,19 @@ unverified similarly named repository. Offline archives can be scanned with
 ## CI
 
 `.github/workflows/sbom.yml` runs on pushes and pull requests that touch
-image references or the inventory, and on manual dispatch. It runs
-`generate-sbom.py` (which fails on inventory/Compose/Quadlet drift), scans
-the repository directory with Syft, and uploads both as a 30-day workflow
-artifact. Manual dispatch with `scan_images` also runs
-`scan-image-sboms.py`. CI output is not committed back to the repository.
+image references or the inventory, weekly (Monday 06:17 UTC), and on manual
+dispatch. It runs `generate-sbom.py` (which fails on inventory/Compose/Quadlet
+drift), scans the repository directory with Syft, and uploads the results as
+a 30-day workflow artifact. Manual dispatch with `scan_images` also runs
+`scan-image-sboms.py`.
+
+Grype then matches the image SBOMs against its vulnerability database: the
+fresh scans when dispatched with `scan_images`, otherwise the committed
+`registry-snapshot/`. Per-image table and JSON reports land in
+`vulnerabilities/` in the artifact, with severity counts in the run summary.
+The Grype pass is report-only and does not fail the job. Matches are not
+triaged and are not deduplicated across binaries or images. CI output is not
+committed back to the repository.
 
 ## Complete a release-specific SBOM
 
