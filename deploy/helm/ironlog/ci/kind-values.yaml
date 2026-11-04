@@ -1,0 +1,22 @@
+# Live test on kind: locally built images, small resources, and the pod user
+# OpenShift restricted-v2 would assign (arbitrary UID, GID 0).
+# Install into a namespace labelled pod-security.kubernetes.io/enforce=restricted.
+openshift: true
+podSecurityContext:
+  runAsUser: 1000770000
+  runAsGroup: 0
+image:
+  registry: ghcr.io/jake-kelley
+  pullPolicy: Never
+  clickhouse: {tag: dev}
+  grafana: {tag: dev}
+  vector: {tag: dev}
+clickhouse:
+  persistence: {size: 5Gi}
+  resources:
+    requests: {cpu: 100m, memory: 512Mi}
+    limits: {memory: 2Gi}
+grafana:
+  persistence: {size: 1Gi}
+networkPolicy:
+  enabled: true

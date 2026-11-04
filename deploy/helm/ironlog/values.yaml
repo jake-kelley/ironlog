@@ -1,0 +1,184 @@
+# Ironlog Helm chart. Contract for the images: images/README.md.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# true = OpenShift restricted-v2 mode: no runAsUser / runAsGroup / fsGroup is
+# set on any pod, so the SCC assigns the namespace UID range. Every other
+# hardening setting stays on.
+openshift: false
+
+# Extra pod-level securityContext keys merged over the computed one for every
+# workload (for example {runAsUser: 1000770000, runAsGroup: 0} to imitate
+# OpenShift on a plain cluster). Leave empty normally.
+podSecurityContext: {}
+
+image:
+  registry: ghcr.io/jake-kelley
+  pullPolicy: IfNotPresent
+  pullSecrets: []        # names of existing image pull Secrets
+  clickhouse:
+    repository: ironlog-clickhouse
+    tag: "26.8.34.13"    # moving <upstream version> tag; pin <version>-<git sha> for production
+  grafana:
+    repository: ironlog-grafana
+    tag: "13.3.0"
+  vector:
+    repository: ironlog-vector
+    tag: "0.61.0"
+
+# Credentials. Leave a value empty and the chart generates a random one on first
+# install and reuses it on upgrade (looked up from the in-cluster Secret).
+# Or point existingSecret at a Secret that carries ALL of these keys:
+#   CLICKHOUSE_PASSWORD CH_VECTOR_PASSWORD CH_GRAFANA_ANALYST_PASSWORD
+#   CH_GRAFANA_AUDITOR_PASSWORD GF_SECURITY_ADMIN_PASSWORD SPLUNK_HEC_TOKEN
+# and optionally: IRONLOG_S3_ACCESS_KEY_ID IRONLOG_S3_SECRET_ACCESS_KEY
+#   GF_DATABASE_PASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+secrets:
+  existingSecret: ""
+  clickhouseAdminPassword: ""
+  vectorPassword: ""
+  grafanaAnalystPassword: ""
+  grafanaAuditorPassword: ""
+  grafanaAdminPassword: ""
+  hecToken: ""
+
+# ClickHouse tiering to S3 (-> IRONLOG_S3_* on the server and the schema Job).
+s3:
+  enabled: false
+  endpoint: ""           # full bucket/prefix URL, AWS S3 or S3-compatible
+  region: ""
+  accessKeyId: ""        # empty both = AWS credential chain (IRSA / pod identity)
+  secretAccessKey: ""
+  hotDays: 30
+  retentionDays: 400     # must exceed hotDays; 1825 for five-year deployments
+
+clickhouse:
+  replicas: 1            # only 1 is supported until Keeper/replication lands
+  adminUser: ironlog_admin
+  readOnlyRootFilesystem: true   # config dir is copied to an emptyDir by an init container
+  uid: 10001
+  persistence:
+    size: 100Gi
+    storageClass: ""
+    accessModes: [ReadWriteOnce]
+    retainOnDelete: true         # keep the PVC when the release/StatefulSet is deleted
+  resources:
+    requests: {cpu: 500m, memory: 2Gi}
+    limits: {memory: 4Gi}
+  serviceAccount:
+    annotations: {}      # e.g. eks.amazonaws.com/role-arn for the S3 tier
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  extraEnv: []
+
+schema:
+  waitSeconds: 300       # IRONLOG_SCHEMA_WAIT_SECONDS for the hook Job
+  backoffLimit: 3
+  activeDeadlineSeconds: 900
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {memory: 256Mi}
+
+# Grafana and Vector wait (init container) until their own ClickHouse account
+# can log in and the siem tables exist.
+schemaGate:
+  timeoutSeconds: 600
+  expectedTables: 7
+
+grafana:
+  replicas: 1            # >1 requires database.type=postgres
+  uid: 472
+  adminUser: admin
+  rootUrl: ""            # GF_SERVER_ROOT_URL
+  readOnlyRootFilesystem: true
+  persistence:
+    enabled: true        # ignored (emptyDir) when database.type=postgres
+    size: 5Gi
+    storageClass: ""
+    existingClaim: ""
+    accessModes: [ReadWriteOnce]
+  database:
+    type: sqlite         # sqlite | postgres
+    host: ""             # host:port
+    name: grafana
+    user: grafana
+    password: ""         # or key GF_DATABASE_PASSWORD in the existing secret
+    sslMode: require
+  service:
+    type: ClusterIP
+    port: 80
+    annotations: {}
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts: []            # [{host: grafana.example.com, path: /}]
+    tls: []              # [{secretName: x, hosts: [grafana.example.com]}]
+  route:                 # OpenShift
+    enabled: false
+    host: ""
+    annotations: {}
+    tls:
+      termination: edge
+      insecureEdgeTerminationPolicy: Redirect
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 512Mi}
+  serviceAccount:
+    annotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  extraEnv: []
+
+vector:
+  hosts:
+    replicas: 1
+    uid: 10001
+    readOnlyRootFilesystem: true
+    service:
+      type: ClusterIP    # LoadBalancer / NodePort for agents and clusters outside this one
+      annotations: {}
+      loadBalancerSourceRanges: []
+      hecPort: 8088
+      agentPort: 6000
+      hecNodePort: null
+      agentNodePort: null
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {memory: 512Mi}
+    serviceAccount:
+      annotations: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    extraEnv: []
+  aws:
+    enabled: false
+    replicas: 1
+    uid: 10001
+    readOnlyRootFilesystem: true
+    region: ""
+    queues:              # all four are required when enabled (vector/vector.yaml)
+      cloudtrail: ""
+      guardduty: ""
+      vpcflow: ""
+      s3access: ""
+    accessKeyId: ""      # optional; empty = IRSA / pod identity / default chain
+    secretAccessKey: ""
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {memory: 512Mi}
+    serviceAccount:
+      annotations: {}    # eks.amazonaws.com/role-arn
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    extraEnv: []
+
+# Only Grafana, Vector (hosts, aws), the schema Job and ClickHouse itself may
+# reach ClickHouse 8123/9000. Needs a CNI that enforces NetworkPolicy.
+networkPolicy:
+  enabled: false

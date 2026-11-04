@@ -1,0 +1,155 @@
+{{- $name := include "ironlog.chHost" . }}
+{{- $sel := include "ironlog.selector" (dict "root" . "component" "clickhouse") }}
+{{- $ro := .Values.clickhouse.readOnlyRootFilesystem }}
+{{- if ne (int .Values.clickhouse.replicas) 1 }}{{ fail "clickhouse.replicas must be 1: replication (Keeper) is not implemented yet" }}{{ end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "ironlog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  type: ClusterIP
+  selector:
+    {{- $sel | nindent 4 }}
+  ports:
+    - {name: http, port: 8123, targetPort: http}
+    - {name: native, port: 9000, targetPort: native}
+---
+# Stable per-pod DNS for the StatefulSet (and future replicas / Keeper).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-headless
+  labels:
+    {{- include "ironlog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    {{- $sel | nindent 4 }}
+  ports:
+    - {name: http, port: 8123, targetPort: http}
+    - {name: native, port: 9000, targetPort: native}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "ironlog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  replicas: {{ .Values.clickhouse.replicas }}
+  serviceName: {{ $name }}-headless
+  selector:
+    matchLabels:
+      {{- $sel | nindent 6 }}
+  {{- if .Values.clickhouse.persistence.retainOnDelete }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "ironlog.podLabels" (dict "root" . "component" "clickhouse") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: false
+      {{- include "ironlog.pullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "ironlog.podSC" (dict "root" . "uid" .Values.clickhouse.uid) | nindent 8 }}
+      terminationGracePeriodSeconds: 120
+      {{- if $ro }}
+      initContainers:
+        # A read-only root cannot take the entrypoint's generated users.d /
+        # config.d files: seed a writable copy of the baked config directory.
+        - name: seed-config
+          image: {{ include "ironlog.image" (dict "root" . "img" .Values.image.clickhouse) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/bash", "-c", "cp -R /etc/clickhouse-server/. /seed/ && find /seed -mindepth 1 -exec chmod u+w {} +"]
+          securityContext:
+            {{- include "ironlog.containerSC" (dict "readOnly" true) | nindent 12 }}
+          volumeMounts:
+            - {name: etc, mountPath: /seed}
+      {{- end }}
+      containers:
+        - name: clickhouse
+          image: {{ include "ironlog.image" (dict "root" . "img" .Values.image.clickhouse) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - {name: http, containerPort: 8123}
+            - {name: native, containerPort: 9000}
+          env:
+            - name: CLICKHOUSE_USER
+              value: {{ .Values.clickhouse.adminUser | quote }}
+            {{- range $k := list "CLICKHOUSE_PASSWORD" "CH_VECTOR_PASSWORD" "CH_GRAFANA_ANALYST_PASSWORD" "CH_GRAFANA_AUDITOR_PASSWORD" }}
+            {{- include "ironlog.secretEnv" (dict "root" $ "name" $k) | nindent 12 }}
+            {{- end }}
+            {{- include "ironlog.tierEnv" . | nindent 12 }}
+            {{- if .Values.s3.enabled }}
+            {{- /* static keys are optional: unset means the AWS credential chain */}}
+            {{- include "ironlog.secretEnv" (dict "root" . "name" "IRONLOG_S3_ACCESS_KEY_ID" "optional" true) | nindent 12 }}
+            {{- include "ironlog.secretEnv" (dict "root" . "name" "IRONLOG_S3_SECRET_ACCESS_KEY" "optional" true) | nindent 12 }}
+            {{- end }}
+            {{- with .Values.clickhouse.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          startupProbe:
+            exec: {command: ["/usr/local/bin/ironlog-healthcheck"]}
+            periodSeconds: 5
+            timeoutSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            exec: {command: ["/usr/local/bin/ironlog-healthcheck"]}
+            periodSeconds: 10
+            timeoutSeconds: 10
+          livenessProbe:
+            exec: {command: ["/usr/local/bin/ironlog-healthcheck"]}
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.clickhouse.resources | nindent 12 }}
+          securityContext:
+            {{- include "ironlog.containerSC" (dict "readOnly" $ro) | nindent 12 }}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/clickhouse}
+            - {name: tmp, mountPath: /tmp}
+            - {name: logs, mountPath: /var/log/clickhouse-server}
+            {{- if $ro }}
+            - {name: etc, mountPath: /etc/clickhouse-server}
+            {{- end }}
+      volumes:
+        - {name: tmp, emptyDir: {}}
+        - {name: logs, emptyDir: {}}
+        {{- if $ro }}
+        - {name: etc, emptyDir: {}}
+        {{- end }}
+      {{- with .Values.clickhouse.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.clickhouse.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.clickhouse.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          {{- toYaml .Values.clickhouse.persistence.accessModes | nindent 10 }}
+        {{- with .Values.clickhouse.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.clickhouse.persistence.size }}

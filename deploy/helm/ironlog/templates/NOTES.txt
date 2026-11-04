@@ -1,0 +1,17 @@
+Ironlog {{ .Chart.AppVersion }} installed as {{ include "ironlog.fullname" . }}.
+
+Schema: the post-install/post-upgrade Job {{ include "ironlog.chHost" . }}-schema applies the DDL and verifies it.
+  kubectl -n {{ .Release.Namespace }} logs job/{{ include "ironlog.chHost" . }}-schema   # only while it exists (deleted on success)
+
+Grafana:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ironlog.fullname" . }}-grafana 3000:{{ .Values.grafana.service.port }}
+  user: {{ .Values.grafana.adminUser }}
+  password: kubectl -n {{ .Release.Namespace }} get secret {{ include "ironlog.secretName" . }} -o jsonpath='{.data.GF_SECURITY_ADMIN_PASSWORD}' | base64 -d
+
+Log intake (Vector service {{ include "ironlog.fullname" . }}-vector, type {{ .Values.vector.hosts.service.type }}):
+  Kubernetes HEC: port {{ .Values.vector.hosts.service.hecPort }}, token in secret key SPLUNK_HEC_TOKEN
+  Linux/Windows agents: port {{ .Values.vector.hosts.service.agentPort }}
+{{- if .Values.openshift }}
+
+openshift=true: no runAsUser/runAsGroup/fsGroup is set; the restricted-v2 SCC assigns them.
+{{- end }}
