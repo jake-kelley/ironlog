@@ -2,9 +2,10 @@ name: SBOM
 
 # Declared-inventory SBOM (fails on inventory/Compose/Quadlet drift), a Syft
 # scan of the repository and a Grype vulnerability report on the image SBOMs,
-# uploaded as a workflow artifact. Runs when image references or the inventory
-# change, and weekly. Registry image scans take a few minutes, so they run on
-# manual dispatch only. Output is never committed.
+# uploaded as a workflow artifact and, from main, published as a GitHub Pages
+# report. Runs when image references or the inventory change, and weekly.
+# Registry image scans take a few minutes, so they run on manual dispatch only.
+# Output is never committed.
 
 on:
   push:
@@ -16,6 +17,7 @@ on:
       - sbom/**
       - scripts/generate-sbom.py
       - scripts/scan-image-sboms.py
+      - scripts/build-vuln-report.py
       - scripts/ami/grafana-clickhouse-plugin.version
       - .github/workflows/sbom.yml
   pull_request:
@@ -26,6 +28,7 @@ on:
       - sbom/**
       - scripts/generate-sbom.py
       - scripts/scan-image-sboms.py
+      - scripts/build-vuln-report.py
       - scripts/ami/grafana-clickhouse-plugin.version
       - .github/workflows/sbom.yml
   # Weekly Grype pass over the committed image SBOMs picks up new CVEs.
@@ -88,6 +91,7 @@ jobs:
         run: |
           src=out/registry-snapshot
           [ -d "$src" ] || src=sbom/registry-snapshot
+          echo "SBOM_SRC=$src" >> "$GITHUB_ENV"
           mkdir -p out/vulnerabilities
           for sbom in "$src"/*.cdx.json; do
             id=$(basename "$sbom" .cdx.json)
@@ -109,9 +113,39 @@ jobs:
           print("\nMatches are not deduplicated across binaries or images and are not triaged.")
           EOF
 
+      - name: Report page
+        run: >-
+          python3 scripts/build-vuln-report.py --scans "$SBOM_SRC" --grype out/vulnerabilities
+          --extra out/declared/ironlog.cdx.json --extra out/declared/ironlog-bom.csv
+          --extra out/repository.cdx.json --output out/site
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-${{ github.sha }}
-          path: out/
+          path: |
+            out/
+            !out/site/sbom/**
+            !out/site/vulnerabilities/**
           if-no-files-found: error
           retention-days: 30
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        with:
+          path: out/site
+
+  # Publishes the report page to GitHub Pages; main branch only, never PRs.
+  pages:
+    needs: sbom
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        id: deploy
