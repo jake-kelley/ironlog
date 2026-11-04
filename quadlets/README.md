@@ -209,19 +209,48 @@ The rich rules above only filter traffic *to the host*. Published container
 ports are DNATed and then forwarded, and firewalld's forward chain starts with
 `ct status dnat accept`, so **rich rules alone do not block them**: from a third
 host `curl http://10.0.1.10:8123/ping` still returned `Ok.` (measured
-2026-11-04, OL9, podman 5.8.2, netavark). Drop before the DNAT as well:
+2026-11-04, OL9, podman 5.8.2, netavark). Drop before the DNAT as well. `quadlets/host/ironlog-firewall.service` does
+this with a table of its own (`table inet ironlog`), taking the sources from
+`IRONLOG_CLICKHOUSE_ALLOWED_HOSTS` (below) in `/etc/ironlog/ironlog.env`:
 
 ```bash
-for p in 8123 9000; do
-  sudo firewall-cmd --permanent --direct --add-rule ipv4 raw PREROUTING 0     -p tcp -d 10.0.1.10 --dport $p ! -s 10.0.1.20/32 -j DROP
-done
-sudo firewall-cmd --reload
-sudo podman network reload --all   # a firewalld reload drops netavark's forward rules
+sudo install -m 0755 quadlets/host/ironlog-firewall.sh /usr/local/libexec/ironlog-firewall.sh
+sudo install -m 0644 images/clickhouse/allowed-hosts.sh /usr/local/libexec/ironlog-allowed-hosts.sh
+sudo install -m 0644 quadlets/host/ironlog-firewall.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now ironlog-firewall.service
+sudo nft list table inet ironlog      # the loaded rules
 ```
 
-Skipping the last line left B connecting but getting no reply (measured). With that, the same curl from a third host times out and from `10.0.1.20`
-returns `Ok.`. (A firewalld *policy* with ingress zone `public` and egress
-`ANY` was tried and did not block it.)
+The script validates the list with the same strict parser as the image and
+**refuses to start when it is empty or invalid** (the unit is for split mode
+only). `nft -f` replaces the table atomically; `systemctl stop` deletes it.
+
+Why a separate table rather than a firewalld direct rule: the chain hooks at
+priority -300, before the raw table and before netavark's DNAT (dstnat, -100), and
+drops `tcp dport { 8123, 9000 }` to any local address (`fib daddr type local`, no
+host IP hard-coded) from sources outside the list. Loopback and `podman*`
+bridge traffic is accepted, so containers on the host are not cut off (the
+in-ClickHouse allowlist still judges them). Because the table is not firewalld's,
+`firewall-cmd --reload` leaves it alone, and **with no firewalld direct rules
+left, a reload no longer flushes podman's rules either** (measured below), so no
+`podman network reload --all` is needed. The unit orders itself after
+`firewalld.service` and before `ironlog-clickhouse.service`, so the ports are never
+open to others while ClickHouse starts. IPv4 and IPv6 sources are separate sets.
+
+**Do not use firewalld direct rules on a host running podman.** Measured
+2026-11-04 on A (firewalld, iptables-nft, netavark): `firewall-cmd --reload` with
+a direct rule present (even a runtime-only one) emptied `table ip nat` and
+`table ip filter`, i.e. all of netavark's DNAT and forward rules, so published
+ports stopped answering (B's connections timed out) until `podman network reload`.
+That reload, run on the emptied tables, prints `netavark: code: 1, msg: iptables:
+No chain/target/match by that name.` (it tries to remove chains that are gone;
+the rules were all restored afterwards, so the message is harmless there). On
+healthy tables the same command printed only a firewalld-zone warning, and with the
+`ironlog` table and no direct rules, `firewall-cmd --reload` kept the DNAT rules
+(`dnat to` rule count 2 before and after). (A firewalld *policy* with ingress zone
+`public` and egress `ANY` was tried and did not block it.)
+
+**Verified with `ironlog-firewall.service`** (A `10.10.10.237`, allowlist `10.10.10.236`): from the workstation `:8123` and `:9000` timed out (curl rc 28); from B `:8123/ping` returned `Ok.`, `:9000` connected, B's Grafana `/api/health` was `ok`, and an HEC event sent to B landed in `siem.k8s_logs`. The same results held after `firewall-cmd --reload` and after `systemctl restart ironlog-clickhouse`, with no podman command. `systemctl stop` removed the table, `start` recreated it. Not tested: IPv6 sources, a reboot of A with the unit.
 
 ### In-ClickHouse source allowlist (`IRONLOG_CLICKHOUSE_ALLOWED_HOSTS`)
 
@@ -253,7 +282,7 @@ schema one-shot verified, an HEC event sent to B landed in A's `siem.k8s_logs`,
 both Grafana datasources reported OK, and `svc_grafana_analyst`, `svc_vector` and
 the admin were refused from another container on A (`10.89.0.15`, server log
 `IP_ADDRESS_NOT_ALLOWED`) while the admin worked from B. The workstation could
-not even open the ports: the raw PREROUTING drop refused it before ClickHouse
+not even open the ports: the `ironlog` nftables drop refused it before ClickHouse
 (so the workstation was not tested against the allowlist itself).
 
 ### Two-host example
@@ -276,6 +305,11 @@ IRONLOG_CLICKHOUSE_ALLOWED_HOSTS=10.0.1.20
 ```bash
 sudo cp quadlets/ironlog.network quadlets/ironlog-clickhouse.container /etc/containers/systemd/
 sudo systemctl daemon-reload && sudo systemctl start ironlog-clickhouse.service
+# source firewall (see "Source firewall" above): needs IRONLOG_CLICKHOUSE_ALLOWED_HOSTS set
+sudo install -m 0755 quadlets/host/ironlog-firewall.sh /usr/local/libexec/ironlog-firewall.sh
+sudo install -m 0644 images/clickhouse/allowed-hosts.sh /usr/local/libexec/ironlog-allowed-hosts.sh
+sudo install -m 0644 quadlets/host/ironlog-firewall.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now ironlog-firewall.service
 ```
 
 The server applies the schema itself at start (log line
@@ -315,7 +349,7 @@ sudo systemctl start ironlog-schema.service ironlog-grafana.service ironlog-vect
 after it passes. A variant without the admin password on host B is not provided.
 
 **Verified 2026-11-04** on two Oracle Linux 9 VMs (podman 5.8.2, SELinux
-enforcing, firewalld): ClickHouse + schema on A (`10.10.10.237`, bound to that
+enforcing, firewalld; firewall unit re-verified the same day, see above): ClickHouse + schema on A (`10.10.10.237`, bound to that
 address), Grafana + `vector-hosts` on B (`10.10.10.236`). Schema one-shot on B
 passed against A; HEC events on B landed in A's `siem.k8s_logs`; both Grafana
 datasources reported OK; `svc_grafana_analyst` could read from B; the built-in
