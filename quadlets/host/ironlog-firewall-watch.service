@@ -1,0 +1,15 @@
+# ironlog split mode, ClickHouse host only: after every `firewall-cmd --reload`,
+# re-create podman's (netavark's) forwarding rules that the reload flushes.
+[Unit]
+Description=ironlog: restore podman network rules after a firewalld reload
+After=firewalld.service ironlog-firewall.service
+Requires=ironlog-firewall.service
+PartOf=ironlog-firewall.service
+
+[Service]
+ExecStart=/usr/local/libexec/ironlog-firewall.sh watch
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

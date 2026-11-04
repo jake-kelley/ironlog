@@ -3,7 +3,9 @@
 # published ClickHouse ports (8123, 9000) from every source not listed in
 # IRONLOG_CLICKHOUSE_ALLOWED_HOSTS. Run by ironlog-firewall.service, which loads
 # /etc/ironlog/ironlog.env (systemd EnvironmentFile semantics) into the environment.
-#   ironlog-firewall.sh start | stop | print   (print = ruleset on stdout, no nft call)
+#   ironlog-firewall.sh start | stop | print | watch
+#   print = ruleset on stdout, no nft call
+#   watch = re-create netavark's rules after every firewalld reload (see below)
 set -euo pipefail
 
 here=$(dirname "$(readlink -f "$0")")
@@ -41,6 +43,20 @@ NFT
 }
 
 case "${1:-}" in
+  watch)
+    # `firewall-cmd --reload` flushes the iptables-nft tables (ip nat, ip filter)
+    # that netavark fills with podman's DNAT and forward rules, so published ports
+    # go dead until `podman network reload --all`. table inet ironlog survives the
+    # reload; this loop runs the podman command on every firewalld Reloaded signal.
+    busctl --system monitor --match       "type=signal,sender=org.fedoraproject.FirewallD1,member=Reloaded" |
+    while read -r line; do
+      [[ "$line" == *"Member=Reloaded"* ]] || continue
+      echo "ironlog-firewall: firewalld reloaded; running podman network reload --all"
+      # netavark prints 'iptables: No chain/target/match by that name' here although
+      # the rules are restored; tolerate the exit status, not the result.
+      podman network reload --all >/dev/null 2>&1 || true
+    done
+    exit 0 ;;
   stop)
     nft list table inet ironlog >/dev/null 2>&1 && nft delete table inet ironlog
     exit 0 ;;
