@@ -292,6 +292,67 @@ host is the same recipe with only that unit plus `ironlog-schema.container`.
 Compose does not support split mode: there Grafana and Vector wait for the local
 `schema` service.
 
+## S3 cold tier (`IRONLOG_S3_TIER=on`)
+
+Tiering is a ClickHouse-host setting; Grafana and Vector hosts are unaffected.
+Add to `/etc/ironlog/ironlog.env` on the ClickHouse host (mode 0600), then
+`sudo systemctl daemon-reload && sudo systemctl restart ironlog-clickhouse ironlog-schema`
+(the units must be the ones that pass these variables through; they are listed in
+`ironlog-clickhouse.container` and `ironlog-schema.container`):
+
+```bash
+IRONLOG_S3_TIER=on
+IRONLOG_S3_ENDPOINT=http://s3.example:8333/ironlog-cold/ch/   # bucket and prefix; the bucket must exist
+IRONLOG_S3_ACCESS_KEY_ID=...        # set both or neither
+IRONLOG_S3_SECRET_ACCESS_KEY=...
+IRONLOG_S3_REGION=us-east-1         # optional
+IRONLOG_HOT_DAYS=7                  # default 30: days on local disk
+IRONLOG_RETENTION_DAYS=100          # default 400 with tier on: days until DELETE; must exceed HOT_DAYS
+```
+
+What changes: the image generates `config.d/20-storage-s3.xml` (secrets by
+`from_env`, never written out), every `siem.*` table gets storage policy
+`hot_to_s3` and `TTL event_time + HOT_DAYS TO VOLUME 's3', event_time + RETENTION_DAYS DELETE`.
+`audit.query_archive` is untouched. Switching an existing populated tier-off
+deployment to tier on works in place. **Switching tier back off is unsupported**:
+tables keep `hot_to_s3` and `ironlog-schema` verification fails. If an existing
+ironlog.env lacks these lines the tier stays off. Empty values count as unset.
+
+**Verified 2026-11-04** on the two OL9 hosts of the split-host test (SELinux
+enforcing, podman 5.8.2), ClickHouse on A with the S3 endpoint on B:
+schema journal `... wrong storage policy=0 (tier=on)` and `verified` after the
+restart and after a reboot of A; rows inserted 10 days old moved to disk
+`s3_cold` (visible in `system.parts`, objects in the bucket, still readable
+through ClickHouse and through Grafana's `SIEM (analyst)` datasource), 200 day
+old rows were deleted, current rows stayed on `default`; HEC events on B still
+landed; no AVC denials on either host; the S3 keys do not appear in the
+`ironlog-clickhouse` / `ironlog-schema` journals. **Not tested**: real AWS S3,
+instance-role / `use_environment_credentials` credentials on a host, TLS to the
+endpoint (the test used plain HTTP): these belong to the AWS phase.
+
+### Test-only S3 endpoint (SeaweedFS)
+
+`quadlets/test-fixtures/ironlog-test-s3.container` runs
+`docker.io/chrislusf/seaweedfs:4.52` as a throwaway S3 endpoint. **Test fixture,
+not for deployments.** Setup used on host B:
+
+```bash
+# s3.json: {"identities":[{"name":"ironlog","credentials":[{"accessKey":"...","secretKey":"..."}],
+#           "actions":["Admin","Read","Write","List","Tagging"]}]}
+sudo install -d -m 711 /etc/ironlog-test-s3
+sudo install -m 600 -o 1000 -g 1000 s3.json /etc/ironlog-test-s3/s3.json   # the image runs as uid 1000
+sudo cp quadlets/test-fixtures/ironlog-test-s3.container /etc/containers/systemd/
+sudo firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="10.10.10.237/32" port port="8333" protocol="tcp" accept' && sudo firewall-cmd --reload
+sudo systemctl daemon-reload && sudo systemctl start ironlog-test-s3.service
+echo "s3.bucket.create -name ironlog-cold" | sudo podman exec -i ironlog-test-s3 weed shell -master=localhost:9333
+```
+
+Gotchas found: the S3 port accepts connections a few seconds after the unit is
+`active`; the key file must be readable by uid 1000 or SeaweedFS silently runs
+without the identities; a `curl --aws-sigv4` bucket PUT returned
+`SignatureDoesNotMatch` against it, so the bucket is created with `weed shell`
+(ClickHouse's own signed requests worked).
+
 ## Relation to `scripts/firstboot` and `packer/`
 
 `scripts/firstboot/ironlog-schema.service` (the old reconciliation unit) and
@@ -355,8 +416,8 @@ warning appears.
 
 ## Open items
 
-- Split-host and S3-tier runs on OL9 hosts, and a dry-run on podman 4.9 if any
-  host still runs OL 9.4.
+- A dry-run on podman 4.9 if any
+  host still runs OL 9.4. S3 tier against real AWS S3 / instance roles (AWS phase).
 - Image publication to ghcr.io (tags above are the contract's, not yet pushed).
 - Retiring `scripts/firstboot/ironlog-schema.service` and the `/opt/ironlog`
   config staging in `packer/`.
