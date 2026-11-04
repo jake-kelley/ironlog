@@ -1,0 +1,18 @@
+<clickhouse>
+    <!-- Image variant of clickhouse/config.d/05-listen.xml: the address comes
+         from IRONLOG_CLICKHOUSE_LISTEN (image default 0.0.0.0, IPv4 only; '::'
+         fails to bind where there is no IPv6). The built-in 'default' user stays
+         loopback-only through users.d/00-lockdown.xml. -->
+    <listen_host from_env="IRONLOG_CLICKHOUSE_LISTEN"/>
+    <!-- Files the server creates are group-writable and closed to others, so a
+         volume written by one UID stays usable by another UID with GID 0
+         (upstream default 027 leaves group read-only). -->
+    <umask>007</umask>
+    <!-- stdout/stderr only; no log files are required. -->
+    <logger>
+        <level>information</level>
+        <console>1</console>
+        <log remove="remove"/>
+        <errorlog remove="remove"/>
+    </logger>
+</clickhouse>
