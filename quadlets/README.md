@@ -204,9 +204,23 @@ sudo firewall-cmd --permanent --add-rich-rule='rule family=ipv4 source address=1
 sudo firewall-cmd --reload
 ```
 
-Verify the result with a connection test from a third host: podman-published
-ports go through its own netfilter rules, so confirm firewalld actually blocks
-them (not tested here).
+The rich rules above only filter traffic *to the host*. Published container
+ports are DNATed and then forwarded, and firewalld's forward chain starts with
+`ct status dnat accept`, so **rich rules alone do not block them**: from a third
+host `curl http://10.0.1.10:8123/ping` still returned `Ok.` (measured
+2026-11-04, OL9, podman 5.8.2, netavark). Drop before the DNAT as well:
+
+```bash
+for p in 8123 9000; do
+  sudo firewall-cmd --permanent --direct --add-rule ipv4 raw PREROUTING 0     -p tcp -d 10.0.1.10 --dport $p ! -s 10.0.1.20/32 -j DROP
+done
+sudo firewall-cmd --reload
+sudo podman network reload --all   # a firewalld reload drops netavark's forward rules
+```
+
+Skipping the last line left B connecting but getting no reply (measured). With that, the same curl from a third host times out and from `10.0.1.20`
+returns `Ok.`. (A firewalld *policy* with ingress zone `public` and egress
+`ANY` was tried and did not block it.)
 
 ### Two-host example
 
@@ -250,6 +264,9 @@ SPLUNK_HEC_TOKEN=...
 ```
 
 ```bash
+# data directories (the units bind-mount them; they are not created for you)
+sudo install -d -m 2770 -o 10001 -g 0 /var/lib/ironlog/vector-hosts-buffer
+sudo install -d -m 0750 -o 472   -g 0 /var/lib/ironlog/grafana
 sudo cp quadlets/ironlog.network quadlets/ironlog-schema.container \
         quadlets/ironlog-grafana.container quadlets/ironlog-vector-hosts.container \
         /etc/containers/systemd/
