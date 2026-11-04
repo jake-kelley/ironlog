@@ -235,8 +235,26 @@ Both units pass it through; set the same value wherever `ironlog-schema` runs.
 Invalid entries make the container and `ironlog-schema` exit non-zero. Leave it
 unset in single-host mode (containers connect from the podman network). The
 restart of `ironlog-clickhouse` is needed for the admin part; the service
-accounts follow the next schema run. It relies on ClickHouse seeing the real
-client address through the published port (see Results below).
+accounts follow the next schema run. Run the schema one-shot with the **same**
+value as the server: it re-applies the accounts' `HOST` clause on every run, so a
+one-shot without the variable would reset them to `HOST ANY` (and it needs the
+same `IRONLOG_S3_TIER`/`IRONLOG_HOT_DAYS`/`IRONLOG_RETENTION_DAYS` as the server or
+verification fails). The admin override is a `users.d/zz-admin-networks.xml`
+written at container start (it must sort after the upstream `default-user.xml`).
+
+Refusals look like `AUTHENTICATION_FAILED` to the client; the server log says
+`Connections from <ip> are not allowed. (IP_ADDRESS_NOT_ALLOWED)`.
+
+**Measured 2026-11-04** (OL9, podman 5.8.2, A `10.10.10.237`, B `10.10.10.236`):
+ClickHouse sees B's real address through the published port
+(`system.query_log.address` = `::ffff:10.10.10.236`), so the list works behind
+DNAT. With `IRONLOG_CLICKHOUSE_ALLOWED_HOSTS=10.10.10.236` on both hosts: B's
+schema one-shot verified, an HEC event sent to B landed in A's `siem.k8s_logs`,
+both Grafana datasources reported OK, and `svc_grafana_analyst`, `svc_vector` and
+the admin were refused from another container on A (`10.89.0.15`, server log
+`IP_ADDRESS_NOT_ALLOWED`) while the admin worked from B. The workstation could
+not even open the ports: the raw PREROUTING drop refused it before ClickHouse
+(so the workstation was not tested against the allowlist itself).
 
 ### Two-host example
 
