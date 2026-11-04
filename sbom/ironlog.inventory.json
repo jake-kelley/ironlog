@@ -29,8 +29,11 @@
       "license_expression": "Apache-2.0",
       "supplier": "ClickHouse, Inc.",
       "image": "docker.io/clickhouse/clickhouse-server:26.8.34.13",
+      "quadlet_image": "ghcr.io/jake-kelley/ironlog-clickhouse:26.8.34.13",
+      "compose_image": "ironlog-clickhouse:local",
       "source_paths": [
         "docker-compose.yml",
+        "images/clickhouse/Dockerfile",
         "quadlets/ironlog-clickhouse.container"
       ],
       "evidence_urls": [
@@ -38,7 +41,7 @@
         "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres",
         "https://nebius.com/newsroom/nebius-participates-in-clickhouse-series-c-crystallizes-value-of-asset-to-fund-hypergrowth-of-core-ai-infrastructure-business"
       ],
-      "notes": "Exact 26.8 LTS build tag. Upstream Apache license does not license every bundled library. Foreign investment disclosed; no current cap table/control rights supplied.",
+      "notes": "Exact 26.8 LTS build tag. Upstream Apache license does not license every bundled library. Foreign investment disclosed; no current cap table/control rights supplied. Deployed as the ironlog image ironlog-clickhouse (images/clickhouse/Dockerfile), built FROM the pinned upstream in \"image\"; Compose builds it locally (ironlog-clickhouse:local), Quadlets reference quadlet_image. Vulnerability scans and licence evidence still target the upstream reference.",
       "depends_on": [],
       "foci_status": "REVIEW_REQUIRED_FOREIGN_INVESTMENT_DISCLOSED"
     },
@@ -50,15 +53,18 @@
       "license_expression": "AGPL-3.0-only",
       "supplier": "Grafana Labs",
       "image": "docker.io/grafana/grafana:13.3.0",
+      "quadlet_image": "ghcr.io/jake-kelley/ironlog-grafana:13.3.0",
+      "compose_image": "ironlog-grafana:local",
       "source_paths": [
         "docker-compose.yml",
+        "images/grafana/Dockerfile",
         "quadlets/ironlog-grafana.container"
       ],
       "evidence_urls": [
         "https://github.com/grafana/grafana/blob/v13.3.0/LICENSING.md",
         "https://grafana.com/press/2022/04/06/grafana-labs-announces-240-million-investment-round-led-by-gic-and-welcomes-new-investor-j-p--morgan/"
       ],
-      "notes": "Image is grafana/grafana (grafana-oss stopped publishing at 13.0.2); default license AGPL-3.0-only per LICENSING.md, with Apache-2.0 directories and third-party licenses. Disclosed GIC investment is historical evidence requiring current ownership review.",
+      "notes": "Image is grafana/grafana (grafana-oss stopped publishing at 13.0.2); default license AGPL-3.0-only per LICENSING.md, with Apache-2.0 directories and third-party licenses. Disclosed GIC investment is historical evidence requiring current ownership review. Deployed as the ironlog image ironlog-grafana (images/grafana/Dockerfile), built FROM the pinned upstream in \"image\"; Compose builds it locally (ironlog-grafana:local), Quadlets reference quadlet_image. Vulnerability scans and licence evidence still target the upstream reference.",
       "depends_on": [
         "clickhouse",
         "grafana-clickhouse-plugin"
@@ -73,8 +79,11 @@
       "license_expression": "MPL-2.0",
       "supplier": "Datadog, Inc. / Vector contributors",
       "image": "docker.io/timberio/vector:0.61.0-debian",
+      "quadlet_image": "ghcr.io/jake-kelley/ironlog-vector:0.61.0",
+      "compose_image": "ironlog-vector:local",
       "source_paths": [
         "docker-compose.yml",
+        "images/vector/Dockerfile",
         "quadlets/ironlog-vector-hosts.container",
         "quadlets/ironlog-vector.container",
         "k8s/vector-shipper.yaml"
@@ -83,7 +92,7 @@
         "https://github.com/vectordotdev/vector/blob/v0.61.0/LICENSE",
         "https://vector.dev/blog/datadog-acquisition/"
       ],
-      "notes": "One unique appliance image; host collector always present, AWS collector enabled when configured. Agent binaries and the k8s shipper (0.61.0-distroless-libc, not scanned) use 0.61.0. Supplier clearance and bundled/static libraries remain unreviewed.",
+      "notes": "One unique appliance image; host collector always present, AWS collector enabled when configured. Agent binaries and the k8s shipper (0.61.0-distroless-libc, not scanned) use 0.61.0. Supplier clearance and bundled/static libraries remain unreviewed. Deployed as the ironlog image ironlog-vector (images/vector/Dockerfile), built FROM the pinned upstream in \"image\"; Compose builds it locally (ironlog-vector:local), Quadlets reference quadlet_image. Vulnerability scans and licence evidence still target the upstream reference.",
       "depends_on": [
         "clickhouse"
       ],

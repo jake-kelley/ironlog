@@ -274,8 +274,9 @@ The `docs/` directory is an [Open Knowledge Format](https://github.com/GoogleClo
 
 ## Operations
 
-- **Start/stop**: `scripts/compose.sh up -d` / `scripts/compose.sh down` (add
-  `--profile aws --profile k3s` to include optional services). For appliance services, use systemd; see
+- **Start/stop**: `scripts/compose.sh up -d --build` builds the ironlog images
+  from `images/` on first use (no config bind mounts); `scripts/compose.sh down`
+  (add `--profile aws --profile k3s` to include optional services). For appliance services, use systemd; see
   [Quadlet operations](quadlets/README.md).
 - **Weekly ISSO pass**: open the 800-53 dashboard, review each section (red
   stats first), check Alerting for anything firing, spot-check

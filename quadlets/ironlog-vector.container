@@ -1,36 +1,27 @@
-# Translated from docker-compose.yml: services.vector (Phase 2 — AWS
-# ingestion). compose gates this behind the "aws" profile so the core stack
-# stays green before AWS creds/queue URLs exist; SHIPS DISABLED here for the
-# same reason — deliberately has NO [Install] section, so `systemctl enable`
-# has nothing to symlink and this unit will not start at boot even if
-# `systemctl enable --now multi-user.target`-style bring-up runs across the
-# rest of quadlets/. See quadlets/README.md "Enabling ironlog-vector" for the
-# exact first-boot-to-AWS-go-live steps.
+# ironlog-vector image, role "aws" (images/vector/): AWS ingestion (CloudTrail,
+# GuardDuty, VPC Flow, S3 Access via SQS+S3). Compose gates this behind the
+# "aws" profile; it SHIPS DISABLED here for the same reason: deliberately NO
+# [Install] section, so it does not start at boot. See quadlets/README.md
+# "Enabling ironlog-vector.service".
 [Unit]
-Description=ironlog SIEM — Vector aggregator (AWS ingestion: CloudTrail/GuardDuty/VPC Flow/S3 Access via SQS+S3)
-# Gated on ironlog-schema.service, NOT on ironlog-clickhouse.service directly.
-# ClickHouse reports healthy on `SELECT 1`, which succeeds against a server
-# with an EMPTY database, so depending on it alone let this service start
-# happily against a schema-less ClickHouse and silently do nothing (measured
-# on real hardware 2026-08-18). ironlog-schema.service Requires= clickhouse
-# itself, so ordering is otherwise unchanged.
+Description=ironlog SIEM - Vector aggregator (AWS ingestion: CloudTrail/GuardDuty/VPC Flow/S3 Access via SQS+S3)
+# Gated on the schema one-shot, NOT on ClickHouse health (see grafana unit).
 After=ironlog-schema.service
 Requires=ironlog-schema.service
 
 [Container]
-Image=docker.io/timberio/vector:0.61.0-debian
+Image=ghcr.io/jake-kelley/ironlog-vector:0.61.0
 Pull=never
 ContainerName=ironlog-vector
 Network=ironlog.network
-NetworkAlias=vector
 
-Environment=VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true
+Environment=IRONLOG_VECTOR_ROLE=aws
 Environment=CH_VECTOR_PASSWORD=${CH_VECTOR_PASSWORD}
-# compose defaults AWS_REGION to us-east-1 via ${AWS_REGION:-us-east-1};
-# systemd/quadlet has no ${VAR:-default} fallback syntax. ASSUMPTION: the
-# secret resolver that generates ironlog.env always writes a concrete
-# AWS_REGION value (defaulting to us-east-1 itself if unset), so this is a
-# straight substitution, not a default. Flagged in quadlets/README.md.
+Environment=IRONLOG_CLICKHOUSE_HOST=${IRONLOG_CLICKHOUSE_HOST}
+Environment=IRONLOG_CLICKHOUSE_HTTP_PORT=${IRONLOG_CLICKHOUSE_HTTP_PORT}
+# compose defaults AWS_REGION to us-east-1; systemd has no ${VAR:-default}.
+# ASSUMPTION: the secret resolver always writes a concrete AWS_REGION into
+# ironlog.env. Static keys are optional (an instance role works).
 Environment=AWS_REGION=${AWS_REGION}
 Environment=AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
 Environment=AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
@@ -39,14 +30,20 @@ Environment=SQS_URL_GUARDDUTY=${SQS_URL_GUARDDUTY}
 Environment=SQS_URL_VPCFLOW=${SQS_URL_VPCFLOW}
 Environment=SQS_URL_S3ACCESS=${SQS_URL_S3ACCESS}
 
-Volume=/opt/ironlog/vector/vector.yaml:/etc/vector/vector.yaml:ro,Z
 Volume=/var/lib/ironlog/vector-buffer:/var/lib/vector:Z
 
-# compose leaves the :8088 splunk_hec port commented out for this service
-# (that port belongs to vector-hosts) — no PublishPort here, matching compose.
+HealthCmd=/usr/local/bin/ironlog-healthcheck
+HealthInterval=15s
+HealthTimeout=5s
+HealthRetries=5
+HealthStartPeriod=30s
+
+# No PublishPort: the port 8088 source belongs to vector-hosts.
 
 [Service]
+Environment=IRONLOG_CLICKHOUSE_HOST=ironlog-clickhouse
+Environment=IRONLOG_CLICKHOUSE_HTTP_PORT=8123
 EnvironmentFile=/etc/ironlog/ironlog.env
 Restart=on-failure
 
-# Deliberately no [Install] section — see [Unit] Description above.
+# Deliberately no [Install] section.

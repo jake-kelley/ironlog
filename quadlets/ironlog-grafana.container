@@ -1,48 +1,41 @@
-# Translated from docker-compose.yml: services.grafana
+# ironlog-grafana image (images/grafana/): provisioning, dashboards, the
+# ClickHouse plugin and the local-auth settings are baked in.
 [Unit]
-Description=ironlog SIEM — Grafana OSS (dashboards/alerts, local login)
-# Gated on ironlog-schema.service, NOT on ironlog-clickhouse.service directly.
-# ClickHouse reports healthy on `SELECT 1`, which succeeds against a server
-# with an EMPTY database, so depending on it alone let this service start
-# happily against a schema-less ClickHouse and silently do nothing (measured
-# on real hardware 2026-08-18). ironlog-schema.service Requires= clickhouse
-# itself, so ordering is otherwise unchanged.
+Description=ironlog SIEM - Grafana OSS (dashboards/alerts, local login)
+# Gated on the schema one-shot, NOT on ClickHouse health: SELECT 1 succeeds
+# against an empty database (measured on real hardware 2026-08-18).
 After=ironlog-schema.service
 Requires=ironlog-schema.service
 
 [Container]
-Image=docker.io/grafana/grafana:13.3.0
+Image=ghcr.io/jake-kelley/ironlog-grafana:13.3.0
 Pull=never
 ContainerName=ironlog-grafana
 Network=ironlog.network
-NetworkAlias=grafana
 
-Environment=GF_AUTH_DISABLE_LOGIN_FORM=false
-Environment=GF_AUTH_BASIC_ENABLED=true
-Environment=GF_AUTH_ANONYMOUS_ENABLED=false
-Environment=GF_USERS_ALLOW_SIGN_UP=false
-Environment=GF_AUTH_GENERIC_OAUTH_ENABLED=false
-# [security]x_xss_protection is deprecated (browsers dropped it).
-Environment=GF_SECURITY_X_XSS_PROTECTION=false
-# Grafana 13 background-installs a default plugin set into the plugins dir at
-# startup. Here it is read-only and the appliance is air-gapped, so every
-# install fails with "read-only file system". The ClickHouse plugin is baked.
-Environment=GF_PLUGINS_PREINSTALL_DISABLED=true
-
-# Renames / URL-composition from ironlog.env's .env.example names:
 Environment=GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL}
 Environment=GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
 Environment=GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
 Environment=CH_GRAFANA_ANALYST_PASSWORD=${CH_GRAFANA_ANALYST_PASSWORD}
 Environment=CH_GRAFANA_AUDITOR_PASSWORD=${CH_GRAFANA_AUDITOR_PASSWORD}
+# Datasource address (images/README.md). Default and override: see [Service].
+Environment=IRONLOG_CLICKHOUSE_HOST=${IRONLOG_CLICKHOUSE_HOST}
+Environment=IRONLOG_CLICKHOUSE_NATIVE_PORT=${IRONLOG_CLICKHOUSE_NATIVE_PORT}
 
+# Image runs as uid 472; the host directory must be owned by it.
 Volume=/var/lib/ironlog/grafana:/var/lib/grafana:Z
-Volume=/opt/ironlog/grafana/provisioning:/etc/grafana/provisioning:ro,Z
-Volume=/opt/ironlog/grafana-plugins:/var/lib/grafana/plugins:ro,Z
 
 PublishPort=3000:3000
 
+HealthCmd=wget -q -O /dev/null http://127.0.0.1:3000/api/health
+HealthInterval=30s
+HealthTimeout=5s
+HealthRetries=3
+HealthStartPeriod=30s
+
 [Service]
+Environment=IRONLOG_CLICKHOUSE_HOST=ironlog-clickhouse
+Environment=IRONLOG_CLICKHOUSE_NATIVE_PORT=9000
 EnvironmentFile=/etc/ironlog/ironlog.env
 Restart=on-failure
 

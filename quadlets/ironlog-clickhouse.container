@@ -1,71 +1,57 @@
-# Translated from docker-compose.yml: services.clickhouse
+# ironlog-clickhouse image (images/clickhouse/): config, lockdown and DDL are
+# baked in. No config bind mounts; only the data directory is mounted.
 [Unit]
-Description=ironlog SIEM — ClickHouse storage/query engine
-# No dependencies of its own; everything else waits on this one.
+Description=ironlog SIEM - ClickHouse storage/query engine
+# No dependencies of its own; ironlog-schema.service and the rest wait on it.
 
 [Container]
-Image=docker.io/clickhouse/clickhouse-server:26.8.34.13
+Image=ghcr.io/jake-kelley/ironlog-clickhouse:26.8.34.13
+# Pull=never: load or pull the image first (quadlets/README.md "Images").
 Pull=never
 ContainerName=ironlog-clickhouse
 Network=ironlog.network
-NetworkAlias=clickhouse
 
-# --- static (non-secret) env, unchanged from compose ---
-Environment=CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-
-# --- secrets: ironlog.env uses the .env.example names verbatim (CH_ADMIN_USER,
-# CH_ADMIN_PASSWORD, ...). The clickhouse image and initdb scripts expect
-# CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (renamed by compose's ${...} mapping)
-# plus a handful of CH_*_PASSWORD vars that keep the SAME name in both compose
-# and ironlog.env. Quadlet's EnvironmentFile= just passes a file's vars through
-# under their own names — it cannot rename or interpolate — so the rename is
-# done here via systemd's own ExecStart $VAR substitution: [Service]
-# EnvironmentFile= (below) loads ironlog.env into THIS UNIT's environment,
-# and systemd substitutes $CH_ADMIN_USER etc. into the generated
-# `podman run --env ...` command line before exec. See quadlets/README.md
-# "Secret handling" section for the full explanation and the caveat that this
-# is unverified without a live podman/systemd to dry-run against.
+# ironlog.env uses the .env.example names (CH_ADMIN_USER, ...); the image
+# expects CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (images/README.md). Quadlet
+# cannot rename variables, so [Service] EnvironmentFile= loads ironlog.env into
+# the unit environment and systemd substitutes the values into the generated
+# `podman run` command line. See quadlets/README.md "Secret handling".
 Environment=CLICKHOUSE_USER=${CH_ADMIN_USER}
 Environment=CLICKHOUSE_PASSWORD=${CH_ADMIN_PASSWORD}
 Environment=CH_VECTOR_PASSWORD=${CH_VECTOR_PASSWORD}
 Environment=CH_GRAFANA_ANALYST_PASSWORD=${CH_GRAFANA_ANALYST_PASSWORD}
 Environment=CH_GRAFANA_AUDITOR_PASSWORD=${CH_GRAFANA_AUDITOR_PASSWORD}
 
-# --- data (bind mount, writable -> :Z) ---
+# Data (bind mount, writable). The image runs as uid 10001, gid 0: the host
+# directory must be writable by it (quadlets/README.md "Data directories").
 Volume=/var/lib/ironlog/clickhouse:/var/lib/clickhouse:Z
 
-# --- baked read-only config (bind mounts, :ro,Z) ---
-Volume=/opt/ironlog/clickhouse/config.d:/etc/clickhouse-server/config.d:ro,Z
-# Individual-file mount, NOT the whole users.d dir: mounting the directory
-# read-only stops the image entrypoint writing users.d/default-user.xml and
-# crash-loops the container (see CLAUDE.md "Bugs fixed during first deploy").
-Volume=/opt/ironlog/clickhouse/users.d/00-lockdown.xml:/etc/clickhouse-server/users.d/00-lockdown.xml:ro,Z
-Volume=/opt/ironlog/clickhouse/initdb:/docker-entrypoint-initdb.d:ro,Z
-Volume=/opt/ironlog/clickhouse/ddl:/ddl:ro,Z
-
-# --- ports: both stay loopback-only. CLAUDE.md treats this as a security
-# property (admin-only access), not an oversight — do not widen. ---
-PublishPort=127.0.0.1:8123:8123
-PublishPort=127.0.0.1:9000:9000
+# Ports are loopback-only BY DEFAULT: ClickHouse is admin-only and this is a
+# deliberate security property (CLAUDE.md, docs/control-mapping.md CM-7). For
+# split-host mode set IRONLOG_CLICKHOUSE_BIND in /etc/ironlog/ironlog.env to
+# this host's private address AFTER reading quadlets/README.md "Split-host
+# mode": it exposes the ClickHouse login surface to that network.
+# The [Service] Environment= below supplies the loopback default, because
+# systemd has no ${VAR:-default} syntax and an empty value would publish on
+# all interfaces. Never set the variable to an empty string.
+PublishPort=${IRONLOG_CLICKHOUSE_BIND}:8123:8123
+PublishPort=${IRONLOG_CLICKHOUSE_BIND}:9000:9000
 
 Ulimit=nofile=262144:262144
 
-# Health: same probe as compose. Uses $$ (systemd-escaped literal $) so the
-# CONTAINER's own /bin/sh -c expands $CLICKHOUSE_USER/$CLICKHOUSE_PASSWORD
-# from ITS runtime env at healthcheck time, instead of systemd trying (and
-# failing, since those exact names aren't in ironlog.env) to substitute them
-# into the unit file at service-start time.
-HealthCmd=clickhouse-client --user "$$CLICKHOUSE_USER" --password "$$CLICKHOUSE_PASSWORD" --query "SELECT 1"
+# Same command as the image HEALTHCHECK; explicit because a podman-built OCI
+# image drops HEALTHCHECK. It reads the container's own CLICKHOUSE_* env.
+# Health only means SELECT 1 works; schema readiness is ironlog-schema.service.
+HealthCmd=/usr/local/bin/ironlog-healthcheck
 HealthInterval=10s
 HealthTimeout=5s
 HealthRetries=10
-# Makes systemd's "active" state track podman's health state, not just
-# process start, so dependent units (grafana/vector-hosts/vector) wait
-# for ClickHouse to answer
-# queries, matching compose's `condition: service_healthy`.
-Notify=healthy
+HealthStartPeriod=60s
 
 [Service]
+# Default, overridden by IRONLOG_CLICKHOUSE_BIND in ironlog.env (systemd.exec:
+# EnvironmentFile= values override Environment=).
+Environment=IRONLOG_CLICKHOUSE_BIND=127.0.0.1
 EnvironmentFile=/etc/ironlog/ironlog.env
 Restart=on-failure
 

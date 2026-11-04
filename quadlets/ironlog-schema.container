@@ -1,0 +1,44 @@
+# One-shot: ironlog-schema from the ironlog-clickhouse image against
+# IRONLOG_CLICKHOUSE_HOST. Applies DDL, service accounts and TTLs, VERIFIES them
+# and exits non-zero if anything is missing. Grafana and both Vector units
+# Require= this unit, so they never start against a schema-less ClickHouse.
+# Generates the SAME unit name as scripts/firstboot/ironlog-schema.service:
+# install only one of the two (quadlets/README.md "Relation to scripts/firstboot").
+[Unit]
+Description=ironlog SIEM - ClickHouse schema, accounts and TTL reconciliation (one-shot)
+# Single host: start and order after the local ClickHouse unit. On a host
+# without ironlog-clickhouse.service (split-host) Wants=/After= on a missing
+# unit are ignored. Either way ironlog-schema waits up to
+# IRONLOG_SCHEMA_WAIT_SECONDS (120) for the server to accept the admin login.
+Wants=ironlog-clickhouse.service
+After=ironlog-clickhouse.service
+
+[Container]
+Image=ghcr.io/jake-kelley/ironlog-clickhouse:26.8.34.13
+Pull=never
+ContainerName=ironlog-schema
+Network=ironlog.network
+# Image HEALTHCHECK is for the server; meaningless for a short-lived job.
+HealthCmd=none
+Exec=ironlog-schema
+
+Environment=CLICKHOUSE_USER=${CH_ADMIN_USER}
+Environment=CLICKHOUSE_PASSWORD=${CH_ADMIN_PASSWORD}
+Environment=CH_VECTOR_PASSWORD=${CH_VECTOR_PASSWORD}
+Environment=CH_GRAFANA_ANALYST_PASSWORD=${CH_GRAFANA_ANALYST_PASSWORD}
+Environment=CH_GRAFANA_AUDITOR_PASSWORD=${CH_GRAFANA_AUDITOR_PASSWORD}
+Environment=IRONLOG_CLICKHOUSE_HOST=${IRONLOG_CLICKHOUSE_HOST}
+Environment=IRONLOG_CLICKHOUSE_NATIVE_PORT=${IRONLOG_CLICKHOUSE_NATIVE_PORT}
+
+[Service]
+# Defaults: the ClickHouse container on this host's ironlog network. Split-host:
+# set IRONLOG_CLICKHOUSE_HOST in ironlog.env (it overrides these).
+Environment=IRONLOG_CLICKHOUSE_HOST=ironlog-clickhouse
+Environment=IRONLOG_CLICKHOUSE_NATIVE_PORT=9000
+EnvironmentFile=/etc/ironlog/ironlog.env
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target default.target

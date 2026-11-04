@@ -1,59 +1,42 @@
-# Translated from docker-compose.yml: services.vector-hosts (Phase 3 —
-# always-on Vector aggregator for hosts + Kubernetes).
-# :8088 splunk_hec (K8s clusters push, token in ironlog.env)
-# :6000 vector native protocol (Linux agents)
+# ironlog-vector image, role "hosts" (images/vector/): Linux agents (:6000) and
+# Kubernetes splunk_hec (:8088). Always on. Config is baked in.
 [Unit]
-Description=ironlog SIEM — Vector aggregator (Linux hosts + Kubernetes)
-# compose: depends_on clickhouse condition service_healthy.
-# Gated on ironlog-schema.service, NOT on ironlog-clickhouse.service directly.
-# ClickHouse reports healthy on `SELECT 1`, which succeeds against a server
-# with an EMPTY database, so depending on it alone let this service start
-# happily against a schema-less ClickHouse and silently do nothing (measured
-# on real hardware 2026-08-18). ironlog-schema.service Requires= clickhouse
-# itself, so ordering is otherwise unchanged.
+Description=ironlog SIEM - Vector aggregator (Linux hosts + Kubernetes)
+# Gated on the schema one-shot, NOT on ClickHouse health (see grafana unit).
 After=ironlog-schema.service
 Requires=ironlog-schema.service
 
 [Container]
-Image=docker.io/timberio/vector:0.61.0-debian
+Image=ghcr.io/jake-kelley/ironlog-vector:0.61.0
 Pull=never
 ContainerName=ironlog-vector-hosts
 Network=ironlog.network
-NetworkAlias=vector-hosts
 
-# Vector >=0.57 disables ${VAR} interpolation in configs by default; our
-# configs deliberately pull secrets from the environment (CLAUDE.md gotcha).
-Environment=VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION=true
-# Same names in compose and ironlog.env — no rename needed.
+Environment=IRONLOG_VECTOR_ROLE=hosts
 Environment=CH_VECTOR_PASSWORD=${CH_VECTOR_PASSWORD}
 Environment=SPLUNK_HEC_TOKEN=${SPLUNK_HEC_TOKEN}
+# Sink address (images/README.md). Default and override: see [Service].
+Environment=IRONLOG_CLICKHOUSE_HOST=${IRONLOG_CLICKHOUSE_HOST}
+Environment=IRONLOG_CLICKHOUSE_HTTP_PORT=${IRONLOG_CLICKHOUSE_HTTP_PORT}
 
-Volume=/opt/ironlog/vector/hosts.yaml:/etc/vector/vector.yaml:ro,Z
+# Disk buffer (data_dir). Image runs as uid 10001, gid 0.
 Volume=/var/lib/ironlog/vector-hosts-buffer:/var/lib/vector:Z
 
 PublishPort=8088:8088
 PublishPort=6000:6000
 
-# compose's healthcheck used a bash /dev/tcp probe against Vector's internal
-# :8686 API, and nothing in compose's depends_on graph actually waits on it
-# (only clickhouse's health gates other services). Not in this task's
-# required Notify=healthy scope (clickhouse only), so
-# translated as a plain HealthCmd for `podman ps`/monitoring visibility, with
-# no Notify=healthy and nothing After= it.
-HealthCmd=bash -c "exec 3<>/dev/tcp/127.0.0.1/8686 && printf 'GET /health HTTP/1.0\r\n\r\n' >&3 && grep -q 200 <&3"
+# Exec health probe (the Vector API listens on 127.0.0.1:8686 only).
+# HealthStartPeriod avoids a failed first probe leaving the transient health
+# unit in `failed` and the system `degraded` (observed 2026-08-18).
+HealthCmd=/usr/local/bin/ironlog-healthcheck
 HealthInterval=15s
 HealthTimeout=5s
 HealthRetries=5
-# Vector's :8686 API is not listening for the first few seconds, so without
-# a start period the very first probe fails, podman's per-probe transient
-# unit is left in `failed`, and `systemctl is-system-running` reports
-# `degraded` for the rest of the boot even though the container went
-# healthy immediately after (observed on real hardware 2026-08-18). A
-# permanently degraded system trains operators to ignore `systemctl
-# --failed`, which is exactly where a real ironlog failure would show up.
 HealthStartPeriod=30s
 
 [Service]
+Environment=IRONLOG_CLICKHOUSE_HOST=ironlog-clickhouse
+Environment=IRONLOG_CLICKHOUSE_HTTP_PORT=8123
 EnvironmentFile=/etc/ironlog/ironlog.env
 Restart=on-failure
 
