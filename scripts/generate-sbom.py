@@ -27,15 +27,20 @@ def generate(root, output):
         if not set(row["depends_on"]) <= ids:
             raise ValueError(f"unknown dependency: {row['id']}")
     # Catch image inventory drift without loading .env, secrets, or cloud state.
+    # "image" is the pinned upstream reference (scanned, licence evidence). The
+    # ironlog images built FROM it are "quadlet_image" (registry reference the
+    # Quadlets pull) and "compose_image" (local tag Compose builds); both default
+    # to "image" for components that are used as-is.
     declared = {row["image"] for row in rows if row["category"] == "runtime" and row["image"]}
+    declared_quadlet = {row.get("quadlet_image", row["image"]) for row in rows if row["category"] == "runtime" and row["image"]}
     quadlet_images = set()
     for path in (root / "quadlets").glob("*.container"):
         quadlet_images.update(re.findall(r"^Image=(.+)$", path.read_text(), re.M))
-    if declared != quadlet_images:
+    if declared_quadlet != quadlet_images:
         raise ValueError("inventory runtime images differ from appliance Quadlets")
     compose = (root / "docker-compose.yml").read_text(encoding="utf-8")
     compose_images = set(re.findall(r"^\s+image:\s*(\S+)", compose, re.M))
-    if {row["image"] for row in rows if row["image"]} != compose_images:
+    if {row.get("compose_image", row["image"]) for row in rows if row["image"]} != compose_images:
         raise ValueError("inventory images differ from Compose (including demo)")
     summary = root / "sbom/registry-snapshot/scan-summary.json"
     if summary.is_file():
@@ -57,6 +62,10 @@ def generate(root, output):
         }
         if row["image"]:
             properties["ironlog:image:declaredReference"] = row["image"]
+        if row.get("quadlet_image"):
+            properties["ironlog:image:builtFromDeclaredReference"] = row["image"]
+            properties["ironlog:image:quadletReference"] = row["quadlet_image"]
+            properties["ironlog:image:composeReference"] = row["compose_image"]
         if row.get("license_review_status"):
             properties["ironlog:license:reviewStatus"] = row["license_review_status"]
             properties["ironlog:license:reviewColor"] = row["review_color"]

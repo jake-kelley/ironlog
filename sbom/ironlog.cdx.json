@@ -3,9 +3,9 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
   "version": 1,
-  "serialNumber": "urn:uuid:c9dfb6ec-376d-4acc-b2f4-e9e5562586a6",
+  "serialNumber": "urn:uuid:a7bc92b5-d511-405f-b51f-eb53c33f6c7d",
   "metadata": {
-    "timestamp": "2026-11-03T23:26:38+00:00",
+    "timestamp": "2026-11-04T06:50:05+00:00",
     "tools": {
       "components": [
         {
@@ -19,7 +19,7 @@
       "bom-ref": "ironlog-declared-inventory",
       "type": "platform",
       "name": "Ironlog deployment inventory",
-      "version": "a568b2007242b980df52cbe8d2765e3d855e083e"
+      "version": "d15fa2cf13ae03d87c1ff8f92f06b0037a01db4d"
     },
     "properties": [
       {
@@ -68,7 +68,7 @@
       "supplier": {
         "name": "ClickHouse, Inc."
       },
-      "description": "Exact 26.8 LTS build tag. Upstream Apache license does not license every bundled library. Foreign investment disclosed; no current cap table/control rights supplied.",
+      "description": "Exact 26.8 LTS build tag. Upstream Apache license does not license every bundled library. Foreign investment disclosed; no current cap table/control rights supplied. Deployed as the ironlog image ironlog-clickhouse (images/clickhouse/Dockerfile), built FROM the pinned upstream in \"image\"; Compose builds it locally (ironlog-clickhouse:local), Quadlets reference quadlet_image. Vulnerability scans and licence evidence still target the upstream reference.",
       "properties": [
         {
           "name": "ironlog:category",
@@ -76,7 +76,7 @@
         },
         {
           "name": "ironlog:evidence:sourcePaths",
-          "value": "docker-compose.yml; quadlets/ironlog-clickhouse.container"
+          "value": "docker-compose.yml; images/clickhouse/Dockerfile; quadlets/ironlog-clickhouse.container"
         },
         {
           "name": "ironlog:foci:status",
@@ -93,6 +93,18 @@
         {
           "name": "ironlog:image:declaredReference",
           "value": "docker.io/clickhouse/clickhouse-server:26.8.34.13"
+        },
+        {
+          "name": "ironlog:image:builtFromDeclaredReference",
+          "value": "docker.io/clickhouse/clickhouse-server:26.8.34.13"
+        },
+        {
+          "name": "ironlog:image:quadletReference",
+          "value": "ghcr.io/jake-kelley/ironlog-clickhouse:26.8.34.13"
+        },
+        {
+          "name": "ironlog:image:composeReference",
+          "value": "ironlog-clickhouse:local"
         }
       ],
       "version": "26.8.34.13",
@@ -123,7 +135,7 @@
       "supplier": {
         "name": "Grafana Labs"
       },
-      "description": "Image is grafana/grafana (grafana-oss stopped publishing at 13.0.2); default license AGPL-3.0-only per LICENSING.md, with Apache-2.0 directories and third-party licenses. Disclosed GIC investment is historical evidence requiring current ownership review.",
+      "description": "Image is grafana/grafana (grafana-oss stopped publishing at 13.0.2); default license AGPL-3.0-only per LICENSING.md, with Apache-2.0 directories and third-party licenses. Disclosed GIC investment is historical evidence requiring current ownership review. Deployed as the ironlog image ironlog-grafana (images/grafana/Dockerfile), built FROM the pinned upstream in \"image\"; Compose builds it locally (ironlog-grafana:local), Quadlets reference quadlet_image. Vulnerability scans and licence evidence still target the upstream reference.",
       "properties": [
         {
           "name": "ironlog:category",
@@ -131,7 +143,7 @@
         },
         {
           "name": "ironlog:evidence:sourcePaths",
-          "value": "docker-compose.yml; quadlets/ironlog-grafana.container"
+          "value": "docker-compose.yml; images/grafana/Dockerfile; quadlets/ironlog-grafana.container"
         },
         {
           "name": "ironlog:foci:status",
@@ -148,6 +160,18 @@
         {
           "name": "ironlog:image:declaredReference",
           "value": "docker.io/grafana/grafana:13.3.0"
+        },
+        {
+          "name": "ironlog:image:builtFromDeclaredReference",
+          "value": "docker.io/grafana/grafana:13.3.0"
+        },
+        {
+          "name": "ironlog:image:quadletReference",
+          "value": "ghcr.io/jake-kelley/ironlog-grafana:13.3.0"
+        },
+        {
+          "name": "ironlog:image:composeReference",
+          "value": "ironlog-grafana:local"
         }
       ],
       "version": "13.3.0",
@@ -174,7 +198,7 @@
       "supplier": {
         "name": "Datadog, Inc. / Vector contributors"
       },
-      "description": "One unique appliance image; host collector always present, AWS collector enabled when configured. Agent binaries and the k8s shipper (0.61.0-distroless-libc, not scanned) use 0.61.0. Supplier clearance and bundled/static libraries remain unreviewed.",
+      "description": "One unique appliance image; host collector always present, AWS collector enabled when configured. Agent binaries and the k8s shipper (0.61.0-distroless-libc, not scanned) use 0.61.0. Supplier clearance and bundled/static libraries remain unreviewed. Deployed as the ironlog image ironlog-vector (images/vector/Dockerfile), built FROM the pinned upstream in \"image\"; Compose builds it locally (ironlog-vector:local), Quadlets reference quadlet_image. Vulnerability scans and licence evidence still target the upstream reference.",
       "properties": [
         {
           "name": "ironlog:category",
@@ -182,7 +206,7 @@
         },
         {
           "name": "ironlog:evidence:sourcePaths",
-          "value": "docker-compose.yml; quadlets/ironlog-vector-hosts.container; quadlets/ironlog-vector.container; k8s/vector-shipper.yaml"
+          "value": "docker-compose.yml; images/vector/Dockerfile; quadlets/ironlog-vector-hosts.container; quadlets/ironlog-vector.container; k8s/vector-shipper.yaml"
         },
         {
           "name": "ironlog:foci:status",
@@ -199,6 +223,18 @@
         {
           "name": "ironlog:image:declaredReference",
           "value": "docker.io/timberio/vector:0.61.0-debian"
+        },
+        {
+          "name": "ironlog:image:builtFromDeclaredReference",
+          "value": "docker.io/timberio/vector:0.61.0-debian"
+        },
+        {
+          "name": "ironlog:image:quadletReference",
+          "value": "ghcr.io/jake-kelley/ironlog-vector:0.61.0"
+        },
+        {
+          "name": "ironlog:image:composeReference",
+          "value": "ironlog-vector:local"
         }
       ],
       "version": "0.61.0-debian",
