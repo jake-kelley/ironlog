@@ -278,6 +278,15 @@ sudo systemctl start ironlog-schema.service ironlog-grafana.service ironlog-vect
 (that is why B needs the admin credentials), and Grafana and Vector start only
 after it passes. A variant without the admin password on host B is not provided.
 
+**Verified 2026-11-04** on two Oracle Linux 9 VMs (podman 5.8.2, SELinux
+enforcing, firewalld): ClickHouse + schema on A (`10.10.10.237`, bound to that
+address), Grafana + `vector-hosts` on B (`10.10.10.236`). Schema one-shot on B
+passed against A; HEC events on B landed in A's `siem.k8s_logs`; both Grafana
+datasources reported OK; `svc_grafana_analyst` could read from B; the built-in
+`default` user was refused; `:8123/ping` from a third host timed out and from B
+returned `Ok.`; both hosts rebooted (A, then B) and B reconnected without
+action. Not tested: TLS, IPv6, podman 4.9, a firewall-less A.
+
 Other splits follow from the variable: Vector alone, or Grafana alone, on a
 host is the same recipe with only that unit plus `ironlog-schema.container`.
 Compose does not support split mode: there Grafana and Vector wait for the local
