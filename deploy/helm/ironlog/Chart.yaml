@@ -1,0 +1,9 @@
+apiVersion: v2
+name: ironlog
+description: Ironlog SIEM (ClickHouse, Grafana, Vector) for Kubernetes, Amazon EKS and OpenShift
+type: application
+version: 0.1.0
+# Moving upstream-version tags of the three ironlog images; see images/README.md.
+appVersion: "26.8.34.13"
+kubeVersion: ">=1.25.0-0"
+home: https://github.com/jake-kelley/ironlog

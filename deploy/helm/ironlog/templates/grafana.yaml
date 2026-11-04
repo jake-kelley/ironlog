@@ -1,0 +1,215 @@
+{{- $name := printf "%s-grafana" (include "ironlog.fullname" .) }}
+{{- $sel := include "ironlog.selector" (dict "root" . "component" "grafana") }}
+{{- $g := .Values.grafana }}
+{{- $pg := eq $g.database.type "postgres" }}
+{{- if and (gt (int $g.replicas) 1) (not $pg) }}{{ fail "grafana.replicas > 1 requires grafana.database.type=postgres" }}{{ end }}
+{{- if and $pg (not $g.database.host) }}{{ fail "grafana.database.type=postgres requires grafana.database.host" }}{{ end }}
+{{- $usePvc := and $g.persistence.enabled (not $pg) }}
+{{- if $usePvc }}
+{{- if not $g.persistence.existingClaim }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "ironlog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    {{- toYaml $g.persistence.accessModes | nindent 4 }}
+  {{- with $g.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $g.persistence.size }}
+---
+{{- end }}
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "ironlog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+  {{- with $g.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ $g.service.type }}
+  selector:
+    {{- $sel | nindent 4 }}
+  ports:
+    - {name: http, port: {{ $g.service.port }}, targetPort: http}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "ironlog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+spec:
+  replicas: {{ $g.replicas }}
+  {{- if $usePvc }}
+  strategy:
+    type: Recreate        # ReadWriteOnce volume + SQLite: never two pods at once
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ironlog.podLabels" (dict "root" . "component" "grafana") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: false
+      {{- include "ironlog.pullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "ironlog.podSC" (dict "root" . "uid" $g.uid) | nindent 8 }}
+      initContainers:
+        {{- include "ironlog.schemaGate" (dict "root" . "user" "svc_grafana_analyst" "key" "CH_GRAFANA_ANALYST_PASSWORD") | nindent 8 }}
+      containers:
+        - name: grafana
+          image: {{ include "ironlog.image" (dict "root" . "img" .Values.image.grafana) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - {name: http, containerPort: 3000}
+          env:
+            - name: IRONLOG_CLICKHOUSE_HOST
+              value: {{ include "ironlog.chHost" . }}
+            - name: IRONLOG_CLICKHOUSE_NATIVE_PORT
+              value: "9000"
+            - name: GF_LOG_MODE
+              value: console
+            - name: GF_SECURITY_ADMIN_USER
+              value: {{ $g.adminUser | quote }}
+            {{- range $k := list "CH_GRAFANA_ANALYST_PASSWORD" "CH_GRAFANA_AUDITOR_PASSWORD" "GF_SECURITY_ADMIN_PASSWORD" }}
+            {{- include "ironlog.secretEnv" (dict "root" $ "name" $k) | nindent 12 }}
+            {{- end }}
+            {{- with $g.rootUrl }}
+            - name: GF_SERVER_ROOT_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if $pg }}
+            - {name: GF_DATABASE_TYPE, value: postgres}
+            - {name: GF_DATABASE_HOST, value: {{ $g.database.host | quote }}}
+            - {name: GF_DATABASE_NAME, value: {{ $g.database.name | quote }}}
+            - {name: GF_DATABASE_USER, value: {{ $g.database.user | quote }}}
+            - {name: GF_DATABASE_SSL_MODE, value: {{ $g.database.sslMode | quote }}}
+            {{- include "ironlog.secretEnv" (dict "root" . "name" "GF_DATABASE_PASSWORD") | nindent 12 }}
+            {{- end }}
+            {{- with $g.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          readinessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/health, port: http}
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 6
+          startupProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 5
+            failureThreshold: 60
+          resources:
+            {{- toYaml $g.resources | nindent 12 }}
+          securityContext:
+            {{- include "ironlog.containerSC" (dict "readOnly" $g.readOnlyRootFilesystem) | nindent 12 }}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/grafana}
+            - {name: tmp, mountPath: /tmp}
+            - {name: logs, mountPath: /var/log/grafana}
+      volumes:
+        - name: data
+          {{- if $usePvc }}
+          persistentVolumeClaim:
+            claimName: {{ default $name $g.persistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - {name: tmp, emptyDir: {}}
+        - {name: logs, emptyDir: {}}
+      {{- with $g.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $g.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $g.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- if $g.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "ironlog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+  {{- with $g.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $g.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with $g.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range $g.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          - path: {{ default "/" .path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}
+                port:
+                  name: http
+    {{- end }}
+{{- end }}
+{{- if $g.route.enabled }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "ironlog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+  {{- with $g.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $g.route.host }}
+  host: {{ . | quote }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ $name }}
+    weight: 100
+  port:
+    targetPort: http
+  {{- with $g.route.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  wildcardPolicy: None
+{{- end }}

@@ -1,0 +1,54 @@
+{{- $name := include "ironlog.chHost" . }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}-schema
+  labels:
+    {{- include "ironlog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: schema
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.schema.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.schema.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "ironlog.podLabels" (dict "root" . "component" "schema") | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: false
+      {{- include "ironlog.pullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "ironlog.podSC" (dict "root" . "uid" .Values.clickhouse.uid) | nindent 8 }}
+      containers:
+        - name: ironlog-schema
+          image: {{ include "ironlog.image" (dict "root" . "img" .Values.image.clickhouse) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["ironlog-schema"]
+          env:
+            - name: HOME
+              value: /tmp
+            - name: IRONLOG_CLICKHOUSE_HOST
+              value: {{ $name }}
+            - name: IRONLOG_CLICKHOUSE_NATIVE_PORT
+              value: "9000"
+            - name: IRONLOG_SCHEMA_WAIT_SECONDS
+              value: {{ .Values.schema.waitSeconds | quote }}
+            - name: CLICKHOUSE_USER
+              value: {{ .Values.clickhouse.adminUser | quote }}
+            {{- range $k := list "CLICKHOUSE_PASSWORD" "CH_VECTOR_PASSWORD" "CH_GRAFANA_ANALYST_PASSWORD" "CH_GRAFANA_AUDITOR_PASSWORD" }}
+            {{- include "ironlog.secretEnv" (dict "root" $ "name" $k) | nindent 12 }}
+            {{- end }}
+            {{- include "ironlog.tierEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.schema.resources | nindent 12 }}
+          securityContext:
+            {{- include "ironlog.containerSC" (dict "readOnly" true) | nindent 12 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: tmp, emptyDir: {}}

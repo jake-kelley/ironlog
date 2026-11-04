@@ -1,0 +1,140 @@
+{{- $root := . }}
+{{- $roles := dict "hosts" .Values.vector.hosts }}
+{{- if .Values.vector.aws.enabled }}{{ $_ := set $roles "aws" .Values.vector.aws }}{{ end }}
+{{- $hosts := .Values.vector.hosts }}
+{{- $svc := $hosts.service }}
+{{- $hostsName := printf "%s-vector" (include "ironlog.fullname" .) }}
+{{- $hostsSel := include "ironlog.selector" (dict "root" . "component" "vector") }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $hostsName }}
+  labels:
+    {{- include "ironlog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: vector
+  {{- with $svc.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ $svc.type }}
+  {{- if and (eq $svc.type "LoadBalancer") $svc.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- toYaml $svc.loadBalancerSourceRanges | nindent 4 }}
+  {{- end }}
+  selector:
+    {{- $hostsSel | nindent 4 }}
+  ports:
+    - name: hec
+      port: {{ $svc.hecPort }}
+      targetPort: hec
+      {{- if and $svc.hecNodePort (ne $svc.type "ClusterIP") }}
+      nodePort: {{ $svc.hecNodePort }}
+      {{- end }}
+    - name: agents
+      port: {{ $svc.agentPort }}
+      targetPort: agents
+      {{- if and $svc.agentNodePort (ne $svc.type "ClusterIP") }}
+      nodePort: {{ $svc.agentNodePort }}
+      {{- end }}
+{{- range $role, $v := $roles }}
+{{- $isAws := eq $role "aws" }}
+{{- $comp := ternary "vector-aws" "vector" $isAws }}
+{{- $name := printf "%s-%s" (include "ironlog.fullname" $root) $comp }}
+{{- $sel := include "ironlog.selector" (dict "root" $root "component" $comp) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "ironlog.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $comp }}
+spec:
+  replicas: {{ $v.replicas }}
+  selector:
+    matchLabels:
+      {{- $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ironlog.podLabels" (dict "root" $root "component" $comp) | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: false
+      {{- include "ironlog.pullSecrets" $root | nindent 6 }}
+      securityContext:
+        {{- include "ironlog.podSC" (dict "root" $root "uid" $v.uid) | nindent 8 }}
+      initContainers:
+        {{- include "ironlog.schemaGate" (dict "root" $root "user" "svc_vector" "key" "CH_VECTOR_PASSWORD") | nindent 8 }}
+      containers:
+        - name: vector
+          image: {{ include "ironlog.image" (dict "root" $root "img" $root.Values.image.vector) }}
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          {{- if not $isAws }}
+          ports:
+            - {name: hec, containerPort: 8088}
+            - {name: agents, containerPort: 6000}
+          {{- end }}
+          env:
+            - name: IRONLOG_VECTOR_ROLE
+              value: {{ $role }}
+            - name: IRONLOG_CLICKHOUSE_HOST
+              value: {{ include "ironlog.chHost" $root }}
+            - name: IRONLOG_CLICKHOUSE_HTTP_PORT
+              value: "8123"
+            {{- include "ironlog.secretEnv" (dict "root" $root "name" "CH_VECTOR_PASSWORD") | nindent 12 }}
+            {{- if $isAws }}
+            - name: AWS_REGION
+              value: {{ required "vector.aws.region is required when vector.aws.enabled" $v.region | quote }}
+            - name: SQS_URL_CLOUDTRAIL
+              value: {{ required "vector.aws.queues.cloudtrail is required" $v.queues.cloudtrail | quote }}
+            - name: SQS_URL_GUARDDUTY
+              value: {{ required "vector.aws.queues.guardduty is required" $v.queues.guardduty | quote }}
+            - name: SQS_URL_VPCFLOW
+              value: {{ required "vector.aws.queues.vpcflow is required" $v.queues.vpcflow | quote }}
+            - name: SQS_URL_S3ACCESS
+              value: {{ required "vector.aws.queues.s3access is required" $v.queues.s3access | quote }}
+            {{- /* static keys optional: unset means IRSA / pod identity / default chain */}}
+            {{- include "ironlog.secretEnv" (dict "root" $root "name" "AWS_ACCESS_KEY_ID" "optional" true) | nindent 12 }}
+            {{- include "ironlog.secretEnv" (dict "root" $root "name" "AWS_SECRET_ACCESS_KEY" "optional" true) | nindent 12 }}
+            {{- else }}
+            {{- include "ironlog.secretEnv" (dict "root" $root "name" "SPLUNK_HEC_TOKEN") | nindent 12 }}
+            {{- end }}
+            {{- with $v.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          # The Vector API listens on loopback only: exec probe, not HTTP.
+          readinessProbe:
+            exec: {command: ["/usr/local/bin/ironlog-healthcheck"]}
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec: {command: ["/usr/local/bin/ironlog-healthcheck"]}
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            {{- toYaml $v.resources | nindent 12 }}
+          securityContext:
+            {{- include "ironlog.containerSC" (dict "readOnly" $v.readOnlyRootFilesystem) | nindent 12 }}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/vector}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: data, emptyDir: {}}
+        - {name: tmp, emptyDir: {}}
+      {{- with $v.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $v.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $v.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
