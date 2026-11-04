@@ -13,7 +13,8 @@
 data_dir: /var/lib/vector
 
 api:
-  enabled: false
+  enabled: true                # image healthcheck hits /health
+  address: 127.0.0.1:8686
 
 # ---------------------------------------------------------------------------
 # Sources — one SQS-notified S3 consumer per log family
@@ -209,7 +210,7 @@ sinks:
   cloudtrail_ch:
     type: clickhouse
     inputs: [cloudtrail_map]
-    endpoint: http://clickhouse:8123
+    endpoint: http://${IRONLOG_CLICKHOUSE_HOST:-clickhouse}:${IRONLOG_CLICKHOUSE_HTTP_PORT:-8123}
     database: siem
     table: cloudtrail
     # Sink healthcheck disabled: Vector probes ClickHouse WITHOUT auth
@@ -236,7 +237,7 @@ sinks:
   guardduty_ch:
     type: clickhouse
     inputs: [guardduty_map]
-    endpoint: http://clickhouse:8123
+    endpoint: http://${IRONLOG_CLICKHOUSE_HOST:-clickhouse}:${IRONLOG_CLICKHOUSE_HTTP_PORT:-8123}
     database: siem
     table: guardduty
     # Sink healthcheck disabled: Vector probes ClickHouse WITHOUT auth
@@ -263,7 +264,7 @@ sinks:
   vpcflow_ch:
     type: clickhouse
     inputs: [vpcflow_map]
-    endpoint: http://clickhouse:8123
+    endpoint: http://${IRONLOG_CLICKHOUSE_HOST:-clickhouse}:${IRONLOG_CLICKHOUSE_HTTP_PORT:-8123}
     database: siem
     table: vpc_flow
     # Sink healthcheck disabled: Vector probes ClickHouse WITHOUT auth
@@ -290,7 +291,7 @@ sinks:
   s3access_ch:
     type: clickhouse
     inputs: [s3access_map]
-    endpoint: http://clickhouse:8123
+    endpoint: http://${IRONLOG_CLICKHOUSE_HOST:-clickhouse}:${IRONLOG_CLICKHOUSE_HTTP_PORT:-8123}
     database: siem
     table: s3_access
     # Sink healthcheck disabled: Vector probes ClickHouse WITHOUT auth
