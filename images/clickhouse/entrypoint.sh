@@ -77,11 +77,11 @@ esac
 # Source-IP allowlist (IRONLOG_CLICKHOUSE_ALLOWED_HOSTS). The service accounts
 # are restricted by ironlog-schema. The admin account is created by the upstream
 # entrypoint with <networks><ip>::/0</ip> in users.d/default-user.xml; a later
-# users.d file (merged in file name order) replaces that list with loopback +
+# users.d file (merged in file name order, so the name must sort after default-user.xml) replaces that list with loopback +
 # the allowlist. Written on every start, so clearing the variable removes it.
 # shellcheck source=allowed-hosts.sh
 . /usr/local/bin/ironlog-allowed-hosts
-adm_cfg=/etc/clickhouse-server/users.d/90-admin-networks.xml
+adm_cfg=/etc/clickhouse-server/users.d/zz-admin-networks.xml
 rm -f "$adm_cfg"
 parse_allowed_hosts || { echo "ironlog-clickhouse: IRONLOG_CLICKHOUSE_ALLOWED_HOSTS: $ALLOWED_ERR" >&2; exit 64; }
 if [ "${#ALLOWED_HOSTS[@]}" -gt 0 ]; then
