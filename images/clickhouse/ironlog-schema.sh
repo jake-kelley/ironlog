@@ -21,6 +21,17 @@ POLICY="hot_to_s3"
 log() { echo "[$TAG] $*"; }
 die() { echo "[$TAG] FATAL: $*" >&2; exit 1; }
 
+# shellcheck source=allowed-hosts.sh
+. "${IRONLOG_ALLOWED_HOSTS_LIB:-/usr/local/bin/ironlog-allowed-hosts}"
+parse_allowed_hosts || die "IRONLOG_CLICKHOUSE_ALLOWED_HOSTS: $ALLOWED_ERR"
+# Service-account HOST clause. Entries are validated above (only [0-9a-fA-F:./]).
+if [ "${#ALLOWED_HOSTS[@]}" -gt 0 ]; then
+  HOST_CLAUSE="HOST LOCAL"
+  for h in "${ALLOWED_HOSTS[@]}"; do HOST_CLAUSE="${HOST_CLAUSE}, IP '${h}'"; done
+else
+  HOST_CLAUSE="HOST ANY"
+fi
+
 case "$TIER" in on|off) ;; *) die "IRONLOG_S3_TIER must be 'on' or 'off' (got '$TIER')" ;; esac
 [[ "$HOT_DAYS" =~ ^[1-9][0-9]*$ ]] || die "IRONLOG_HOT_DAYS must be a positive integer (got '$HOT_DAYS')"
 [[ "$RETENTION_DAYS" =~ ^[1-9][0-9]*$ ]] || die "IRONLOG_RETENTION_DAYS must be a positive integer (got '$RETENTION_DAYS')"
@@ -75,6 +86,11 @@ CREATE USER IF NOT EXISTS svc_grafana_analyst IDENTIFIED WITH sha256_password BY
 GRANT siem_analyst TO svc_grafana_analyst;
 CREATE USER IF NOT EXISTS svc_grafana_auditor IDENTIFIED WITH sha256_password BY '$(esc "$CH_GRAFANA_AUDITOR_PASSWORD")' DEFAULT ROLE siem_auditor SETTINGS PROFILE 'siem_reader';
 GRANT siem_auditor TO svc_grafana_auditor;
+-- On every run (CREATE ... IF NOT EXISTS leaves existing users alone), so
+-- changing or clearing IRONLOG_CLICKHOUSE_ALLOWED_HOSTS takes effect.
+ALTER USER svc_vector ${HOST_CLAUSE};
+ALTER USER svc_grafana_analyst ${HOST_CLAUSE};
+ALTER USER svc_grafana_auditor ${HOST_CLAUSE};
 SQL
 
 # Tier + retention for the siem.* MergeTree tables. audit.* keeps its own TTL
@@ -110,14 +126,17 @@ EXPECTED_TABLES="'cloudtrail','guardduty','k8s_logs','linux_syslog','s3_access',
 table_count="$(q "SELECT count() FROM system.tables WHERE database = 'siem' AND name IN ($EXPECTED_TABLES)")"
 audit_count="$(q "SELECT count() FROM system.tables WHERE database = 'audit' AND name = 'query_archive'")"
 user_count="$(q "SELECT count() FROM system.users WHERE name IN ('svc_vector','svc_grafana_analyst','svc_grafana_auditor')")"
+# 'HOST ANY' is stored as host_ip ['::/0']; any restriction must not contain it.
+if [ "${#ALLOWED_HOSTS[@]}" -gt 0 ]; then want_any=0; else want_any=1; fi
+bad_hosts="$(q "SELECT count() FROM system.users WHERE name IN ('svc_vector','svc_grafana_analyst','svc_grafana_auditor') AND has(host_ip, '::/0') != $want_any")"
 bad_ttl=0
 for t in $(q "SELECT name FROM system.tables WHERE database = 'siem' AND engine LIKE '%MergeTree'"); do
   [ "$(ttl_of "$t")" = "$want_ttl" ] || bad_ttl=$((bad_ttl + 1))
 done
 if [ "$TIER" = "on" ]; then want_policy="$POLICY"; else want_policy="default"; fi
 bad_policy="$(q "SELECT count() FROM system.tables WHERE database = 'siem' AND engine LIKE '%MergeTree' AND storage_policy != '$want_policy'")"
-log "verification: siem tables=${table_count}/7 audit.query_archive=${audit_count}/1 service accounts=${user_count}/3 tables with wrong TTL=${bad_ttl} wrong storage policy=${bad_policy} (tier=${TIER})"
-if [ "$table_count" != 7 ] || [ "$audit_count" != 1 ] || [ "$user_count" != 3 ] || [ "$bad_ttl" != 0 ] || [ "$bad_policy" != 0 ]; then
+log "verification: siem tables=${table_count}/7 audit.query_archive=${audit_count}/1 service accounts=${user_count}/3 accounts with wrong host restriction=${bad_hosts} (allowlist entries=${#ALLOWED_HOSTS[@]}) tables with wrong TTL=${bad_ttl} wrong storage policy=${bad_policy} (tier=${TIER})"
+if [ "$table_count" != 7 ] || [ "$audit_count" != 1 ] || [ "$user_count" != 3 ] || [ "$bad_hosts" != 0 ] || [ "$bad_ttl" != 0 ] || [ "$bad_policy" != 0 ]; then
   if [ "$TIER" = "off" ] && [ "$bad_policy" != 0 ]; then
     echo "[$TAG] Tables use a non-default storage policy but IRONLOG_S3_TIER is off; the S3 tier cannot be removed from existing tables here." >&2
   fi

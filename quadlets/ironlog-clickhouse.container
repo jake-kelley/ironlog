@@ -31,6 +31,9 @@ Environment=IRONLOG_S3_ENDPOINT=${IRONLOG_S3_ENDPOINT}
 Environment=IRONLOG_S3_ACCESS_KEY_ID=${IRONLOG_S3_ACCESS_KEY_ID}
 Environment=IRONLOG_S3_SECRET_ACCESS_KEY=${IRONLOG_S3_SECRET_ACCESS_KEY}
 Environment=IRONLOG_S3_REGION=${IRONLOG_S3_REGION}
+# Source-IP allowlist for the service accounts and the admin account (empty = no
+# restriction). Split-host: the Grafana/Vector host's address.
+Environment=IRONLOG_CLICKHOUSE_ALLOWED_HOSTS=${IRONLOG_CLICKHOUSE_ALLOWED_HOSTS}
 Environment=IRONLOG_HOT_DAYS=${IRONLOG_HOT_DAYS}
 Environment=IRONLOG_RETENTION_DAYS=${IRONLOG_RETENTION_DAYS}
 

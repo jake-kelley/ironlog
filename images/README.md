@@ -59,6 +59,7 @@ changing the behavior it describes.
 | `CH_VECTOR_PASSWORD` | required | `svc_vector` (ingest) |
 | `CH_GRAFANA_ANALYST_PASSWORD`, `CH_GRAFANA_AUDITOR_PASSWORD` | required | Grafana read accounts |
 | `IRONLOG_CLICKHOUSE_LISTEN` | `0.0.0.0` | `listen_host` |
+| `IRONLOG_CLICKHOUSE_ALLOWED_HOSTS` | empty (no restriction) | Comma-separated IPv4/IPv6 addresses or CIDRs. Set: `svc_vector`, `svc_grafana_analyst`, `svc_grafana_auditor` get `HOST LOCAL, IP '<each>'` (re-applied on every `ironlog-schema` run) and the admin account is limited to loopback + the list. Unset or empty: `HOST ANY` and the upstream admin default. Any entry that is not an IP/CIDR is refused (entrypoint exit 64, `ironlog-schema` exit 1). Single-host mode must leave it unset: containers connect from podman/docker network addresses. Not passed through by `docker-compose.yml` or the Helm chart for the same reason |
 | `IRONLOG_S3_TIER` | `off` | `on` adds the S3 cold volume and moves parts to it after `IRONLOG_HOT_DAYS` |
 | `IRONLOG_S3_ENDPOINT` | — | Full bucket/prefix URL, AWS S3 or S3-compatible (MinIO, Ceph, OpenShift Data Foundation) |
 | `IRONLOG_S3_ACCESS_KEY_ID`, `IRONLOG_S3_SECRET_ACCESS_KEY` | — | Static keys for S3-compatible stores; unset means the AWS credential chain (instance or task role) |
