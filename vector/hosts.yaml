@@ -161,7 +161,7 @@ sinks:
   k8s_ch:
     type: clickhouse
     inputs: [k8s_map]
-    endpoint: http://clickhouse:8123
+    endpoint: http://${IRONLOG_CLICKHOUSE_HOST:-clickhouse}:${IRONLOG_CLICKHOUSE_HTTP_PORT:-8123}
     database: siem
     table: k8s_logs
     # Sink healthcheck disabled: Vector probes ClickHouse WITHOUT auth
@@ -188,7 +188,7 @@ sinks:
   windows_ch:
     type: clickhouse
     inputs: [windows_map]
-    endpoint: http://clickhouse:8123
+    endpoint: http://${IRONLOG_CLICKHOUSE_HOST:-clickhouse}:${IRONLOG_CLICKHOUSE_HTTP_PORT:-8123}
     database: siem
     table: windows_events
     # Sink healthcheck disabled — same unauthenticated-probe issue as below.
@@ -211,7 +211,7 @@ sinks:
   linux_ch:
     type: clickhouse
     inputs: [linux_map]
-    endpoint: http://clickhouse:8123
+    endpoint: http://${IRONLOG_CLICKHOUSE_HOST:-clickhouse}:${IRONLOG_CLICKHOUSE_HTTP_PORT:-8123}
     database: siem
     table: linux_syslog
     # Sink healthcheck disabled: Vector probes ClickHouse WITHOUT auth
