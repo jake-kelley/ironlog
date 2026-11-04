@@ -115,7 +115,7 @@ jobs:
 
       - name: Report page
         run: >-
-          python3 scripts/build-vuln-report.py --scans "$SBOM_SRC" --grype out/vulnerabilities
+          python3 scripts/build-vuln-report.py --inventory sbom/ironlog.inventory.json --scans "$SBOM_SRC" --grype out/vulnerabilities
           --extra out/declared/ironlog.cdx.json --extra out/declared/ironlog-bom.csv
           --extra out/repository.cdx.json --output out/site
 

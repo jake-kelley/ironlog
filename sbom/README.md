@@ -102,10 +102,12 @@ fresh scans when dispatched with `scan_images`, otherwise the committed
 The Grype pass is report-only and does not fail the job. Matches are not
 triaged and are not deduplicated across binaries or images.
 
-`scripts/build-vuln-report.py` turns the scan summary and Grype reports into
-a self-contained, color-coded `index.html` (severity cards per image,
-filterable findings grouped by vulnerability and package version, SBOM
-downloads). Runs on `main` publish it to GitHub Pages; pull requests do not.
+`scripts/build-vuln-report.py` turns the declared inventory, image SBOMs and
+Grype reports into a self-contained, color-coded `index.html`: summary tiles,
+a severity bar per image, the declared BOM with license and FOCI status, the
+packages in each image with their worst matched vulnerability, filterable
+findings grouped by vulnerability and package version, and SBOM downloads.
+Light and dark themes follow the browser setting. Runs on `main` publish it to GitHub Pages; pull requests do not.
 CI output is not committed back to the repository.
 
 ## Complete a release-specific SBOM
