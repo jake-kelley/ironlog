@@ -1,6 +1,6 @@
 # ironlog split mode, ClickHouse host only: restrict the published ClickHouse
 # ports to IRONLOG_CLICKHOUSE_ALLOWED_HOSTS with an ironlog-owned nftables table.
-# Install: see "Source firewall" in quadlets/README.md.
+# Install: see the split-host firewall section of quadlets/README.md.
 [Unit]
 Description=ironlog ClickHouse source firewall (nftables table inet ironlog)
 Documentation=file:///usr/share/doc/ironlog/quadlets/README.md

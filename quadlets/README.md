@@ -305,7 +305,7 @@ IRONLOG_CLICKHOUSE_ALLOWED_HOSTS=10.0.1.20
 ```bash
 sudo cp quadlets/ironlog.network quadlets/ironlog-clickhouse.container /etc/containers/systemd/
 sudo systemctl daemon-reload && sudo systemctl start ironlog-clickhouse.service
-# source firewall (see "Source firewall" above): needs IRONLOG_CLICKHOUSE_ALLOWED_HOSTS set
+# source firewall (see the firewall section above): needs IRONLOG_CLICKHOUSE_ALLOWED_HOSTS set
 sudo install -m 0755 quadlets/host/ironlog-firewall.sh /usr/local/libexec/ironlog-firewall.sh
 sudo install -m 0644 images/clickhouse/allowed-hosts.sh /usr/local/libexec/ironlog-allowed-hosts.sh
 sudo install -m 0644 quadlets/host/ironlog-firewall.service /etc/systemd/system/
