@@ -74,6 +74,24 @@ XML
     ;;
 esac
 
+# Source-IP allowlist (IRONLOG_CLICKHOUSE_ALLOWED_HOSTS). The service accounts
+# are restricted by ironlog-schema. The admin account is created by the upstream
+# entrypoint with <networks><ip>::/0</ip> in users.d/default-user.xml; a later
+# users.d file (merged in file name order) replaces that list with loopback +
+# the allowlist. Written on every start, so clearing the variable removes it.
+# shellcheck source=allowed-hosts.sh
+. /usr/local/bin/ironlog-allowed-hosts
+adm_cfg=/etc/clickhouse-server/users.d/90-admin-networks.xml
+rm -f "$adm_cfg"
+parse_allowed_hosts || { echo "ironlog-clickhouse: IRONLOG_CLICKHOUSE_ALLOWED_HOSTS: $ALLOWED_ERR" >&2; exit 64; }
+if [ "${#ALLOWED_HOSTS[@]}" -gt 0 ]; then
+  [[ "$CLICKHOUSE_USER" =~ ^[A-Za-z_][A-Za-z0-9_-]*$ ]] || { echo "ironlog-clickhouse: CLICKHOUSE_USER must match [A-Za-z_][A-Za-z0-9_-]* when IRONLOG_CLICKHOUSE_ALLOWED_HOSTS is set" >&2; exit 64; }
+  ips='<ip>::1</ip><ip>127.0.0.1</ip>'
+  for h in "${ALLOWED_HOSTS[@]}"; do ips="${ips}<ip>${h}</ip>"; done
+  echo "<clickhouse><users><${CLICKHOUSE_USER}><networks replace=\"replace\">${ips}</networks></${CLICKHOUSE_USER}></users></clickhouse>" > "$adm_cfg"
+  chmod 0664 "$adm_cfg"
+fi
+
 # Schema + accounts on every start (upstream initdb runs only on an empty data dir).
 (
   export IRONLOG_CLICKHOUSE_HOST=localhost IRONLOG_CLICKHOUSE_NATIVE_PORT=9000

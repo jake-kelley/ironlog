@@ -183,5 +183,27 @@ $DOCKER exec "d2-$SFX" grep -q "<use_environment_credentials>true" /etc/clickhou
   && pass "no static keys -> use_environment_credentials, no key/region elements" || fail "env-credential config"
 $DOCKER rm -f "d2-$SFX" >/dev/null
 
+echo "== 8. IRONLOG_CLICKHOUSE_ALLOWED_HOSTS"
+out=$($DOCKER run --rm "${ENVS[@]}" -e "IRONLOG_CLICKHOUSE_ALLOWED_HOSTS=10.0.0.1,evil'; DROP" "$IMG" 2>&1); rc=$?
+[ $rc -eq 64 ] && grep -q "ALLOWED_HOSTS: invalid entry" <<<"$out" && pass "invalid allowlist entry -> server container exit 64" || fail "invalid allowlist (server) rc=$rc out=$out"
+out=$($DOCKER run --rm "${ENVS[@]}" -e "IRONLOG_CLICKHOUSE_ALLOWED_HOSTS=10.0.0.1/33" "$IMG" ironlog-schema 2>&1); rc=$?
+[ $rc -ne 0 ] && grep -q "ALLOWED_HOSTS" <<<"$out" && pass "invalid allowlist entry -> ironlog-schema exits $rc before touching the server" || fail "invalid allowlist (schema) rc=$rc out=$out"
+V5=$(vol h)
+start h "$V5" "${ENVS[@]}" -e IRONLOG_CLICKHOUSE_ALLOWED_HOSTS=127.0.0.1
+wait_verified h 1 || { fail "allowlist start did not verify"; $DOCKER logs "h-$SFX" 2>&1 | tail -15; }
+hip=$($DOCKER inspect -f "{{(index .NetworkSettings.Networks \"$NET\").IPAddress}}" "h-$SFX")
+peer() { $DOCKER run --rm --network "$NET" --platform "$PLATFORM" --entrypoint clickhouse-client "$IMG" --host "$hip" "$@" --query "SELECT 1" 2>&1; }
+out=$(peer --user svc_grafana_analyst --password anapw); [ "$out" != 1 ] && grep -q "IP address is not allowed" <<<"$out" && pass "svc_grafana_analyst refused from another container" || fail "analyst from peer: $out"
+out=$(peer --user svc_vector --password "$VEC_PW"); [ "$out" != 1 ] && grep -q "IP address is not allowed" <<<"$out" && pass "svc_vector refused from another container" || fail "vector from peer: $out"
+out=$(peer --user admin --password "$ADMIN_PW"); [ "$out" != 1 ] && grep -q "IP address is not allowed" <<<"$out" && pass "admin refused from another container" || fail "admin from peer: $out"
+[ "$(admin h --query "SELECT count() FROM system.users WHERE name LIKE 'svc_%' AND NOT has(host_ip, '::/0')")" = 3 ] && pass "3 service accounts restricted (host_ip has no ::/0)" || fail "host_ip restriction"
+# allowlist the peer's network, re-run the one-shot from it: schema must reconcile to it
+sub="${hip%.*}.0/24"
+$DOCKER exec -e "IRONLOG_CLICKHOUSE_ALLOWED_HOSTS=$sub" "h-$SFX" ironlog-schema >/dev/null 2>&1
+out=$(peer --user svc_grafana_analyst --password anapw); [ "$out" = 1 ] && pass "allowlisting the peer subnet and re-running ironlog-schema lets it in" || fail "analyst after widening: $out"
+$DOCKER exec "h-$SFX" ironlog-schema >/dev/null 2>&1
+out=$(peer --user svc_grafana_analyst --password anapw); [ "$out" = 1 ] && pass "clearing the variable (HOST ANY) restores access" || fail "analyst after clearing: $out"
+$DOCKER rm -f "h-$SFX" >/dev/null
+
 echo
 if [ "$fails" -eq 0 ]; then echo "ALL PASSED"; else echo "$fails FAILED"; exit 1; fi

@@ -14,13 +14,14 @@ COPY clickhouse/ddl/ /ddl/
 COPY images/clickhouse/entrypoint.sh /usr/local/bin/ironlog-entrypoint
 COPY images/clickhouse/ironlog-schema.sh /usr/local/bin/ironlog-schema
 COPY images/clickhouse/healthcheck.sh /usr/local/bin/ironlog-healthcheck
+COPY images/clickhouse/allowed-hosts.sh /usr/local/bin/ironlog-allowed-hosts
 
 # Non-root, GID 0 with g=u so a random UID with GID 0 works. config.d and
 # users.d must stay writable: the entrypoint writes users.d/default-user.xml and
 # config.d/20-storage-s3.xml at start.
 ENV IRONLOG_CLICKHOUSE_LISTEN=0.0.0.0
 RUN rm -f /etc/clickhouse-server/config.d/docker_related_config.xml \
- && chmod 0755 /usr/local/bin/ironlog-healthcheck /usr/local/bin/ironlog-entrypoint /usr/local/bin/ironlog-schema \
+ && chmod 0755 /usr/local/bin/ironlog-healthcheck /usr/local/bin/ironlog-entrypoint /usr/local/bin/ironlog-schema /usr/local/bin/ironlog-allowed-hosts \
  && chmod 0644 /etc/clickhouse-server/config.d/*.xml /etc/clickhouse-server/users.d/*.xml \
  && chmod -R a+rX /ddl \
  && chown -R 10001:0 /var/lib/clickhouse /var/log/clickhouse-server /etc/clickhouse-server \
