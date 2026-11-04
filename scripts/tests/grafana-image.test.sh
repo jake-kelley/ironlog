@@ -32,7 +32,7 @@ wait_healthy() { # container
   local c=$1 ip i
   ip=$(ip_of "$c")
   for i in $(seq 1 60); do
-    if curl -fsS "http://$ip:3000/api/health" 2>/dev/null | grep -q '"database": *"ok"'; then return 0; fi
+    if curl -fsS -m 10 "http://$ip:3000/api/health" 2>/dev/null | grep -q '"database": *"ok"'; then return 0; fi
     [ "$("$docker_bin" inspect -f '{{.State.Running}}' "$c")" = true ] || { "$docker_bin" logs "$c" 2>&1 | tail -30 >&2; fail "$c exited"; }
     sleep 2
   done
@@ -41,7 +41,7 @@ wait_healthy() { # container
 }
 
 api() { # container path
-  curl -fsS -u "$admin_user:$admin_pass" "http://$(ip_of "$1"):3000$2"
+  curl -fsS -m 10 -u "$admin_user:$admin_pass" "http://$(ip_of "$1"):3000$2"
 }
 
 start() { # name args...
@@ -86,7 +86,7 @@ check_logs_clean "$c"
 api "$c" /api/health | grep -q '"database": *"ok"' || fail "health"
 "$docker_bin" exec "$c" sh -c 'test "$GF_PATHS_PLUGINS" = /usr/share/ironlog/grafana-plugins && test ! -e /var/lib/grafana/plugins/grafana-clickhouse-datasource' \
   || fail "plugin not baked outside /var/lib/grafana"
-[ "$(curl -s -o /dev/null -w '%{http_code}' "http://$(ip_of "$c"):3000/api/datasources")" = 401 ] || fail "anonymous access not rejected"
+[ "$(curl -s -m 10 -o /dev/null -w '%{http_code}' "http://$(ip_of "$c"):3000/api/datasources")" = 401 ] || fail "anonymous access not rejected"
 "$docker_bin" exec "$c" sh -c 'p=$(grep -h "port:" /etc/grafana/provisioning/datasources/clickhouse.yml | sort -u); echo "$p"' | grep -q 'IRONLOG_CLICKHOUSE_NATIVE_PORT' || fail "port not templated"
 api "$c" /api/datasources/uid/siem-analyst | tr -d ' \n' | grep -q '"port":9000' || fail "default port != 9000"
 pass "(a) default: health ok, 2 datasources (host clickhouse, port 9000), plugin $pin, no install attempts, anon rejected"
@@ -129,7 +129,7 @@ wait_healthy "$d2"
 for d in "$d1" "$d2"; do check_provisioned "$d" clickhouse; check_plugin "$d"; check_logs_clean "$d"
   "$docker_bin" exec "$d" test ! -e /var/lib/grafana/grafana.db || fail "$d used sqlite"; done
 # shared state: create a folder via d1, read it via d2
-curl -fsS -u "$admin_user:$admin_pass" -H 'Content-Type: application/json' -d '{"title":"shared-check"}' "http://$(ip_of "$d1"):3000/api/folders" >/dev/null
+curl -fsS -m 10 -u "$admin_user:$admin_pass" -H 'Content-Type: application/json' -d '{"title":"shared-check"}' "http://$(ip_of "$d1"):3000/api/folders" >/dev/null
 api "$d2" /api/folders | grep -q shared-check || fail "d2 does not see d1's folder: database not shared"
 "$docker_bin" exec "$pg" psql -U grafana -d grafana -tAc 'select count(*) from dashboard' | grep -Eq '^[0-9]+$' || fail "no grafana tables in postgres"
 pass "(d) two Grafana containers healthy on one postgres ($pg_image), state shared, no sqlite file"
