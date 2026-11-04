@@ -3,6 +3,7 @@
 ## 2026-11-04
 
 * **Container images in Compose and Quadlets**: `docker-compose.yml` builds `ironlog-clickhouse`, `ironlog-grafana` and `ironlog-vector` from `images/` and no longer bind-mounts configuration; a one-shot `schema` service (`ironlog-schema`) gates Grafana and Vector. Quadlets reference `ghcr.io/jake-kelley/ironlog-*`, add `ironlog-schema.container`, and drop the config mounts, `Notify=healthy` and `NetworkAlias=` (not available in OL 9.4's podman 4.9). ClickHouse bind address is configurable (`IRONLOG_CLICKHOUSE_BIND`, default loopback) for the documented split-host mode in [quadlets/README.md](../quadlets/README.md). Podman hosts target Oracle Linux 9.
+* **Oracle Linux 9 live test**: The three images and Quadlets ran on an Oracle Linux 9.8 VM with SELinux enforcing and podman 5.8.2. The run covered fresh builds, arbitrary-UID runs, HEC to ClickHouse to Grafana, port exposure, AVC denials (none) and unit restarts, plus a reboot that kept the data. `scripts/tests/ol9-quadlet-e2e.sh` repeats the test except the reboot. Split-host and S3-tier runs on OL9 are still open.
 
 ## 2026-11-03
 

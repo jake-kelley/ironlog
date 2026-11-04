@@ -287,9 +287,30 @@ static keys), then `sudo systemctl start ironlog-vector.service`. Logs:
 
 ## Verify on a target host
 
-The units pass the Quadlet generator dry-run on podman 5.8.2 (OL 9.8 container,
-see above) but have **not been started** under podman/systemd (the authoring
-environment has Docker only). Run on an OL9 host:
+Live-tested 2026-11-04 on an Oracle Linux 9.8 VM (UEK 6.12, SELinux enforcing,
+podman 5.8.2, Proxmox): fresh image builds from the repo, arbitrary-UID runs,
+Quadlet install and start, HEC to ClickHouse to Grafana, port exposure, no AVC
+denials, every unit restarted, and a full reboot with the stack coming back on
+its own and the earlier rows intact.
+
+`scripts/tests/ol9-quadlet-e2e.sh` repeats all of it except the reboot. Copy the
+repo to the host (for example `git archive HEAD | ssh host 'mkdir ironlog &&
+tar x -C ironlog'`), then on the host:
+
+```bash
+cd ironlog
+./scripts/tests/ol9-quadlet-e2e.sh                         # build, install, test
+IRONLOG_E2E_SKIP_BUILD=1 ./scripts/tests/ol9-quadlet-e2e.sh  # reuse built images
+```
+
+It needs passwordless sudo, reuses `/etc/ironlog/ironlog.env` if present
+(otherwise writes random passwords there, mode 600), never prints secrets,
+leaves the stack running and exits non-zero on any failure. For the reboot
+check, `sudo reboot`, then confirm `systemctl is-active 'ironlog-*'`, the
+`ironlog-schema` journal line `SIEM schema, TTLs and service accounts verified`
+and that row counts are unchanged.
+
+The manual steps behind the script:
 
 ```bash
 sudo cp quadlets/ironlog.network quadlets/*.container /etc/containers/systemd/
@@ -308,8 +329,8 @@ warning appears.
 
 ## Open items
 
-- Live Quadlet start on an OL9 host, and a dry-run on podman 4.9 if any host
-  still runs OL 9.4.
+- Split-host and S3-tier runs on OL9 hosts, and a dry-run on podman 4.9 if any
+  host still runs OL 9.4.
 - Image publication to ghcr.io (tags above are the contract's, not yet pushed).
 - Retiring `scripts/firstboot/ironlog-schema.service` and the `/opt/ironlog`
   config staging in `packer/`.
