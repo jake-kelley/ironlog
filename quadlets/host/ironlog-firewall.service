@@ -1,0 +1,20 @@
+# ironlog split mode, ClickHouse host only: restrict the published ClickHouse
+# ports to IRONLOG_CLICKHOUSE_ALLOWED_HOSTS with an ironlog-owned nftables table.
+# Install: see "Source firewall" in quadlets/README.md.
+[Unit]
+Description=ironlog ClickHouse source firewall (nftables table inet ironlog)
+Documentation=file:///usr/share/doc/ironlog/quadlets/README.md
+After=network-pre.target firewalld.service
+Before=network.target ironlog-clickhouse.service
+Wants=network-pre.target
+ConditionPathExists=/etc/ironlog/ironlog.env
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/etc/ironlog/ironlog.env
+ExecStart=/usr/local/libexec/ironlog-firewall.sh start
+ExecStop=/usr/local/libexec/ironlog-firewall.sh stop
+
+[Install]
+WantedBy=multi-user.target
