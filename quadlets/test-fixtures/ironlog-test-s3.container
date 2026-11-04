@@ -1,0 +1,22 @@
+# TEST FIXTURE ONLY: SeaweedFS as an S3-compatible endpoint for the
+# IRONLOG_S3_TIER=on live test. Not part of an ironlog deployment; do not
+# copy it to production hosts. Needs /etc/ironlog-test-s3/s3.json (root, 0600),
+# see quadlets/README.md "S3 cold tier".
+[Unit]
+Description=ironlog test fixture: SeaweedFS S3 endpoint
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=docker.io/chrislusf/seaweedfs:4.52
+ContainerName=ironlog-test-s3
+Volume=ironlog-test-s3-data:/data
+Volume=/etc/ironlog-test-s3/s3.json:/etc/seaweedfs/s3.json:ro,Z
+PublishPort=8333:8333
+Exec=server -s3 -s3.config=/etc/seaweedfs/s3.json -dir=/data -s3.port=8333 -ip.bind=0.0.0.0
+
+[Service]
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
