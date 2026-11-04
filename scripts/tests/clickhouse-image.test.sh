@@ -197,6 +197,7 @@ out=$(peer --user svc_grafana_analyst --password anapw); [ "$out" != 1 ] && grep
 out=$(peer --user svc_vector --password "$VEC_PW"); [ "$out" != 1 ] && grep -q "AUTHENTICATION_FAILED" <<<"$out" && pass "svc_vector refused from another container" || fail "vector from peer: $out"
 out=$(peer --user admin --password "$ADMIN_PW"); [ "$out" != 1 ] && grep -q "AUTHENTICATION_FAILED" <<<"$out" && pass "admin refused from another container" || fail "admin from peer: $out"
 $DOCKER exec "h-$SFX" bash -c 'grep -h -c IP_ADDRESS_NOT_ALLOWED /var/log/clickhouse-server/*.log' | grep -qv '^0$' && pass "server log records IP_ADDRESS_NOT_ALLOWED (the client only sees AUTHENTICATION_FAILED)" || fail "no IP_ADDRESS_NOT_ALLOWED in server log"
+$DOCKER exec "h-$SFX" bash -c 'grep -h -c IP_ADDRESS_NOT_ALLOWED /var/log/clickhouse-server/*.log' | grep -qv '^0$' && pass "server log records IP_ADDRESS_NOT_ALLOWED (the client only sees AUTHENTICATION_FAILED)" || fail "no IP_ADDRESS_NOT_ALLOWED in server log"
 [ "$(admin h --query "SELECT count() FROM system.users WHERE name LIKE 'svc_%' AND NOT has(host_ip, '::/0')")" = 3 ] && pass "3 service accounts restricted (host_ip has no ::/0)" || fail "host_ip restriction"
 # allowlist the peer's network, re-run the one-shot from it: schema must reconcile to it
 sub="${hip%.*}.0/24"
