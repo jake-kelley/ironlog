@@ -6,6 +6,9 @@ set -uo pipefail
 
 DOCKER="${DOCKER:-docker}"
 PLATFORM="${PLATFORM:-linux/amd64}"
+# podman builds OCI images, which drop HEALTHCHECK; --format docker keeps it so
+# section 3 can read the image's own health state (docker has no --format).
+BUILD_FMT=(); case "$DOCKER" in *podman*) BUILD_FMT=(--format docker);; esac
 # docker.io/minio/minio no longer exists on Docker Hub (2026-11-04), so the
 # pinned S3-compatible store is SeaweedFS.
 S3_IMAGE="${S3_IMAGE:-docker.io/chrislusf/seaweedfs:4.52}"
@@ -46,7 +49,7 @@ insert_probe() { # insert_probe <name> <marker>: as svc_vector
     'clickhouse-client --user svc_vector --password "$VP" --query "INSERT INTO siem.k8s_logs (event_time, cluster, namespace, node, container, pod, level, message) VALUES (now(), '"'c'"', '"'n'"', '"'n1'"', '"'c'"', '"'p'"', '"'info'"', '"'$2'"')"'; }
 
 echo "== 1. build ($PLATFORM)"
-if $DOCKER build --platform "$PLATFORM" -f "$ROOT/images/clickhouse/Dockerfile" -t "$IMG" "$ROOT" >/dev/null; then
+if $DOCKER build "${BUILD_FMT[@]}" --platform "$PLATFORM" -f "$ROOT/images/clickhouse/Dockerfile" -t "$IMG" "$ROOT" >/dev/null; then
   pass "image builds"
 else
   fail "image build"; exit 1
@@ -86,7 +89,7 @@ if $DOCKER exec "a-$SFX" clickhouse-client --host "$ip" --user default --query "
   && pass "tier off: no S3 config, no hot_to_s3 policy" || fail "tier off still has S3 config"
 echo "-- TTL (tier off):"
 admin a --query "SELECT name, extract(engine_full, ' TTL (.*?)( SETTINGS|\$)') AS ttl, storage_policy FROM system.tables WHERE database = 'siem' AND engine LIKE '%MergeTree' ORDER BY name FORMAT TSV"
-admin a --query "SELECT 'raw column TTL:', count() FROM system.columns WHERE database = 'siem' AND name = 'raw' AND ttl_expression != ''" | tr '\t' ' '
+admin a --query "SELECT 'raw column TTL:', count() FROM system.tables WHERE database = 'siem' AND engine LIKE '%MergeTree' AND create_table_query LIKE '%raw%TTL%'" | tr '\t' ' '
 
 echo "== 4. (b) restart with the same volume"
 $DOCKER restart "a-$SFX" >/dev/null
@@ -196,7 +199,8 @@ peer() { $DOCKER run --rm --network "$NET" --platform "$PLATFORM" --entrypoint c
 out=$(peer --user svc_grafana_analyst --password anapw); [ "$out" != 1 ] && grep -q "AUTHENTICATION_FAILED" <<<"$out" && pass "svc_grafana_analyst refused from another container" || fail "analyst from peer: $out"
 out=$(peer --user svc_vector --password "$VEC_PW"); [ "$out" != 1 ] && grep -q "AUTHENTICATION_FAILED" <<<"$out" && pass "svc_vector refused from another container" || fail "vector from peer: $out"
 out=$(peer --user admin --password "$ADMIN_PW"); [ "$out" != 1 ] && grep -q "AUTHENTICATION_FAILED" <<<"$out" && pass "admin refused from another container" || fail "admin from peer: $out"
-$DOCKER exec "h-$SFX" bash -c 'grep -h -c IP_ADDRESS_NOT_ALLOWED /var/log/clickhouse-server/*.log' | grep -qv '^0$' && pass "server log records IP_ADDRESS_NOT_ALLOWED (the client only sees AUTHENTICATION_FAILED)" || fail "no IP_ADDRESS_NOT_ALLOWED in server log"
+# server logs go to the container console; capture first so grep -q cannot SIGPIPE docker logs under pipefail
+hlog=$($DOCKER logs "h-$SFX" 2>&1); grep -q IP_ADDRESS_NOT_ALLOWED <<<"$hlog" && pass "server log records IP_ADDRESS_NOT_ALLOWED (the client only sees AUTHENTICATION_FAILED)" || fail "no IP_ADDRESS_NOT_ALLOWED in server log"
 [ "$(admin h --query "SELECT count() FROM system.users WHERE name LIKE 'svc_%' AND NOT has(host_ip, '::/0')")" = 3 ] && pass "3 service accounts restricted (host_ip has no ::/0)" || fail "host_ip restriction"
 # allowlist the peer's network, re-run the one-shot from it: schema must reconcile to it
 sub="${hip%.*}.0/24"
