@@ -285,8 +285,9 @@ The server applies the schema itself at start (log line
 `ironlog-grafana.container`, `ironlog-vector-hosts.container`.
 
 ```bash
-# /etc/ironlog/ironlog.env  (mode 0600, root); the same passwords as host A
+# /etc/ironlog/ironlog.env  (mode 0600, root); the same passwords and allowlist as host A
 IRONLOG_CLICKHOUSE_HOST=10.0.1.10
+IRONLOG_CLICKHOUSE_ALLOWED_HOSTS=10.0.1.20
 CH_ADMIN_USER=siem_admin
 CH_ADMIN_PASSWORD=...
 CH_VECTOR_PASSWORD=...
