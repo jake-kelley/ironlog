@@ -289,7 +289,22 @@ not even open the ports: the `ironlog` nftables drop refused it before ClickHous
 
 ClickHouse host `10.0.1.10`, Grafana + Vector host `10.0.1.20`.
 
+Both hosts need the repo checkout (the `quadlets/` and `images/clickhouse/` files
+used below, e.g. `git archive HEAD | ssh hostX 'mkdir ironlog && tar x -C ironlog'`,
+then run the `sudo cp`/`install` lines from inside it) and the images they run
+([Images](#images)). One image per archive, copied from a host that has them:
+
+```bash
+# on host A: ClickHouse. Host B needs ironlog-clickhouse too (the schema one-shot runs that image) plus grafana and vector
+ssh hostA 'sudo podman save --format oci-archive ghcr.io/jake-kelley/ironlog-clickhouse:26.8.34.13' | ssh hostB 'cat > /tmp/ironlog-clickhouse.tar'
+ssh hostA 'sudo podman save --format oci-archive ghcr.io/jake-kelley/ironlog-grafana:13.3.0' | ssh hostB 'cat > /tmp/ironlog-grafana.tar'
+ssh hostA 'sudo podman save --format oci-archive ghcr.io/jake-kelley/ironlog-vector:0.61.0' | ssh hostB 'cat > /tmp/ironlog-vector.tar'
+ssh hostB 'for n in clickhouse grafana vector; do sudo podman load -i /tmp/ironlog-$n.tar; done'
+```
+
 **Host A (ClickHouse)**: units `ironlog.network`, `ironlog-clickhouse.container`.
+Do not install `ironlog-schema.container` on A: it connects from a podman-network
+address, which the allowlist refuses, so it fails at every boot.
 
 ```bash
 # /etc/ironlog/ironlog.env  (mode 0600, root)
@@ -331,6 +346,10 @@ GRAFANA_ROOT_URL=http://hostb.example:3000
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=...
 SPLUNK_HEC_TOKEN=...
+# only if A runs the S3 tier: the same values as on A (without them the schema one-shot fails verification)
+# IRONLOG_S3_TIER=on
+# IRONLOG_HOT_DAYS=7
+# IRONLOG_RETENTION_DAYS=100
 ```
 
 ```bash
@@ -349,13 +368,17 @@ sudo systemctl start ironlog-schema.service ironlog-grafana.service ironlog-vect
 after it passes. A variant without the admin password on host B is not provided.
 
 **Verified 2026-11-04** on two Oracle Linux 9 VMs (podman 5.8.2, SELinux
-enforcing, firewalld; firewall unit re-verified the same day, see above): ClickHouse + schema on A (`10.10.10.237`, bound to that
-address), Grafana + `vector-hosts` on B (`10.10.10.236`). Schema one-shot on B
-passed against A; HEC events on B landed in A's `siem.k8s_logs`; both Grafana
-datasources reported OK; `svc_grafana_analyst` could read from B; the built-in
-`default` user was refused; `:8123/ping` from a third host timed out and from B
-returned `Ok.`; both hosts rebooted (A, then B) and B reconnected without
-action. Not tested: TLS, IPv6, podman 4.9, a firewall-less A.
+enforcing, firewalld): ClickHouse + schema on A (`10.10.10.237`, bound to that
+address, `IRONLOG_CLICKHOUSE_ALLOWED_HOSTS=10.10.10.236`, `ironlog-firewall.service`,
+S3 tier on), Grafana + `vector-hosts` on B (`10.10.10.236`). Host B was wiped
+(units, `/etc/ironlog`, data dirs, ironlog images) and rebuilt by following the
+Host B steps above literally: schema one-shot passed against A, an HEC event on B
+landed in A's `siem.k8s_logs`, `/api/health` was `ok` and both datasources
+healthy, the workstation timed out on A `:8123`/`:9000` while B reached both.
+After rebooting A then B: all ironlog units active, `table inet ironlog` present,
+rows kept, parts still on `s3_cold`, a new HEC event landed, no AVC denials on
+either host, workstation still blocked. Not tested: TLS, IPv6, podman 4.9, a
+firewall-less A.
 
 Other splits follow from the variable: Vector alone, or Grafana alone, on a
 host is the same recipe with only that unit plus `ironlog-schema.container`.
@@ -416,6 +439,11 @@ sudo firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address
 sudo systemctl daemon-reload && sudo systemctl start ironlog-test-s3.service
 echo "s3.bucket.create -name ironlog-cold" | sudo podman exec -i ironlog-test-s3 weed shell -master=localhost:9333
 ```
+
+The rich rule above does **not** restrict the published port (same `ct status dnat
+accept` effect as in the firewall section): measured 2026-11-04, `:8333` on B
+accepted a connection from the workstation. Acceptable for a throwaway fixture
+only; the S3 keys still protect it.
 
 Gotchas found: the S3 port accepts connections a few seconds after the unit is
 `active`; the key file must be readable by uid 1000 or SeaweedFS silently runs
