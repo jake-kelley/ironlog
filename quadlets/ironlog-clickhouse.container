@@ -22,6 +22,18 @@ Environment=CH_VECTOR_PASSWORD=${CH_VECTOR_PASSWORD}
 Environment=CH_GRAFANA_ANALYST_PASSWORD=${CH_GRAFANA_ANALYST_PASSWORD}
 Environment=CH_GRAFANA_AUDITOR_PASSWORD=${CH_GRAFANA_AUDITOR_PASSWORD}
 
+# S3 cold tier (images/clickhouse/README.md). All optional: unset in
+# ironlog.env, systemd substitutes an empty string and the image treats empty
+# as unset (tier off, 30 day retention). Secrets are passed by name only; the
+# generated ClickHouse config uses from_env references.
+Environment=IRONLOG_S3_TIER=${IRONLOG_S3_TIER}
+Environment=IRONLOG_S3_ENDPOINT=${IRONLOG_S3_ENDPOINT}
+Environment=IRONLOG_S3_ACCESS_KEY_ID=${IRONLOG_S3_ACCESS_KEY_ID}
+Environment=IRONLOG_S3_SECRET_ACCESS_KEY=${IRONLOG_S3_SECRET_ACCESS_KEY}
+Environment=IRONLOG_S3_REGION=${IRONLOG_S3_REGION}
+Environment=IRONLOG_HOT_DAYS=${IRONLOG_HOT_DAYS}
+Environment=IRONLOG_RETENTION_DAYS=${IRONLOG_RETENTION_DAYS}
+
 # Data (bind mount, writable). The image runs as uid 10001, gid 0: the host
 # directory must be writable by it (quadlets/README.md "Data directories").
 Volume=/var/lib/ironlog/clickhouse:/var/lib/clickhouse:Z
