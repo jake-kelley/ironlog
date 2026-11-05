@@ -1,5 +1,8 @@
 # packer/ — ironlog appliance image build
 
+> **Legacy:** the AMI appliance path is superseded by the portable container
+> images (`images/README.md`). Whether to retire it is pending an operator decision.
+
 Builds the ironlog all-in-one SIEM appliance as an AMI, aarch64 (Graviton),
 via Packer HCL2. Two builders share one provisioner list:
 
@@ -15,7 +18,7 @@ for anything compliance-touching). This is an operator decision already
 made; this template does not relitigate it.
 
 Local app authentication is the default. The image contains no Keycloak,
-Postgres, HyperDX, MongoDB or oauth2-proxy. Future Keycloak integration uses an existing
+Postgres or oauth2-proxy. Future Keycloak integration uses an existing
 external provider and is deferred. See [local authentication](../docs/local-auth.md).
 
 ## Files

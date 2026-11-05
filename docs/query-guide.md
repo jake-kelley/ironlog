@@ -13,7 +13,6 @@ free-text log search, SQL, dashboards, and alerting. Replace `APPLIANCE_FQDN`
 with `localhost` for connected development. Every query Grafana runs is
 recorded in `audit.query_archive` under the datasource's service account
 (`svc_grafana_analyst` or `svc_grafana_auditor`), not under your Grafana user.
-HyperDX is no longer part of the stack.
 
 ## Log Search dashboard
 

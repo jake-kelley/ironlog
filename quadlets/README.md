@@ -12,8 +12,8 @@ K3s is excluded: it is a test/demo producer, not part of the SIEM.
 
 Units go in `/etc/containers/systemd/` (flat, names as here) and generate
 `ironlog-<name>.service`. Local authentication and the Grafana login are in
-[local authentication](../docs/local-auth.md). No Keycloak, Postgres, HyperDX,
-MongoDB or oauth2-proxy unit exists.
+[local authentication](../docs/local-auth.md). No Keycloak, Postgres
+or oauth2-proxy unit exists.
 
 ## Oracle Linux 9 and podman versions
 
@@ -59,8 +59,8 @@ Plain **systemd** drop-ins on the generated service (for example
 
 All `Image=` lines are `ghcr.io/jake-kelley/<name>:<upstream version>` (contract
 default registry; moving tag `26.8.34.13`, `13.3.0`, `0.61.0`; immutable tags
-are `<version>-<git short sha>`). The tags and registry are **assumptions until
-the images are published**: nothing has been pushed to ghcr.io. The vector tag
+are `<version>-<git short sha>`). `.github/workflows/images.yml` publishes
+these tags from `main`. The vector tag
 `0.61.0` is the contract's `<upstream version>` rule applied to the upstream
 `0.61.0-debian` tag.
 
@@ -149,7 +149,8 @@ must write a concrete value.
 `${NAME}` and `PublishPort=${IRONLOG_CLICKHOUSE_BIND}:8123:8123` verbatim in
 `ExecStart=`, and systemd 259 (WSL Ubuntu) expands `Environment=` defaults,
 `EnvironmentFile=` overrides, and renders an empty value as shown above.
-**Not verified**: starting these units under podman/systemd with real images.
+Starting these units under podman/systemd with real images is verified in the
+Oracle Linux 9 sections below.
 
 ## Data directories
 
@@ -516,7 +517,6 @@ warning appears.
 
 - A dry-run on podman 4.9 if any
   host still runs OL 9.4. S3 tier against real AWS S3 / instance roles (AWS phase).
-- Image publication to ghcr.io (tags above are the contract's, not yet pushed).
 - Retiring `scripts/firstboot/ironlog-schema.service` and the `/opt/ironlog`
   config staging in `packer/`.
 - TLS between hosts.

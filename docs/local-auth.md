@@ -10,7 +10,7 @@ timestamp: 2026-09-14T00:00:00Z
 
 Ironlog currently uses Grafana's native username/password authentication; Grafana is the only UI.
 Keycloak integration is paused. Ironlog does not deploy Keycloak, its
-Postgres database, HyperDX, MongoDB, or oauth2-proxy. Future identity integration will use an
+Postgres database, or oauth2-proxy. Future identity integration will use an
 existing environment-managed Keycloak; it is not enabled by this change.
 
 ## Fresh development installs
@@ -52,15 +52,6 @@ from `.env.example` instead.
 Switching from Docker to Podman does not automatically migrate existing Docker
 volumes. Keep `IRONLOG_CONTAINER_RUNTIME=docker` to continue using those
 volumes, or plan and perform a separate data migration before changing runtime.
-
-Before recreating the Compose stack, stop any old `siem-hyperdx`, `siem-hyperdx-auth`,
-`siem-hyperdx-db`, `siem-keycloak` and `siem-keycloak-db` containers if present;
-they are no longer part of the stack. HyperDX and MongoDB were removed: keep their
-volumes only until you decide the data (HyperDX users and saved searches, which
-are not audit data) is no longer needed. Remove the orphans with
-`scripts/compose.sh up -d --remove-orphans` once you have decided.
-The ClickHouse user `svc_hyperdx` is no longer created; an existing install keeps
-it until an administrator drops it (`DROP USER IF EXISTS svc_hyperdx`).
 
 Default Grafana admin settings only initialize a fresh Grafana database.
 They do not reset the password of an existing administrator. Use that

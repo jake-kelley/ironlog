@@ -1,5 +1,8 @@
 # scripts/firstboot/ — appliance first-boot configuration
 
+> **Legacy:** the AMI appliance path is superseded by the portable container
+> images (`images/README.md`). Whether to retire it is pending an operator decision.
+
 Turns a generic ironlog AMI (built by `packer/`, running the `quadlets/`
 Podman units) into a configured, running appliance instance. Deployed by
 Packer to `/usr/local/lib/ironlog/` (provisioner step 5 in
@@ -95,8 +98,7 @@ a literal used as-is. Scheme matching is by exact prefix, not a generic
 ## Authentication mode
 
 `APPLIANCE_MODE=local` is the default and currently supported mode. Grafana
-(the only UI) runs with native local authentication. No HyperDX, MongoDB,
-Keycloak, Postgres, or oauth2-proxy is deployed. `oidc` and `ldap` are deferred and rejected; future
+(the only UI) runs with native local authentication. No Keycloak, Postgres, or oauth2-proxy is deployed. `oidc` and `ldap` are deferred and rejected; future
 OIDC integration will use an existing external Keycloak.
 
 The fresh Grafana default is `admin` with password `IronlogDev123!`.

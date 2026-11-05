@@ -1,7 +1,7 @@
 ---
 type: Guide
 title: RHEL 9 and private software builds
-description: Select a RHEL 9 base and provision the appliance from a local or S3 software bundle.
+description: Legacy AMI path, superseded by the portable images. Select a RHEL 9 base and provision the appliance from a local or S3 software bundle.
 tags: [deployment, rhel, aws, air-gap]
 timestamp: 2026-09-15T00:00:00Z
 ---
