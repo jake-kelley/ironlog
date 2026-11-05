@@ -2,40 +2,56 @@ digraph ironlog_architecture {
   label="Ironlog | Detailed architecture";
   subgraph cluster_sources {
     kind=zone; label="01  SOURCES - what produces events";
-    win [kind=desktop label="Windows hosts - Vector agent [AU-12]\nRole: ship Security, System, PowerShell/Operational\nevent logs to the aggregator" color="#7C3AED" notes="Purple: event source. vector/agent-windows.yaml, windows_event_log source, installed by scripts/install-windows-agent.ps1."];
+    win [kind=desktop label="Windows hosts - Vector agent [AU-12]\nRole: ship Security, System, PowerShell/Operational\nevent logs to the aggregator" color="#7C3AED" notes="Purple: event source. vector/agent-windows.yaml, installed by scripts/install-windows-agent.ps1."];
     lin [kind=server label="Linux hosts - Vector agent [AU-12]\nRole: ship journald and auditd (audit.log) events\nto the aggregator" color="#7C3AED" notes="Purple: event source. vector/agent-linux.yaml."];
-    k8s [kind=container-host label="Kubernetes - vector-shipper [AU-12]\nRole: DaemonSet ships pod logs over HEC;\nlocal k3s demo is an optional test producer" color="#7C3AED" notes="Purple: event source. k8s/vector-shipper.yaml, image timberio/vector 0.61.0-distroless-libc."];
+    k8s [kind=container-host label="Kubernetes - vector-shipper [AU-12]\nRole: DaemonSet ships pod logs over HEC;\nlocal k3s demo is an optional test producer" color="#7C3AED" notes="Purple: event source. k8s/vector-shipper.yaml."];
     aws [kind=cloud-storage label="AWS logs - OPTIONAL [AU-12]\nRole: CloudTrail, GuardDuty, VPC Flow, S3 access logs\nin S3; one SQS queue per type announces objects" color="#7C3AED" notes="Purple: optional event source. docs/aws-ingestion.md."];
   }
   subgraph cluster_ingestion {
     kind=zone; label="02  INGESTION - collect, normalise, buffer";
-    vh [kind=container label="Vector Hosts 0.61.0 - always on [AU-3]\nRole: aggregator - receives native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse" color="#0D9488" notes="Teal: ingestion. vector/hosts.yaml; container siem-vector-hosts."];
-    va [kind=container label="Vector AWS 0.61.0 - OPTIONAL [AU-3]\nRole: poll SQS, read S3, VRL normalise, disk buffer\nOff by default: aws profile; unit ships disabled" color="#0D9488" notes="Teal: optional ingestion. vector/vector.yaml; container siem-vector."];
+    vh [kind=container label="Vector role hosts - always on [AU-3]\nRole: aggregator - native :6000 and HEC :8088,\nVRL normalise, disk buffer, INSERT to ClickHouse" color="#0D9488" notes="Teal: ingestion. vector/hosts.yaml baked into ironlog-vector; IRONLOG_VECTOR_ROLE=hosts. Quadlet ironlog-vector-hosts, Compose vector-hosts, Helm vector.hosts."];
+    va [kind=container label="Vector role aws - OPTIONAL [AU-3]\nRole: poll SQS, read S3, VRL normalise, disk buffer\nOff by default: Compose profile aws, Quadlet ships disabled" color="#0D9488" notes="Teal: optional ingestion. vector/vector.yaml baked into ironlog-vector; IRONLOG_VECTOR_ROLE=aws. Helm vector.aws.enabled."];
   }
   subgraph cluster_data {
     kind=zone; label="03  DATA - ClickHouse 26.8.34.13 LTS (event store, SQL, RBAC)";
-    siem [kind=database label="siem database - 30-day TTL [AU-11]\nRole: 7 tables: cloudtrail, guardduty, vpc_flow,\ns3_access, windows_events, linux_syslog, k8s_logs" color="#2563EB" notes="Blue: data. clickhouse/ddl/010_aws.sql and 020_hosts.sql. Text index idx_msg_text on windows_events, linux_syslog, k8s_logs; The siem.log_search view over linux, windows, k8s, cloudtrail and guardduty is clickhouse/ddl/050_search.sql. Raw column 7 days except guardduty (30 days); vpc_flow has no raw column."];
-    audit [kind=database label="audit.query_archive - 2-year TTL [AU-9]\nRole: audit trail of finished queries, filled by\nquery_archive_mv from system.query_log" color="#2563EB" notes="Blue: data. clickhouse/ddl/030_audit.sql; system.query_log kept 90 days."];
-    accw [kind=user label="svc_vector - write-only [AU-9]\nRole: role siem_ingest, INSERT on siem.* only,\nno reads; used by both Vector instances" color="#2563EB" notes="Blue: access control. clickhouse/ddl/040_rbac.sql, clickhouse/initdb/99-init.sh."];
-    accr [kind=user label="Read-only accounts [AC-6]\nsvc_grafana_analyst: SELECT siem.* and log_search\nsvc_grafana_auditor: SELECT siem.* and audit.*" color="#2563EB" notes="Blue: access control. Roles siem_analyst and siem_auditor; settings profile siem_reader (readonly=2). Queries from these shared accounts (one per Grafana datasource) land in audit.query_archive."];
-    tier [kind=cloud-storage label="S3 tiering - NOT DEPLOYED [AU-4]\n20-storage-s3.xml.disabled is not active;\nall data stays on local disk" color="#9CA3AF" notes="Grey: not deployed. Disabled configuration only."];
+    siem [kind=database label="siem database - 30-day TTL [AU-11]\nRole: 7 tables: cloudtrail, guardduty, vpc_flow,\ns3_access, windows_events, linux_syslog, k8s_logs" color="#2563EB" notes="Blue: data. clickhouse/ddl/010_aws.sql and 020_hosts.sql. Text index idx_msg_text on windows_events, linux_syslog, k8s_logs; siem.log_search view is clickhouse/ddl/050_search.sql. Retention is 30 days with the S3 tier off, 400 with it on (images/README.md)."];
+    audit [kind=database label="audit.query_archive - 2-year TTL [AU-9]\nRole: audit trail of finished queries, filled by\nquery_archive_mv from system.query_log" color="#2563EB" notes="Blue: data. clickhouse/ddl/030_audit.sql."];
+    accw [kind=user label="svc_vector - write-only [AU-9]\nRole: role siem_ingest, INSERT on siem.* only,\nno reads; used by both Vector roles" color="#2563EB" notes="Blue: access control. clickhouse/ddl/040_rbac.sql."];
+    accr [kind=user label="Read-only accounts [AC-6]\nsvc_grafana_analyst: SELECT siem.* and log_search\nsvc_grafana_auditor: SELECT siem.* and audit.*" color="#2563EB" notes="Blue: access control. Roles siem_analyst and siem_auditor; profile siem_reader. Created by ironlog-schema."];
+    tier [kind=cloud-storage label="S3 cold tier - OPTIONAL [AU-4]\nRole: IRONLOG_S3_TIER=on (default off) moves parts\nolder than IRONLOG_HOT_DAYS to AWS S3 or S3-compatible" color="#2563EB" notes="Blue: optional data tier. Enabled by environment on the ironlog-clickhouse image, which generates config.d/20-storage-s3.xml at start. Live-tested 2026-11-04 on Oracle Linux 9 against a SeaweedFS S3-compatible store (quadlets/README.md); real AWS S3 not tested. Switching back off is unsupported."];
   }
   subgraph cluster_apps {
     kind=zone; label="04  APPLICATIONS - Grafana, the only UI";
-    grafana [kind=container label="Grafana 13.3.0 - :3000 [AU-5, AU-6]\nRole: the only UI - dashboards, Log Search, SQL explore,\n7 AU-5 ingestion-silence alerts; native local login" color="#D97706" notes="Amber: application. grafana/grafana image 13.3.0 (Open Source edition), ClickHouse plugin 4.23.4. grafana/provisioning: two ClickHouse datasources over native :9000; Log Search dashboard queries siem.log_search."];
+    grafana [kind=container label="Grafana 13.3.0 - :3000 [AU-5, AU-6]\nRole: the only UI - dashboards, Log Search, SQL explore,\n7 AU-5 ingestion-silence alerts; local accounts" color="#D97706" notes="Amber: application. ironlog-grafana image, Open Source edition, ClickHouse plugin 4.23.4. Two baked ClickHouse datasources (analyst, auditor) over native 9000."];
+    schema [kind=container label="ironlog-schema - one-shot [AU-9]\nRole: applies DDL, accounts and TTLs, then verifies;\ngates Grafana and both Vector roles" color="#D97706" notes="Amber: one-shot job from the ironlog-clickhouse image (command ironlog-schema): Quadlet ironlog-schema.service, Compose service schema, Helm post-install/upgrade hook Job. Runs against IRONLOG_CLICKHOUSE_HOST."];
   }
   subgraph cluster_people {
     kind=zone; label="05  PEOPLE";
-    users [kind=user label="Analysts and auditors\nRole: sign in to Grafana :3000 with its\nlocal account; no SSO or MFA" color="#7C3AED" notes="Purple: people. No IdP, SSO or MFA is deployed (docs/local-auth.md)."];
+    users [kind=user label="Analysts and auditors\nRole: sign in to Grafana :3000 with its\nlocal account; no SSO or MFA" color="#7C3AED" notes="Purple: people. docs/local-auth.md."];
+  }
+  subgraph cluster_images {
+    kind=zone; label="06  IMAGES - three ironlog images built from images/, config baked in (CI publishes to ghcr.io/jake-kelley)";
+    imgvec [kind=container label="ironlog-vector:0.61.0\nRole: role hosts (HEC 8088, native 6000)\nor role aws (SQS/S3); health :8686" color="#475569" notes="Slate: image. images/vector/Dockerfile, base timberio/vector 0.61.0-debian."];
+    imgch [kind=container label="ironlog-clickhouse:26.8.34.13\nRole: ClickHouse 8123 + 9000, baked DDL and config,\nironlog-schema command, S3 tier switch" color="#475569" notes="Slate: image. images/clickhouse/Dockerfile, base clickhouse-server 26.8.34.13."];
+    imggr [kind=container label="ironlog-grafana:13.3.0\nRole: Grafana OSS 13.3.0 + ClickHouse plugin 4.23.4,\nbaked provisioning, dashboards, alert rules" color="#475569" notes="Slate: image. images/grafana/Dockerfile, base grafana/grafana 13.3.0."];
+  }
+  subgraph cluster_deploy {
+    kind=zone; label="07  DEPLOYMENT TARGETS - the same three images, different runtime";
+    dq [kind=server label="podman Quadlets - Oracle Linux 9 [VERIFIED]\nRole: single host, or split hosts (ClickHouse on one,\nGrafana + Vector on another); systemd units" color="#475569" notes="Slate: deployment. quadlets/. Live-tested 2026-11-04 on OL 9.8, podman 5.8.2, SELinux enforcing, single-host and two-host split with S3 tier (quadlets/README.md, docs/log.md). Minimum podman 4.7."];
+    dc [kind=server label="Compose - development\nRole: builds the images locally (ironlog-*:local);\npodman default, Docker selectable" color="#475569" notes="Slate: deployment. docker-compose.yml; profiles aws and k3s are optional."];
+    dh [kind=container-host label="Helm chart - Kubernetes / OpenShift / EKS\nRole: StatefulSet + schema hook Job; CI on kind\nunder restricted Pod Security (not OpenShift SCC)" color="#475569" notes="Slate: deployment. deploy/helm/ironlog, .github/workflows/helm.yml. Runs with arbitrary UID, GID 0."];
+    de [kind=cloud-storage label="Amazon ECS on EC2 - PLANNED, wave 2\nRole: not built yet; no deploy/ecs/ in the repo.\nTarget named in images/README.md" color="#9CA3AF" notes="Grey: planned, not implemented."];
+    dp [kind=server label="Packer EC2 AMI appliance - LEGACY\nRole: OS-image path (RHEL 9 / Rocky 9, arm64);\nscripts/build-ami.sh, packer/" color="#9CA3AF" notes="Grey: legacy, still in the repository; predates the portable container images."];
   }
   subgraph cluster_legend {
     kind=zone; label="LEGEND - colours, lines and tags";
     l1 [kind=server label="Purple\nevent sources and people" color="#7C3AED" notes="Legend."];
     l2 [kind=container label="Teal\ningestion (Vector)" color="#0D9488" notes="Legend."];
     l3 [kind=database label="Blue\ndata stores and DB accounts" color="#2563EB" notes="Legend."];
-    l4 [kind=container label="Amber\napplications" color="#D97706" notes="Legend."];
-    l5 [kind=cloud-storage label="Grey\nNOT DEPLOYED (disabled config only)" color="#9CA3AF" notes="Legend."];
-    l6 [kind=router label="Lines and tags\nLines have no arrowheads: labels give protocol, port and DB account; OPTIONAL or (AWS) marks the AWS path\n[AU-n] = NIST 800-53 control per docs/control-mapping.md" color="#4B5563" notes="Legend."];
+    l4 [kind=container label="Amber\napplications and jobs" color="#D97706" notes="Legend."];
+    l5 [kind=container label="Slate\nimages and deployment targets" color="#475569" notes="Legend."];
+    l6 [kind=cloud-storage label="Grey\nPLANNED or LEGACY, not current" color="#9CA3AF" notes="Legend."];
+    l7 [kind=router label="Lines and tags\nLines have no arrowheads: labels give protocol, port and DB account; OPTIONAL marks paths enabled by configuration\n[AU-n] = NIST 800-53 control per docs/control-mapping.md" color="#4B5563" notes="Legend."];
   }
   win -> vh [label="native TCP 6000"];
   lin -> vh [label="native TCP 6000"];
@@ -43,7 +59,9 @@ digraph ironlog_architecture {
   aws -> va [label="OPTIONAL: SQS poll + S3 read"];
   vh -> siem [label="HTTP 8123 INSERT"];
   va -> siem [label="INSERT (AWS)"];
+  siem -> tier [label="OPTIONAL: S3 tier"];
   grafana -> siem [label="native 9000 SELECT"];
   grafana -> audit [label="native 9000 SELECT"];
   users -> grafana [label="HTTP 3000"];
+  schema -> siem [label="DDL, native 9000"];
 }
