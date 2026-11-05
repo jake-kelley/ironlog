@@ -1,0 +1,147 @@
+name: Helm
+
+# Lints the chart and validates the rendered manifests, then installs it on
+# kind with locally built images under the restricted Pod Security profile
+# (deploy/helm/ironlog/ci/kind-values.yaml: arbitrary UID, GID 0) and checks
+# the schema hook, Grafana and its datasources, and HEC ingest into ClickHouse.
+# kind is not OpenShift: SCC admission and Routes are not exercised.
+
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - deploy/helm/**
+      - images/**
+      - clickhouse/**
+      - grafana/**
+      - vector/**
+      - .github/workflows/helm.yml
+  pull_request:
+    paths: *paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helm-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CHART: deploy/helm/ironlog
+  KUBECONFORM_VERSION: v0.8.0
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.3.1
+
+      - name: helm lint
+        run: |
+          helm lint "$CHART"
+          helm lint "$CHART" -f "$CHART/ci/kind-values.yaml"
+
+      - name: kubeconform
+        run: |
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" | tar -xz kubeconform
+          for values in values.yaml ci/kind-values.yaml; do
+            echo "== $values"
+            helm template t "$CHART" -f "$CHART/$values" | ./kubeconform -strict -kubernetes-version 1.34.0 -summary
+          done
+
+  kind:
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build images
+        run: |
+          for image in clickhouse grafana vector; do
+            docker build -q -f "images/$image/Dockerfile" -t "ghcr.io/jake-kelley/ironlog-$image:dev" .
+          done
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.3.1
+
+      - uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
+        with:
+          cluster_name: ironlog
+
+      - name: Load images
+        run: |
+          for image in clickhouse grafana vector; do
+            kind load docker-image --name ironlog "ghcr.io/jake-kelley/ironlog-$image:dev"
+          done
+
+      # --wait covers the post-install schema Job hook: install fails if it does.
+      - name: helm install
+        run: |
+          kubectl create namespace ironlog
+          kubectl label namespace ironlog pod-security.kubernetes.io/enforce=restricted
+          helm install ironlog "$CHART" -n ironlog -f "$CHART/ci/kind-values.yaml" --wait --timeout 10m
+          kubectl -n ironlog get pods -o wide
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          secret() { kubectl -n ironlog get secret ironlog -o "jsonpath={.data.$1}" | base64 -d; }
+          kubectl -n ironlog port-forward svc/ironlog-grafana 3000:80 >/tmp/pf-grafana.log 2>&1 &
+          kubectl -n ironlog port-forward svc/ironlog-vector 8088:8088 >/tmp/pf-vector.log 2>&1 &
+          for _ in $(seq 30); do
+            curl -sf http://127.0.0.1:3000/api/health >/dev/null && curl -s -o /dev/null http://127.0.0.1:8088 && break
+            sleep 2
+          done
+
+          curl -sf http://127.0.0.1:3000/api/health | tee /dev/stderr | grep -q '"database": *"ok"'
+          printf 'user = "admin:%s"\n' "$(secret GF_SECURITY_ADMIN_PASSWORD)" > /tmp/gf.curl
+          for uid in siem-analyst siem-audit; do
+            curl -sf -K /tmp/gf.curl "http://127.0.0.1:3000/api/datasources/uid/$uid/health" | tee /dev/stderr | grep -q '"status":"OK"'
+            echo; echo "datasource $uid OK"
+          done
+
+          mark="ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          printf 'header = "Authorization: Splunk %s"\n' "$(secret SPLUNK_HEC_TOKEN)" > /tmp/hec.curl
+          code=$(curl -s -o /dev/null -w '%{http_code}' -K /tmp/hec.curl \
+            -d "{\"event\":{\"cluster\":\"ci\",\"namespace\":\"ns\",\"node\":\"n1\",\"container\":\"c\",\"pod\":\"p\",\"level\":\"info\",\"message\":\"$mark\"}}" \
+            http://127.0.0.1:8088/services/collector/event)
+          echo "HEC POST -> $code"; [ "$code" = 200 ]
+          bad=$(curl -s -o /dev/null -w '%{http_code}' -H 'Authorization: Splunk wrong' -d '{"event":"x"}' http://127.0.0.1:8088/services/collector/event)
+          echo "HEC bad token -> $bad"; [ "$bad" = 401 ]
+
+          for _ in $(seq 45); do
+            n=$(kubectl -n ironlog exec ironlog-clickhouse-0 -c clickhouse -- bash -c \
+              "clickhouse-client --user \"\$CLICKHOUSE_USER\" --password \"\$CLICKHOUSE_PASSWORD\" -q \"SELECT count() FROM siem.k8s_logs WHERE message = '$mark'\"")
+            [ "$n" = 1 ] && break
+            sleep 2
+          done
+          echo "rows in siem.k8s_logs for $mark: $n"; [ "$n" = 1 ]
+          rm -f /tmp/gf.curl /tmp/hec.curl
+
+      - name: helm upgrade (secrets reused, schema hook re-runs)
+        run: |
+          before=$(kubectl -n ironlog get secret ironlog -o jsonpath='{.data.CLICKHOUSE_PASSWORD}')
+          helm upgrade ironlog "$CHART" -n ironlog -f "$CHART/ci/kind-values.yaml" --wait --timeout 10m
+          after=$(kubectl -n ironlog get secret ironlog -o jsonpath='{.data.CLICKHOUSE_PASSWORD}')
+          [ "$before" = "$after" ] && echo "secret unchanged across upgrade"
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          kubectl -n ironlog get all,pvc,events -o wide || true
+          for pod in $(kubectl -n ironlog get pods -o name); do
+            echo "== $pod"; kubectl -n ironlog logs "$pod" --all-containers --tail=80 || true
+          done
+          cat /tmp/pf-*.log || true
