@@ -38,82 +38,90 @@ accounts, not individual app identities. Ingest happens through the write-only
 `svc_vector` account; analysts can never write, auditors can also read the
 analyst-activity trail.
 
-## Components
+## Images
 
-| Service | Image (pinned) | License | Role |
+Ironlog ships as three container images, built from `images/` and published
+for `linux/amd64` and `linux/arm64` to GitHub Container Registry. All
+configuration is baked in; a deployment supplies only environment variables,
+one data volume per container, networking and secrets. They run as non-root
+and also under an arbitrary UID with GID 0 (OpenShift `restricted-v2`).
+Contract: [images/README.md](images/README.md).
+
+| Image | Upstream (pinned) | License | Role |
 |---|---|---|---|
-| clickhouse | clickhouse/clickhouse-server:26.8.34.13 (LTS) | Apache-2.0 | storage, SQL, full-text (text index), RBAC, audit trail |
-| grafana | grafana/grafana:13.3.0 + ClickHouse plugin 4.23.4 | AGPL-3.0 | log search, dashboards, AU-5 alerting |
-| vector-hosts | timberio/vector:0.61.0-debian | MPL-2.0 | host/K8s ingestion (always on) |
-| vector | timberio/vector:0.61.0-debian | MPL-2.0 | AWS ingestion (profile `aws`) |
-| k3s (demo) | rancher/k3s:v1.37.1-k3s1 | Apache-2.0 | local test cluster (profile `k3s`) |
+| `ghcr.io/jake-kelley/ironlog-clickhouse:26.8.34.13` | clickhouse/clickhouse-server:26.8.34.13 (LTS) | Apache-2.0 | storage, SQL, full-text (text index), RBAC, audit trail; optional S3 cold tier; also runs the one-shot `ironlog-schema` |
+| `ghcr.io/jake-kelley/ironlog-grafana:13.3.0` | grafana/grafana:13.3.0 + ClickHouse plugin 4.23.4 | AGPL-3.0 | only UI: log search, dashboards, AU-5 alerting, local accounts |
+| `ghcr.io/jake-kelley/ironlog-vector:0.61.0` | timberio/vector:0.61.0-debian | MPL-2.0 | `IRONLOG_VECTOR_ROLE=hosts`: agents (:6000) and Kubernetes HEC (:8088); `aws`: CloudTrail, GuardDuty, VPC Flow, S3 access via SQS |
 
-Grafana ships as `grafana/grafana`: the `grafana-oss` repository stopped
-publishing at 13.0.2. The plugin version is pinned in
-`scripts/ami/grafana-clickhouse-plugin.version`.
+Each image is also tagged `<version>-<git sha>`. Pushes to `main` publish
+them with an SBOM attestation and a Grype report
+([images workflow](.github/workflows/images.yml)). The local k3s demo
+(`rancher/k3s:v1.37.1-k3s1`, Compose profile `k3s`) is a test producer, not
+part of the SIEM.
 
-License status: HyperDX and its MongoDB (SSPL) were removed; the remaining
-component licenses in this table (Apache-2.0, AGPL-3.0, MPL-2.0) are
-OSI-approved. BOM lists constituent
-software, not Ironlog as a separate software product. Artifact license
-coverage remains incomplete; FOCI assurance is not established. See
-[FOSS/FOCI assessment](docs/foss-foci-assessment.md), [BOM](docs/bom.md), and
-[CycloneDX SBOM bundle](sbom/README.md) for evidence and unresolved items.
+Remaining component licenses (Apache-2.0, AGPL-3.0, MPL-2.0) are
+OSI-approved. The BOM lists constituent software, not Ironlog as a separate
+product. Artifact license coverage remains incomplete; FOCI assurance is not
+established. See [FOSS/FOCI assessment](docs/foss-foci-assessment.md),
+[BOM](docs/bom.md), [CycloneDX SBOM bundle](sbom/README.md) and the
+[vulnerability report](https://jake-kelley.github.io/ironlog/).
+
+## Deployment targets
+
+The same images run everywhere, on one host or split across several.
+
+| Target | Status | Guide |
+|---|---|---|
+| Podman + systemd Quadlets on Oracle Linux 9 | verified live: single host, split host (ClickHouse alone), S3 cold tier, reboots | [quadlets/README.md](quadlets/README.md) |
+| Compose (Podman or Docker) | development stack, builds the images locally | [Fresh install](#fresh-install) |
+| Kubernetes / OpenShift (Helm) | CI install on kind under the restricted Pod Security profile; no live OpenShift run yet | [deploy/helm/ironlog/README.md](deploy/helm/ironlog/README.md) |
+| Amazon ECS on EC2 | planned (wave 2) | — |
+| EC2 AMI appliance (Packer, RHEL 9 / Rocky 9) | legacy; superseded by the images, retirement pending | [packer/README.md](packer/README.md) |
 
 ## Repository layout
 
-For RHEL 9 or builds without public internet software sources, see
-[RHEL 9 and private software builds](docs/private-software-builds.md).
-The same provisioners support Rocky 9 development builds; approved software
-can be staged from local media or an accessible S3 bucket.
-
-    docker-compose.yml           connected development stack
+    images/                      Dockerfiles, entrypoints, portability contract
+    quadlets/                    podman systemd units for the images; host/ firewall unit
+    deploy/helm/ironlog/         Helm chart (Kubernetes, EKS, OpenShift)
+    docker-compose.yml           development stack (builds images/ locally)
     bootstrap.sh                 fresh Compose install
     .env.example                 every secret/setting, annotated
     clickhouse/
-      ddl/                       schemas, audit trail, RBAC (auto-applied on first start)
+      ddl/                       schemas, audit trail, RBAC, search view
       config.d/ users.d/         listen config, query_log, default-user lockdown
-      initdb/99-init.sh          applies DDL + creates service accounts
     vector/
       vector.yaml                AWS pipelines (CloudTrail/GuardDuty/VPCFlow/S3)
       hosts.yaml                 host+K8s aggregator (HEC :8088, native :6000)
       agent-linux.yaml           drop-in config for Linux hosts
       agent-windows.yaml         drop-in config for Windows hosts
       tests.yaml tests-hosts.yaml  VRL unit tests
-    k8s/
-      vector-shipper.yaml        DaemonSet manifest for any cluster
-      k3s-demo-up.sh             one-command local demo cluster
-    scripts/
-      install-windows-agent.ps1  elevated Windows agent installer
-      fix-windows-agent-addr.ps1 WSL-lab address fix + boot task
     grafana/provisioning/        datasources, dashboards, AU-5 alert rules
-    keycloak/realm-export/       historical realm reference; not deployed
+    k8s/                         vector-shipper DaemonSet; k3s demo
+    scripts/
+      tests/                     image tests, OL9 Quadlet end-to-end test
+      install-windows-agent.ps1  elevated Windows agent installer
+      generate-sbom.py, scan-image-sboms.py, build-vuln-report.py   SBOM and report
+      okf-validate.py            OKF conformance checker for docs/
+    .github/workflows/           images, helm (kind), sbom (Grype, Pages)
     docs/                        OKF v0.1 knowledge bundle (runbooks, policies, catalog)
-    scripts/okf-validate.py      OKF conformance checker for docs/
+    sbom/                        declared inventory, CycloneDX bundle, image SBOMs
+    keycloak/realm-export/       historical realm reference; not deployed
 
-    --- appliance build (Phase 8) ---
-    packer/                      HCL2 build: RHEL 9 (shipping) / Rocky 9 (dev)
-    quadlets/                    podman systemd units — the compose stack, without compose
-    scripts/build-ami.sh         select one RHEL 9 or Rocky 9 builder
-    scripts/prepare-artifacts.py stage local/S3 software bundles
-    scripts/ami/                 software source, partitioning, baseline, STIG, FIPS, cleanup
-    scripts/firstboot/           launch-time: config resolution, schema reconciliation
+    --- legacy EC2 AMI appliance ---
+    packer/  scripts/ami/  scripts/firstboot/  scripts/build-ami.sh  scripts/prepare-artifacts.py
 
 ## UIs
 
 | URL | What | Auth |
 |---|---|---|
-| http://localhost:3000 | Grafana — log search, dashboards, SQL (Explore), alerts | Local `admin` / `IronlogDev123!` |
+| http://localhost:3000 | Grafana — log search, dashboards, SQL (Explore), alerts | Compose: local `admin` / `IronlogDev123!` |
 
-These are generic development credentials for fresh installs. Existing app
-accounts are preserved. See [local authentication](docs/local-auth.md) for
-configuration and upgrade instructions; no hosts-file entry is needed.
-
-On the **appliance**, connect to `http://<appliance-host>:3000` when
-`APPLIANCE_TLS=false`. HTTPS URLs require
-a configured TLS terminator; setting `APPLIANCE_TLS=true` does not install one.
-ClickHouse (`:8123`/`:9000`) stays bound to
-loopback in both deployments and is never published.
+The Compose credentials are generic development values for fresh installs;
+existing accounts are preserved. Quadlet hosts set the Grafana admin password
+in their environment file; the Helm chart generates one and keeps it across
+upgrades. See [local authentication](docs/local-auth.md). ClickHouse
+(`:8123`/`:9000`) is bound to loopback by default; split-host mode exposes it
+only to the hosts listed in `IRONLOG_CLICKHOUSE_ALLOWED_HOSTS`.
 
 Dashboards (Grafana -> SIEM folder):
 - **Log Search**: free-text search across Linux, Windows, Kubernetes,
@@ -137,84 +145,32 @@ Run these commands from the repository root in a Bash shell.
 1. Prereqs: Podman with a working Compose provider, Bash, and OpenSSL.
    Docker Engine with Compose v2 is also supported.
 2. `./bootstrap.sh` — generates `.env` with generic app logins and random
-   backend credentials, starts the stack, and verifies RBAC.
+   backend credentials, starts the stack (building the images on first run),
+   and verifies RBAC.
 3. Open http://localhost:3000 and log in as `admin` / `IronlogDev123!`.
 4. Onboard data sources (next section).
 
 Podman is the default. For Docker, run
 `IRONLOG_CONTAINER_RUNTIME=docker ./bootstrap.sh`. Bootstrap records the
 selection in `.env`; `scripts/compose.sh up -d`, `scripts/compose.sh logs`,
-and `scripts/compose.sh down` use it for later operations. Existing Docker
-installs should add `IRONLOG_CONTAINER_RUNTIME=docker` to `.env` before using
-the wrapper. Switching engines does not migrate existing containers or volumes.
+and `scripts/compose.sh down` use it for later operations. Switching engines
+does not migrate existing containers or volumes.
 
 `podman compose` requires an external provider such as `podman-compose` or
 Docker Compose. Select one with `PODMAN_COMPOSE_PROVIDER` if needed; see
 [Podman's Compose documentation](https://docs.podman.io/en/latest/markdown/podman-compose.1.html).
-On Windows/macOS, start a Podman machine before bootstrap. Bootstrap checks
-the runtime and Compose provider before generating `.env`. The optional
-privileged k3s demo uses the same runtime selection; rootless k3s operation
-is not verified. Local runtime routing is covered by mocked tests; live
-Podman Compose startup remains to
-be verified. The EC2 appliance continues to use Podman systemd Quadlets.
+On Windows/macOS, start a Podman machine before bootstrap.
 
 `bootstrap.sh` refuses to overwrite an existing `.env`. Fully wipe with
 `scripts/compose.sh down -v` (destroys data).
 
-## Deploy as an EC2 AMI appliance
+For a server install, use the published images instead: Quadlets on Oracle
+Linux 9 ([quadlets/README.md](quadlets/README.md)) or the Helm chart:
 
-The appliance uses Podman with systemd Quadlets on **RHEL 9 for shipping**
-and **Rocky Linux 9 for development**, currently on arm64. Commercial,
-GovCloud, and C2S/SC2S are deployment targets; availability and compliance
-must be validated in the target environment.
-
-Container images and the Grafana ClickHouse plugin are baked into the AMI.
-Builds can use public software sources or a prepared bundle containing an
-RPM repository, container archives, and plugin files. Stage the bundle from
-local media or any S3 bucket your credentials can read. No checksum manifest
-or bucket-owner check is required. See the
-[private software build guide](docs/private-software-builds.md) for bundle
-layout, S3 staging, and private-network configuration.
-
-1. Install Packer and its required plugin, then select one builder from the
-   repository root:
-
-   ```bash
-   scripts/build-ami.sh --os rhel9
-   # Development alternative:
-   scripts/build-ami.sh --os rocky9
-   ```
-
-   For private builds, copy and customize
-   `packer/rhel9-private-bundle.pkrvars.hcl.example`, then pass the resulting
-   file with `-var-file=packer/rhel9-private-bundle.pkrvars.hcl`. Set
-   `source_ami_id` to use your approved base image. The wrapper does not
-   download Packer plugins.
-2. Launch with the appliance config as **EC2 user-data** (see
-   [scripts/firstboot/appliance.conf.example](scripts/firstboot/appliance.conf.example)).
-   First boot **hard-fails by design** if no config is found — an unconfigured
-   appliance refuses to start rather than come up with default credentials.
-3. Every value is a literal, or `ssm://`, `asm://`, `file:///` (air-gapped
-   enclaves), or `generate:<bytes>`. Nothing secret is baked into the AMI.
-4. Use the Grafana local login above.
-
-What first boot does: resolves secrets, derives the Grafana URL from
-`APPLIANCE_FQDN` + `APPLIANCE_TLS`, mounts the data volume at
-`/var/lib/ironlog`, then reconciles the ClickHouse schema and service accounts
-**on every boot** (`ironlog-schema.service`) — all DDL is
-`CREATE ... IF NOT EXISTS` (existing installs get the text indexes added and
-materialized, and the old `tokenbf_v1` message indexes dropped), and the unit
-fails loudly with recovery instructions if the 7 `siem.*` tables,
-`audit.query_archive` and 3 service accounts aren't all present afterwards.
-
-Disk layout is STIG-shaped: separate LVs for `/home`, `/var`, `/var/log`,
-`/var/log/audit`, `/var/tmp`, `/tmp`, with SIEM data on its own EBS volume at
-`/var/lib/ironlog`. FIPS mode is enabled at build time and the build fails if
-`fips=1` isn't live on the rebooted kernel.
-
-Details: [packer/README.md](packer/README.md),
-[scripts/firstboot/README.md](scripts/firstboot/README.md),
-[quadlets/README.md](quadlets/README.md).
+```bash
+kubectl create namespace ironlog
+helm install ironlog deploy/helm/ironlog -n ironlog
+```
 
 ## Data source onboarding
 
@@ -276,8 +232,8 @@ The `docs/` directory is an [Open Knowledge Format](https://github.com/GoogleClo
 
 - **Start/stop**: `scripts/compose.sh up -d --build` builds the ironlog images
   from `images/` on first use (no config bind mounts); `scripts/compose.sh down`
-  (add `--profile aws --profile k3s` to include optional services). For appliance services, use systemd; see
-  [Quadlet operations](quadlets/README.md).
+  (add `--profile aws --profile k3s` to include optional services). On
+  Quadlet hosts, use systemd; see [Quadlet operations](quadlets/README.md).
 - **Weekly ISSO pass**: open the 800-53 dashboard, review each section (red
   stats first), check Alerting for anything firing, spot-check
   `audit.query_archive` via the audit-trail datasource.
@@ -334,7 +290,8 @@ Hard-won lessons encoded in this repo — check here before debugging:
   leaves a non-empty `metadata/` and the DDL is then skipped *forever* on every
   subsequent start — a healthy-looking server with no schema. `SELECT 1`
   healthchecks pass against an empty database, so nothing downstream notices;
-  this is why the appliance reconciles the schema as a separate gated unit.
+  this is why `ironlog-schema` runs as a separate one-shot that gates Grafana
+  and Vector.
 - **The audit trail uses a standard incremental MV**, chosen on ClickHouse
   24.8 where `REFRESH ... APPEND` was experimental, and kept on 26.8.
   `system.query_log`
@@ -342,30 +299,41 @@ Hard-won lessons encoded in this repo — check here before debugging:
 - WSL idle-shutdown stops the stack between sessions; the boot task (or any
   open WSL shell) keeps it alive.
 
+## CI and supply chain
+
+- **[Images](.github/workflows/images.yml)**: builds the three images for
+  amd64 and arm64 and runs `scripts/tests/*-image.test.sh` on pull requests;
+  pushes to `main` publish to GHCR with an SBOM attestation and a Grype report.
+- **[Helm](.github/workflows/helm.yml)**: `helm lint`, kubeconform, then an
+  install on kind under the restricted Pod Security profile with Grafana,
+  datasource, HEC ingest and upgrade checks.
+- **[SBOM](.github/workflows/sbom.yml)**: regenerates the SBOM bundle, runs
+  Grype weekly and publishes the [vulnerability report](https://jake-kelley.github.io/ironlog/)
+  to GitHub Pages.
+- `scripts/tests/ol9-quadlet-e2e.sh` repeats the Oracle Linux 9 Quadlet test
+  on a live host.
+
 ## Roadmap
 
-- **Phase 5 (remaining)**: S3 tiering for ClickHouse (config staged at
-  `config.d/20-storage-s3.xml.disabled`), Object Lock raw archive (Parquet via
-  aws_s3 sink), query_archive export. Retention numbers pending confirmation
-  in retention-policy.md. AU-5 alerting: DONE.
-- **Phase 6**: detection SQL + alert rules per control family (`detections/`).
-- **Phase 7**: operational cadence — review checklists, evidence exports,
-  annual catalog review.
-- **Phase 8 (in progress)**: EC2 AMI appliance. Build pipeline, quadlets,
-  first-boot config resolution and schema reconciliation have historical
-  real-hardware validation (cold boot, FIPS, end-to-end ingest, RBAC).
-  The new local-auth deployment still needs a fresh live boot. Outstanding:
-  first RHEL 9 build for real compliance evidence, TLS termination, and
-  offline Grafana plugin staging. External Keycloak integration is deferred;
-  the current default uses local app accounts.
+- **Portable containers, wave 1 (done 2026-11-04)**: three images on GHCR,
+  Quadlets verified on Oracle Linux 9 (single host, split host, S3 cold tier),
+  Helm chart tested on kind, CI for all of it.
+- **Wave 2**: Amazon ECS on EC2, ClickHouse S3 tier on real AWS S3 with an
+  instance role, a live OpenShift test, TLS between services, Grafana 13.3.1.
+- **Retention and archive**: Object Lock raw archive (Parquet via aws_s3
+  sink), query_archive export. Retention numbers pending confirmation in
+  retention-policy.md. AU-5 alerting: done.
+- **Detections**: detection SQL + alert rules per control family.
+- **Operations**: review checklists, evidence exports, annual catalog review.
+
+External Keycloak integration is deferred; the default is local app accounts.
 
 ## Known issues
 
-- **Offline Grafana startup** still needs the ClickHouse plugin staged at
-  build time; see `quadlets/README.md`.
 - **Existing app databases** retain their credentials. Generic defaults do
   not reset accounts; see [local authentication](docs/local-auth.md).
-- **Packer leaks one 100 GiB volume per build** — the builder's `/dev/sdb`
-  carries `delete_on_termination = false` in `packer/sources.pkr.hcl`. Fixing
-  it needs an explicit `ami_block_device_mappings`, because `CreateImage`
-  otherwise copies the flag onto every launched appliance's data volume.
+- **TLS between services** is not implemented; terminate TLS in front of
+  Grafana and keep ClickHouse on loopback or an allowlisted private network.
+- **Legacy AMI build** leaks one 100 GiB volume per Packer build: the
+  builder's `/dev/sdb` carries `delete_on_termination = false` in
+  `packer/sources.pkr.hcl`.

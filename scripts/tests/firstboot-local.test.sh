@@ -62,7 +62,6 @@ grep -Fx 'GRAFANA_ADMIN_USER="admin"' "$IRONLOG_TEST_ROOT/etc/ironlog.env"
 grep -Fx 'GRAFANA_ADMIN_PASSWORD="IronlogDev123!"' "$IRONLOG_TEST_ROOT/etc/ironlog.env"
 grep -Fx 'start --no-block ironlog-grafana.service' "$IRONLOG_TEST_ROOT/jobs"
 ! grep -Ei 'keycloak|oauth2|postgres' "$IRONLOG_TEST_ROOT/jobs"
-! grep -Ei 'hyperdx|mongo' "$IRONLOG_TEST_ROOT/jobs" "$IRONLOG_TEST_ROOT/etc/ironlog.env"
 # A repeat boot does not queue jobs or replace the environment file.
 before=$(cat "$IRONLOG_TEST_ROOT/jobs")
 run

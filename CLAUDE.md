@@ -11,43 +11,47 @@ and are not the current contract. Database RBAC remains unchanged.
 
 ## Current build and deployment contract
 
-Ironlog uses ClickHouse 26.8.34.13 (LTS), Vector 0.61.0 and Grafana 13.3.0
-(`grafana/grafana`, Open Source edition; ClickHouse plugin pinned to 4.23.4 in
-`scripts/ami/grafana-clickhouse-plugin.version`). Grafana is the only UI and
-authenticates local users itself; HyperDX, MongoDB, oauth2-proxy, Keycloak and
-Postgres are not deployed. Free-text search is the `siem.log_search` view
+Ironlog ships as three portable images built from `images/` (contract:
+images/README.md): `ghcr.io/jake-kelley/ironlog-clickhouse:26.8.34.13`
+(ClickHouse LTS; also runs the one-shot `ironlog-schema`),
+`ironlog-grafana:13.3.0` (`grafana/grafana`, ClickHouse plugin pinned to 4.23.4
+in `scripts/ami/grafana-clickhouse-plugin.version`) and `ironlog-vector:0.61.0`
+(`IRONLOG_VECTOR_ROLE=hosts` or `aws`). amd64 and arm64. Configuration is baked
+in: no config bind mounts; runtime input is environment variables plus one data
+path. Images must start under an arbitrary UID with GID 0. Grafana is the only
+UI and authenticates local users itself; oauth2-proxy, Keycloak and Postgres
+are not deployed. Free-text search is the `siem.log_search` view
 (`clickhouse/ddl/050_search.sql`) behind the Grafana "Log Search" dashboard,
 backed by `idx_msg_text` text indexes (`hasAllTokens`/`hasAnyTokens`).
 
-- RHEL 9 is the shipping/compliance target; Rocky 9 is for development.
-  Both builders currently use arm64. Select exactly one with
-  `scripts/build-ami.sh --os rhel9` or `--os rocky9`.
-- `source_ami_id` selects an approved base image. Private builds can use
-  `software_source=bundle` and a local `artifact_bundle_dir` prepared by
-  `scripts/prepare-artifacts.py` from local media or S3.
+- Deployment targets: Quadlets on Oracle Linux 9 podman (quadlets/, verified
+  live 2026-11-04 single host, split host and S3 cold tier), Compose for
+  development (builds `:local` images), Helm chart in deploy/helm/ironlog
+  (CI on kind). Amazon ECS on EC2 is planned (wave 2; deploy/ecs/ does not
+  exist yet). Keep image tags in Quadlets and Helm values equal to the
+  published GHCR tags.
+- CI: .github/workflows/images.yml (build, image tests, GHCR publish with SBOM
+  attestation and Grype on main), helm.yml (lint, kubeconform, kind install),
+  sbom.yml (SBOM, weekly Grype, Pages report).
+- Legacy EC2 AMI appliance (packer/, scripts/ami/, scripts/firstboot/,
+  scripts/build-ami.sh): RHEL 9 shipping / Rocky 9 development, superseded by
+  the images; whether to retire it is an open operator decision.
 - Operator explicitly requested no bundle checksums or bucket ownership
   checks. Do not add SHA256SUMS, archive hash arguments, STS identity calls,
   or expected-bucket-owner enforcement. RPM signature checks remain enabled.
-- Bundle builds use a local RPM repository and container archives. Grafana's
-  ClickHouse plugin is baked in; Quadlets use `Pull=never`.
-- See docs/private-software-builds.md and packer/README.md for exact commands.
-  Compose remains the connected development path.
 
 ## Validation and remaining work
 
-Local-auth Rocky appliances have been live-tested. Those AWS test resources,
-including retained AMIs and snapshots, were subsequently deleted. Do not
-assume any endpoint or local agent from historical notes remains live.
+Image tests: scripts/tests/{clickhouse,grafana,vector}-image.test.sh; live
+Quadlet test: scripts/tests/ol9-quadlet-e2e.sh. Do not assume any endpoint,
+VM or local agent from historical notes remains live. External OIDC is
+paused. Consult current DDL and docs/retention-policy.md before changing
+retention.
 
-RHEL/private-bundle changes have local validation and mocked provisioning
-tests; a real RHEL 9 build with private software sources remains unverified.
-Rocky results do not establish RHEL FIPS/STIG compliance. External OIDC is
-paused. S3 retention/tiering and export work remains separate; consult
-current DDL and docs/retention-policy.md before changing retention.
-
-Run `python scripts/okf-validate.py docs` after doc edits. For build changes,
-use scripts/tests/build-ami.test.sh, scripts/tests/offline-software-source.test.sh,
-and scripts/tests/prepare-artifacts.test.py as appropriate.
+Run `python scripts/okf-validate.py docs` after doc edits. For legacy AMI
+changes, use scripts/tests/build-ami.test.sh,
+scripts/tests/offline-software-source.test.sh and
+scripts/tests/prepare-artifacts.test.py.
 
 ## Development host
 
@@ -167,11 +171,6 @@ host for the idle-freeze watch).
 - Windows scripts must stay PURE ASCII: an em dash in a .ps1 string broke
   PowerShell 5.1 parsing (BOM-less UTF-8 read as ANSI turns the dash into a
   smart quote).
-
-HyperDX (added 2026-07-14) was REMOVED 2026-11-03 (commit 5e4ca7f) together with
-MongoDB, the oauth2-proxy hyperdx-auth, the Keycloak "hyperdx" client, svc_hyperdx
-and port 8081. Decision: Grafana is the only UI; single platform = ClickHouse.
-Search now lives in Grafana (Log Search dashboard over siem.log_search).
 
 ## Conventions (do not violate)
 - Schema density rules: ORDER BY low-cardinality-first + timestamp last;
