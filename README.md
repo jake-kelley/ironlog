@@ -337,3 +337,10 @@ External Keycloak integration is deferred; the default is local app accounts.
 - **Legacy AMI build** leaks one 100 GiB volume per Packer build: the
   builder's `/dev/sdb` carries `delete_on_termination = false` in
   `packer/sources.pkr.hcl`.
+
+## License
+
+Ironlog is licensed under the [Apache License, Version 2.0](LICENSE). See
+[NOTICE](NOTICE). The published images also contain ClickHouse, Vector and
+Grafana under their own licenses (Apache-2.0, MPL-2.0 and AGPL-3.0-only);
+[docs/bom.md](docs/bom.md) lists them.

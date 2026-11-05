@@ -7,3 +7,5 @@ version: 0.1.0
 appVersion: "26.8.34.13"
 kubeVersion: ">=1.25.0-0"
 home: https://github.com/jake-kelley/ironlog
+annotations:
+  artifacthub.io/license: Apache-2.0

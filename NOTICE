@@ -1,0 +1,10 @@
+Ironlog
+Copyright 2026 Jake Kelley
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The container images built from this repository bundle third-party software
+under its own licenses, including ClickHouse (Apache-2.0), Vector (MPL-2.0),
+Grafana (AGPL-3.0-only) and the Grafana ClickHouse data source plugin
+(Apache-2.0). Those components are not covered by this product's license;
+see docs/bom.md for versions, sources and license details.
