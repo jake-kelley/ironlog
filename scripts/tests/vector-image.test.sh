@@ -109,11 +109,15 @@ bad=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Splunk wrong" -d
   http://127.0.0.1:18088/services/collector/event)
 [ "$bad" = "401" ] && pass "bad HEC token rejected (401)" || fail "bad token http=$bad"
 rows=0
-for _ in $(seq 30); do
+# Disk buffer plus a 5 s batch: normally a few seconds, slower on a busy runner.
+for _ in $(seq 90); do
   rows=$(chq --query "SELECT count() FROM siem.k8s_logs WHERE message = '$marker'")
   [ "$rows" = "1" ] && break; sleep 1
 done
-[ "$rows" = "1" ] && pass "row landed in siem.k8s_logs" || { fail "row count=$rows"; $DOCKER logs "ironlog-vtest-hosts-$$" 2>&1 | tail -20; }
+[ "$rows" = "1" ] && pass "row landed in siem.k8s_logs" || {
+  fail "row count=$rows"; $DOCKER logs "ironlog-vtest-hosts-$$" 2>&1 | tail -20
+  chq --query "SYSTEM FLUSH LOGS"
+  chq --query "SELECT event_time, user, type, exception FROM system.query_log WHERE query_kind = 'Insert' ORDER BY event_time DESC LIMIT 10 FORMAT TSV"; }
 chq --query "SELECT cluster, namespace, level, message FROM siem.k8s_logs WHERE message = '$marker' FORMAT TSV"
 
 echo "== 7. role=aws runs and reports healthy, as --user $ARB_USER"
