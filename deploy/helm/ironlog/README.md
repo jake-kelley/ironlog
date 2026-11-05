@@ -151,6 +151,11 @@ helm template t deploy/helm/ironlog | kubeconform -strict -kubernetes-version 1.
 helm install ironlog deploy/helm/ironlog -n ironlog -f deploy/helm/ironlog/ci/kind-values.yaml --wait --timeout 8m
 ```
 
+`.github/workflows/helm.yml` runs the lint, kubeconform and this kind install on
+every change to the chart or images, then checks the schema hook, Grafana and
+both datasources, HEC ingest into `siem.k8s_logs` and an upgrade that keeps the
+generated secrets.
+
 Verified on kind v0.30.0 (Kubernetes v1.34.0): install and upgrade, schema hook
 Job success, Grafana `/api/health` ok and datasource health OK, HEC POST landing
 in `siem.k8s_logs`, NetworkPolicy blocking an unrelated pod. **Not verified on

@@ -118,8 +118,8 @@ echo "== (d) shared postgres database, two Grafana containers"
 net=$tag-net; networks+=("$net"); "$docker_bin" network create "$net" >/dev/null
 pg=$tag-pg; containers+=("$pg")
 "$docker_bin" run -d --name "$pg" --network "$net" -e POSTGRES_PASSWORD=pgpw -e POSTGRES_USER=grafana -e POSTGRES_DB=grafana "$pg_image" >/dev/null
-for i in $(seq 1 30); do "$docker_bin" exec "$pg" pg_isready -U grafana -d grafana >/dev/null 2>&1 && break; sleep 1; done
-"$docker_bin" exec "$pg" pg_isready -U grafana -d grafana >/dev/null || fail "postgres not ready"
+for i in $(seq 1 90); do "$docker_bin" exec "$pg" pg_isready -U grafana -d grafana >/dev/null 2>&1 && break; sleep 1; done
+"$docker_bin" exec "$pg" pg_isready -U grafana -d grafana >/dev/null || { "$docker_bin" logs --tail 40 "$pg" >&2 || true; fail "postgres not ready"; }
 dbenv=(--network "$net" -e GF_DATABASE_TYPE=postgres -e GF_DATABASE_HOST=$pg:5432 -e GF_DATABASE_NAME=grafana
   -e GF_DATABASE_USER=grafana -e GF_DATABASE_PASSWORD=pgpw -e GF_DATABASE_SSL_MODE=disable)
 d1=$(start d1 "${dbenv[@]}")
