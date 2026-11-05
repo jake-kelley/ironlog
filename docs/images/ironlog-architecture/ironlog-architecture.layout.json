@@ -1,39 +1,4 @@
 {
-  "01  SOURCES - what produces events": {
-    "x": 40,
-    "y": 80,
-    "w": 440,
-    "h": 1050,
-    "color": "#7C3AED"
-  },
-  "02  INGESTION - collect, normalise, buffer": {
-    "x": 640,
-    "y": 80,
-    "w": 440,
-    "h": 1050,
-    "color": "#0D9488"
-  },
-  "03  DATA - ClickHouse 26.8.34.13 LTS (event store, SQL, RBAC)": {
-    "x": 1240,
-    "y": 80,
-    "w": 440,
-    "h": 1050,
-    "color": "#2563EB"
-  },
-  "04  APPLICATIONS - Grafana, the only UI": {
-    "x": 1840,
-    "y": 80,
-    "w": 440,
-    "h": 1050,
-    "color": "#D97706"
-  },
-  "05  PEOPLE": {
-    "x": 2440,
-    "y": 80,
-    "w": 440,
-    "h": 1050,
-    "color": "#7C3AED"
-  },
   "Windows hosts - Vector agent [AU-12]": {
     "x": 50,
     "y": 140,
@@ -54,21 +19,35 @@
   },
   "AWS logs - OPTIONAL [AU-12]": {
     "x": 50,
-    "y": 860,
+    "y": 900,
     "w": 420,
     "h": 170
   },
-  "Vector Hosts 0.61.0 - always on [AU-3]": {
+  "01  SOURCES - what produces events": {
+    "x": 40,
+    "y": 80,
+    "w": 440,
+    "h": 1130,
+    "color": "#7C3AED"
+  },
+  "Vector role hosts - always on [AU-3]": {
     "x": 650,
     "y": 340,
     "w": 420,
     "h": 170
   },
-  "Vector AWS 0.61.0 - OPTIONAL [AU-3]": {
+  "Vector role aws - OPTIONAL [AU-3]": {
     "x": 650,
-    "y": 860,
+    "y": 900,
     "w": 420,
     "h": 170
+  },
+  "02  INGESTION - collect, normalise, buffer": {
+    "x": 640,
+    "y": 80,
+    "w": 440,
+    "h": 1130,
+    "color": "#0D9488"
   },
   "siem database - 30-day TTL [AU-11]": {
     "x": 1250,
@@ -78,81 +57,176 @@
   },
   "audit.query_archive - 2-year TTL [AU-9]": {
     "x": 1250,
-    "y": 340,
+    "y": 550,
     "w": 420,
     "h": 170
   },
   "svc_vector - write-only [AU-9]": {
     "x": 1250,
-    "y": 540,
+    "y": 740,
     "w": 420,
     "h": 170
   },
   "Read-only accounts [AC-6]": {
     "x": 1250,
+    "y": 930,
+    "w": 420,
+    "h": 170
+  },
+  "S3 cold tier - OPTIONAL [AU-4]": {
+    "x": 1250,
+    "y": 360,
+    "w": 420,
+    "h": 170
+  },
+  "03  DATA - ClickHouse 26.8.34.13 LTS (event store, SQL, RBAC)": {
+    "x": 1240,
+    "y": 80,
+    "w": 440,
+    "h": 1130,
+    "color": "#2563EB"
+  },
+  "Grafana 13.3.0 - :3000 [AU-5, AU-6]": {
+    "x": 1850,
+    "y": 340,
+    "w": 420,
+    "h": 170
+  },
+  "ironlog-schema - one-shot [AU-9]": {
+    "x": 1850,
     "y": 740,
     "w": 420,
     "h": 170
   },
-  "S3 tiering - NOT DEPLOYED [AU-4]": {
-    "x": 1250,
-    "y": 940,
-    "w": 420,
-    "h": 170
-  },
-  "Grafana 13.3.0 - :3000 [AU-5, AU-6]": {
-    "x": 1850,
-    "y": 390,
-    "w": 420,
-    "h": 170
+  "04  APPLICATIONS - Grafana, the only UI": {
+    "x": 1840,
+    "y": 80,
+    "w": 440,
+    "h": 1130,
+    "color": "#D97706"
   },
   "Analysts and auditors": {
     "x": 2450,
-    "y": 390,
+    "y": 340,
     "w": 420,
     "h": 170
   },
-  "LEGEND - colours, lines and tags": {
+  "05  PEOPLE": {
+    "x": 2440,
+    "y": 80,
+    "w": 440,
+    "h": 1130,
+    "color": "#7C3AED"
+  },
+  "ironlog-vector:0.61.0": {
+    "x": 650,
+    "y": 1330,
+    "w": 420,
+    "h": 170
+  },
+  "ironlog-clickhouse:26.8.34.13": {
+    "x": 1250,
+    "y": 1330,
+    "w": 420,
+    "h": 170
+  },
+  "ironlog-grafana:13.3.0": {
+    "x": 1850,
+    "y": 1330,
+    "w": 420,
+    "h": 170
+  },
+  "06  IMAGES - three ironlog images built from images/, config baked in (CI publishes to ghcr.io/jake-kelley)": {
     "x": 40,
-    "y": 1200,
+    "y": 1260,
     "w": 2840,
-    "h": 260,
-    "color": "#6B7280"
+    "h": 280,
+    "color": "#475569"
+  },
+  "podman Quadlets - Oracle Linux 9 [VERIFIED]": {
+    "x": 50,
+    "y": 1660,
+    "w": 420,
+    "h": 170
+  },
+  "Compose - development": {
+    "x": 650,
+    "y": 1660,
+    "w": 420,
+    "h": 170
+  },
+  "Helm chart - Kubernetes / OpenShift / EKS": {
+    "x": 1250,
+    "y": 1660,
+    "w": 420,
+    "h": 170
+  },
+  "Amazon ECS on EC2 - PLANNED, wave 2": {
+    "x": 1850,
+    "y": 1660,
+    "w": 420,
+    "h": 170
+  },
+  "Packer EC2 AMI appliance - LEGACY": {
+    "x": 2450,
+    "y": 1660,
+    "w": 420,
+    "h": 170
+  },
+  "07  DEPLOYMENT TARGETS - the same three images, different runtime": {
+    "x": 40,
+    "y": 1590,
+    "w": 2840,
+    "h": 280,
+    "color": "#475569"
   },
   "Purple": {
     "x": 65,
-    "y": 1270,
-    "w": 300,
+    "y": 1990,
+    "w": 280,
     "h": 150
   },
   "Teal": {
-    "x": 395,
-    "y": 1270,
-    "w": 300,
+    "x": 370,
+    "y": 1990,
+    "w": 280,
     "h": 150
   },
   "Blue": {
-    "x": 725,
-    "y": 1270,
-    "w": 300,
+    "x": 675,
+    "y": 1990,
+    "w": 280,
     "h": 150
   },
   "Amber": {
-    "x": 1055,
-    "y": 1270,
-    "w": 300,
+    "x": 980,
+    "y": 1990,
+    "w": 280,
+    "h": 150
+  },
+  "Slate": {
+    "x": 1285,
+    "y": 1990,
+    "w": 280,
     "h": 150
   },
   "Grey": {
-    "x": 1385,
-    "y": 1270,
-    "w": 300,
+    "x": 1590,
+    "y": 1990,
+    "w": 280,
     "h": 150
   },
   "Lines and tags": {
-    "x": 1715,
-    "y": 1270,
-    "w": 1140,
+    "x": 1895,
+    "y": 1990,
+    "w": 960,
     "h": 150
+  },
+  "LEGEND - colours, lines and tags": {
+    "x": 40,
+    "y": 1920,
+    "w": 2840,
+    "h": 260,
+    "color": "#6B7280"
   }
 }
