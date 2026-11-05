@@ -4,8 +4,11 @@ Ironlog ships as three container images that run unchanged on podman/Docker
 (Compose or Quadlets), Kubernetes, OpenShift and Amazon ECS on EC2. All
 containers can share one host or be split across several. The images are the
 product; every deployment target only supplies environment variables, volumes,
-networking and secrets. Status: **draft, 2026-11-04**. Change this file before
-changing the behavior it describes.
+networking and secrets. Status: **published**; `.github/workflows/images.yml`
+pushes all three to GHCR from `main` (amd64 and arm64, SBOM attestation, Grype
+report). Verified targets: Compose, Quadlets on Oracle Linux 9, and Helm on
+kind. ECS on EC2 is planned. Change this file before changing the behavior it
+describes.
 
 ## Images
 
@@ -46,7 +49,7 @@ changing the behavior it describes.
 5. Logs go to stdout/stderr. No log files are required.
 6. Each image documents one health command, usable as a Docker
    `HEALTHCHECK`, Kubernetes probe, ECS `healthCheck` and Quadlet `HealthCmd`.
-7. TLS between services is out of scope for this draft; it must be addable
+7. TLS between services is out of scope for this contract; it must be addable
    later without changing the variables below.
 
 ## Environment
@@ -126,8 +129,8 @@ Health: `GET /health` on 8686.
 | Target | Location | Notes |
 |---|---|---|
 | podman / Docker | `docker-compose.yml`, `quadlets/` | One host, or several hosts with `IRONLOG_CLICKHOUSE_HOST` pointing across |
-| Kubernetes / OpenShift / EKS | `deploy/helm/ironlog/` | Runs under OpenShift `restricted-v2`; schema as a Job |
-| Amazon ECS on EC2 | `deploy/ecs/` | CloudFormation; all services on one instance or split; ClickHouse data on a persistent EBS volume |
+| Kubernetes / OpenShift / EKS | `deploy/helm/ironlog/` | Tested on kind under the restricted Pod Security profile (`.github/workflows/helm.yml`), not yet on a real OpenShift cluster; schema as a Job |
+| Amazon ECS on EC2 | `deploy/ecs/` (planned, not yet in the repository) | CloudFormation; all services on one instance or split; ClickHouse data on a persistent EBS volume |
 
 Not covered by this contract: FIPS-validated crypto inside the containers
 (upstream bases are Ubuntu 22.04, Alpine 3.24.3 and Debian 13.7), TLS, HA.

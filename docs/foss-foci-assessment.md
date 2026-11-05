@@ -9,8 +9,7 @@ timestamp: 2026-11-03T00:00:00Z
 # Ironlog FOSS and FOCI assessment
 
 **Disposition: every runtime component's primary license is OSI-approved
-(Apache-2.0, AGPL-3.0-only, MPL-2.0); HyperDX and MongoDB (SSPL) were
-removed on 2026-11-03. Artifact-level license review remains incomplete.
+(Apache-2.0, AGPL-3.0-only, MPL-2.0). Artifact-level license review remains incomplete.
 FOCI assurance is not established.** Intended deployment is **owner-operated, not SaaS**.
 Ironlog is treated as a deployment/configuration bundle, not a separate
 software product requiring an entry in this BOM. Inventory covers its
@@ -30,8 +29,7 @@ Deliverables: [BOM](bom.md), [CSV](../sbom/ironlog-bom.csv),
 FOSS describes freedoms to use, study, modify and redistribute software;
 it does not mean hosting/support costs zero. The Open Source Initiative
 (OSI) maintains [criteria and approved licenses](https://opensource.org/licenses).
-The earlier SSPL exception for MongoDB is no longer needed: MongoDB left the
-stack with HyperDX on 2026-11-03. Primary upstream licenses do not establish
+Primary upstream licenses do not establish
 all unmeasured dependency licenses. Receiving organizations may apply their own criteria.
 RHEL subscriptions supply support/maintenance entitlements; see [Red Hat subscription guide](https://www.redhat.com/en/resources/red-hat-enterprise-linux-subscription-guide).
 
@@ -43,14 +41,6 @@ RHEL subscriptions supply support/maintenance entitlements; see [Red Hat subscri
 | Grafana ClickHouse datasource 4.23.4 | Apache-2.0 | FOSS; version pinned, plugin backend not scanned. [Versioned license](https://github.com/grafana/clickhouse-datasource/blob/v4.23.4/LICENSE). |
 | RHEL 9 / Rocky 9 host | Multiple package licenses | Exact AMI/RPM/firmware licenses unmeasured. RHEL subscription and redistribution terms separate from package-level FOSS. Rocky is development alternative, not replacement shipping decision. |
 | Packer build tool | Installed version unknown; `>= 1.9.0` permits BUSL releases | **Build-chain exception/unresolved** if FOSS-only applies to tools. Current BUSL releases are not FOSS before change date. Not an appliance runtime service. [Packer 1.16.0 license](https://github.com/hashicorp/packer/blob/v1.16.0/LICENSE). |
-
-### Removed: HyperDX and MongoDB
-
-HyperDX 2.19.0 (MIT) and its MongoDB 7.0 app-state database (SSPL-1.0, not
-OSI-approved) were removed on 2026-11-03; Grafana is the single UI. The
-earlier yellow SSPL acceptance therefore no longer applies to any shipped
-component. Existing installs remove the old containers and the
-`svc_hyperdx` account per [local authentication](local-auth.md).
 
 ## FOCI findings
 

@@ -23,12 +23,12 @@ Phase column shows when the evidence becomes live.
 | AU-9 Protection of audit info | S3 Object Lock (compliance), write-only ingest role, read-only analyst roles, query_archive | ddl/030,040; retention-policy.md | 1/5 |
 | AU-11 Retention | TTLs + S3 lifecycle | retention-policy.md, ddl TTL clauses | 5 |
 | AU-12 Generation | Agents + collectors on all in-scope systems | vector/vector.yaml (AWS), vector/hosts.yaml + vector/agent-linux.yaml (Linux), k8s/vector-shipper.yaml (K8s), vector/agent-windows.yaml + scripts/install-windows-agent.ps1 (Windows), docs/aws-ingestion.md, docs/host-ingestion.md | 2–4 |
-| AC-2 Account management | Native Grafana account (the only UI); generic development user, not individual accountability; CH service accounts svc_vector, svc_grafana_analyst, svc_grafana_auditor (svc_hyperdx removed) | docs/local-auth.md, bootstrap.sh, clickhouse/initdb/99-init.sh | Local mode |
+| AC-2 Account management | Native Grafana account (the only UI); generic development user, not individual accountability; CH service accounts svc_vector, svc_grafana_analyst, svc_grafana_auditor | docs/local-auth.md, bootstrap.sh, clickhouse/initdb/99-init.sh | Local mode |
 | AC-3 / AC-6 Enforcement, least privilege | CH roles/grants/profiles and native app login; shared Grafana datasources are not isolated by human role | clickhouse/ddl/040_rbac.sql, docker-compose.yml, docs/local-auth.md | Local mode |
 | IA-2 MFA | Not enforced in local mode. External Keycloak integration is deferred; no IdP is bundled | docs/local-auth.md | Deferred |
 | SI-4 Monitoring | GuardDuty triage, detection content | detections/ (P6) | 6 |
 | CM-2 Baseline configuration | Compose stack translated 1:1 to podman systemd quadlets (appliance deployment model); baked read-only config under /opt/ironlog, persistent data on a separate bind-mounted volume under /var/lib/ironlog | quadlets/*.container, quadlets/ironlog.network, quadlets/README.md | Appliance |
-| CM-7 Least functionality | ClickHouse admin ports remain loopback-only; Grafana (3000) is the only published UI; no HyperDX/MongoDB/Keycloak/Postgres/oauth2-proxy; AWS Vector starts only when configured | quadlets/ironlog-clickhouse.container, quadlets/ironlog-grafana.container, quadlets/ironlog-vector.container | Appliance |
+| CM-7 Least functionality | ClickHouse admin ports remain loopback-only; Grafana (3000) is the only published UI; no Keycloak/Postgres/oauth2-proxy; AWS Vector starts only when configured | quadlets/ironlog-clickhouse.container, quadlets/ironlog-grafana.container, quadlets/ironlog-vector.container | Appliance |
 | CM-2 Baseline configuration (image build) | Packer HCL2 templates build the appliance AMI: RHEL 9 aarch64 (shipping) and Rocky 9 aarch64 (dev), one shared provisioner list, source AMIs selected by filter (not hardcoded id), disk-layout contract (root + separate /var/lib/ironlog data volume) for scripts/ami/00-partition.sh | packer/ironlog.pkr.hcl, packer/sources.pkr.hcl, packer/build.pkr.hcl, packer/variables.pkr.hcl, packer/README.md | Appliance |
 | CM-6 Configuration settings (image build — STIG/FIPS wiring) | Provisioner order wires scripts/ami/30-stig.sh (STIG hardening) and scripts/ami/40-fips.sh (FIPS mode) into every AMI build; FIPS/Vector TLS incompatibility documented as an open, untested risk requiring a real-RHEL-9 boot test | packer/build.pkr.hcl, packer/README.md ("FIPS / Vector — open risk") | Appliance |
 | MA-2 Controlled maintenance (offline runtime) | scripts/ami/20-container-images.sh loads or pulls the three appliance container images (ClickHouse 26.8.34.13, Grafana 13.3.0, Vector 0.61.0) (arm64) and bakes the Grafana ClickHouse plugin at build time; appliance Quadlets use Pull=never | scripts/ami/20-container-images.sh, packer/build.pkr.hcl, quadlets/README.md | Appliance; live offline boot unverified |
@@ -48,8 +48,7 @@ Phase column shows when the evidence becomes live.
 | CM-6 Configuration settings / AC-6 Least privilege (Kubernetes and OpenShift deployment) | Helm chart runs all pods non-root with no privilege escalation, all capabilities dropped, seccomp RuntimeDefault and read-only root filesystems; `openshift=true` sets no fixed UID/GID so restricted-v2 assigns them. Schema is a post-install/post-upgrade Job and Grafana/Vector wait for it in an init container; an optional NetworkPolicy limits ClickHouse 8123/9000 to Grafana, Vector, the schema Job and ClickHouse. Live-tested on kind with Pod Security `restricted` and UID 1000770000/GID 0; not tested on a real OpenShift cluster | deploy/helm/ironlog/ | Kubernetes / OpenShift / EKS; OpenShift unverified |
 
 License notes:
-- All components are OSI-licensed. MongoDB (SSPL) was used only for HyperDX
-  app state and was removed together with HyperDX on 2026-11-03.
+- All components are OSI-licensed.
 - Grafana uses its native local account. A second password account is not
   MFA. External SSO is deferred and no longer claimed as an implemented control.
 
@@ -63,4 +62,4 @@ Access-control and audit attribution:
 - ClickHouse `system.query_log` records the service account, not the browser
   user. `audit.query_archive` therefore attributes queries per service account
   (`svc_vector`, `svc_grafana_analyst`, `svc_grafana_auditor`, plus admin use),
-  not per person. HyperDX no longer contributes query evidence.
+  not per person.

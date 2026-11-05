@@ -1,5 +1,8 @@
 # scripts/ami/ — AMI build provisioner scripts
 
+> **Legacy:** the AMI appliance path is superseded by the portable container
+> images (`images/README.md`). Whether to retire it is pending an operator decision.
+
 Shell provisioners, run in order as root by `packer/build.pkr.hcl`,
 turning a stock RHEL 9 / Rocky 9 aarch64 cloud
 image into the hardened ironlog appliance base. All are `bash`, `set -euo

@@ -2,7 +2,7 @@
 
 Assessment date: **2026-11-03**. Deployment model: **owner-operated, non-SaaS**.
 Runtime primary licenses: **OSI-approved** (Apache-2.0, AGPL-3.0-only,
-MPL-2.0); HyperDX and MongoDB (SSPL) were removed 2026-11-03.
+MPL-2.0).
 Artifact license review: **incomplete**.
 FOCI: **not established**. Inventory covers constituent software; Ironlog
 deployment/configuration bundle is not listed as a separate software product.
@@ -38,8 +38,7 @@ Total: **2,074 package occurrences across the three runtime images**, plus
 **10,483 CycloneDX components**. Packages are not deduplicated across images.
 Grafana's packages are mostly Go modules (1,846). File-evidence counts are
 not comparable with the 2026-11-02 run, which recorded far fewer file
-components per image. HyperDX and MongoDB scans were deleted with the
-components on 2026-11-03.
+components per image.
 
 Scanner output is preserved separately from manually researched license
 decisions. Many packages have missing license data; some Debian license

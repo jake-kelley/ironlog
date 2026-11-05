@@ -15,7 +15,7 @@ appliance; no SaaS offering. This BOM describes configured materials, not
 proof of a currently deployed or certified system.
 
 **Runtime primary licenses: OSI-approved (Apache-2.0, AGPL-3.0-only,
-MPL-2.0). HyperDX and MongoDB (SSPL) were removed 2026-11-03. Artifact
+MPL-2.0). Artifact
 license review: incomplete. FOCI: not established.** Ironlog itself
 is a deployment/configuration bundle and excluded as a separate software
 product from this inventory. See
@@ -36,8 +36,7 @@ statement. Machine-readable [CSV](../sbom/ironlog-bom.csv),
 All Docker Hub runtime references are fully qualified with `docker.io/` in
 source. Three unique images implement four container services when AWS
 collection is enabled. Grafana now ships as `grafana/grafana`; the
-`grafana-oss` repository stopped publishing at 13.0.2. HyperDX and its
-MongoDB app-state database were removed on 2026-11-03.
+`grafana-oss` repository stopped publishing at 13.0.2.
 
 Linux/Windows Vector agent binaries and the Kubernetes Vector shipper
 (`timberio/vector:0.61.0-distroless-libc`) are
@@ -85,8 +84,7 @@ costs and RHEL subscription charges are separate from software freedoms.
 
 No deployed on-box Keycloak, PostgreSQL, oauth2-proxy, ECS, AI/MCP query
 component or FerretDB is included. Historical files and proposed alternatives
-are not current shipped dependencies; HyperDX and MongoDB were removed on
-2026-11-03. Package-level scanning covers all three ARM64 runtime images.
+are not current shipped dependencies. Package-level scanning covers all three ARM64 runtime images.
 Host OS, agent binaries, demo image and the datasource plugin remain outside
 current scan coverage.
 
