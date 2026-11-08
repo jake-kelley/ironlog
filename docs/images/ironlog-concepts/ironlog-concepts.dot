@@ -1,0 +1,35 @@
+digraph ironlog_concepts {
+  label="Ironlog | Conceptual architecture";
+  subgraph cluster_sources {
+    kind=zone; label="01  SOURCES";
+    agents [kind=managed-endpoint label="Host log agents" color="#7C3AED" notes="Today: Vector agents on Windows and Linux."];
+    shipper [kind=container-host label="Cluster log shipper" color="#7C3AED" notes="Today: Vector DaemonSet on Kubernetes."];
+    cloud [kind=cloud-storage label="Cloud logs\n(optional)" color="#7C3AED" notes="Today: AWS logs in S3, announced through SQS."];
+  }
+  subgraph cluster_etl {
+    kind=zone; label="02  STREAMING ETL";
+    push [kind=container label="Push pipeline" color="#0D9488" notes="Today: Vector."];
+    pull [kind=container label="Pull pipeline\n(optional)" color="#0D9488" notes="Today: Vector."];
+  }
+  subgraph cluster_olap {
+    kind=zone; label="03  OLAP DATABASE";
+    hot [kind=database label="Columnar event store" color="#2563EB" notes="Today: ClickHouse."];
+    cold [kind=cloud-storage label="Cold tier\n(optional)" color="#2563EB" notes="Today: S3-compatible object storage behind ClickHouse."];
+  }
+  subgraph cluster_viz {
+    kind=zone; label="04  VISUALISATION";
+    ui [kind=siem label="Dashboards and alerting" color="#D97706" notes="Today: Grafana."];
+  }
+  subgraph cluster_people {
+    kind=zone; label="05  USERS";
+    users [kind=user-group label="Analysts and auditors" color="#7C3AED"];
+  }
+  agents -> push;
+  shipper -> push;
+  cloud -> pull;
+  push -> hot;
+  pull -> hot;
+  hot -> cold;
+  ui -> hot;
+  users -> ui;
+}

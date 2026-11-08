@@ -1,0 +1,91 @@
+{
+  "01  SOURCES": {
+    "x": 80,
+    "y": 80,
+    "w": 240,
+    "h": 640,
+    "color": "#7C3AED"
+  },
+  "02  STREAMING ETL": {
+    "x": 560,
+    "y": 80,
+    "w": 240,
+    "h": 640,
+    "color": "#0D9488"
+  },
+  "03  OLAP DATABASE": {
+    "x": 1040,
+    "y": 80,
+    "w": 240,
+    "h": 640,
+    "color": "#2563EB"
+  },
+  "04  VISUALISATION": {
+    "x": 1520,
+    "y": 80,
+    "w": 240,
+    "h": 640,
+    "color": "#D97706"
+  },
+  "05  USERS": {
+    "x": 2000,
+    "y": 80,
+    "w": 240,
+    "h": 640,
+    "color": "#7C3AED"
+  },
+  "Host log agents": {
+    "x": 126,
+    "y": 160,
+    "w": 148,
+    "h": 108
+  },
+  "Cluster log shipper": {
+    "x": 126,
+    "y": 330,
+    "w": 148,
+    "h": 108
+  },
+  "Cloud logs": {
+    "x": 126,
+    "y": 540,
+    "w": 148,
+    "h": 108
+  },
+  "Push pipeline": {
+    "x": 606,
+    "y": 245,
+    "w": 148,
+    "h": 108
+  },
+  "Pull pipeline": {
+    "x": 606,
+    "y": 540,
+    "w": 148,
+    "h": 108
+  },
+  "Columnar event store": {
+    "x": 1086,
+    "y": 245,
+    "w": 148,
+    "h": 108
+  },
+  "Cold tier": {
+    "x": 1086,
+    "y": 540,
+    "w": 148,
+    "h": 108
+  },
+  "Dashboards and alerting": {
+    "x": 1566,
+    "y": 245,
+    "w": 148,
+    "h": 108
+  },
+  "Analysts and auditors": {
+    "x": 2046,
+    "y": 245,
+    "w": 148,
+    "h": 108
+  }
+}

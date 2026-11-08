@@ -1,0 +1,173 @@
+{
+  "pages": [
+    {
+      "name": "ironlog_concepts",
+      "devices": [
+        {
+          "id": "n6",
+          "kind": "managed-endpoint",
+          "label": "Host log agents",
+          "data": {
+            "notes": "Today: Vector agents on Windows and Linux."
+          }
+        },
+        {
+          "id": "n7",
+          "kind": "container-host",
+          "label": "Cluster log shipper",
+          "data": {
+            "notes": "Today: Vector DaemonSet on Kubernetes."
+          }
+        },
+        {
+          "id": "n8",
+          "kind": "cloud-storage",
+          "label": "Cloud logs\n(optional)",
+          "data": {
+            "notes": "Today: AWS logs in S3, announced through SQS."
+          }
+        },
+        {
+          "id": "n9",
+          "kind": "container",
+          "label": "Push pipeline",
+          "data": {
+            "notes": "Today: Vector."
+          }
+        },
+        {
+          "id": "n10",
+          "kind": "container",
+          "label": "Pull pipeline\n(optional)",
+          "data": {
+            "notes": "Today: Vector."
+          }
+        },
+        {
+          "id": "n11",
+          "kind": "database",
+          "label": "Columnar event store",
+          "data": {
+            "notes": "Today: ClickHouse."
+          }
+        },
+        {
+          "id": "n12",
+          "kind": "cloud-storage",
+          "label": "Cold tier\n(optional)",
+          "data": {
+            "notes": "Today: S3-compatible object storage behind ClickHouse."
+          }
+        },
+        {
+          "id": "n13",
+          "kind": "siem",
+          "label": "Dashboards and alerting",
+          "data": {
+            "notes": "Today: Grafana."
+          }
+        },
+        {
+          "id": "n14",
+          "kind": "user-group",
+          "label": "Analysts and auditors"
+        }
+      ],
+      "links": [
+        {
+          "id": "e1",
+          "from": {
+            "device": "n6",
+            "label": "Host log agents"
+          },
+          "to": {
+            "device": "n9",
+            "label": "Push pipeline"
+          }
+        },
+        {
+          "id": "e2",
+          "from": {
+            "device": "n7",
+            "label": "Cluster log shipper"
+          },
+          "to": {
+            "device": "n9",
+            "label": "Push pipeline"
+          }
+        },
+        {
+          "id": "e3",
+          "from": {
+            "device": "n8",
+            "label": "Cloud logs\n(optional)"
+          },
+          "to": {
+            "device": "n10",
+            "label": "Pull pipeline\n(optional)"
+          }
+        },
+        {
+          "id": "e4",
+          "from": {
+            "device": "n9",
+            "label": "Push pipeline"
+          },
+          "to": {
+            "device": "n11",
+            "label": "Columnar event store"
+          }
+        },
+        {
+          "id": "e5",
+          "from": {
+            "device": "n10",
+            "label": "Pull pipeline\n(optional)"
+          },
+          "to": {
+            "device": "n11",
+            "label": "Columnar event store"
+          }
+        },
+        {
+          "id": "e6",
+          "from": {
+            "device": "n11",
+            "label": "Columnar event store"
+          },
+          "to": {
+            "device": "n12",
+            "label": "Cold tier\n(optional)"
+          }
+        },
+        {
+          "id": "e7",
+          "from": {
+            "device": "n13",
+            "label": "Dashboards and alerting"
+          },
+          "to": {
+            "device": "n11",
+            "label": "Columnar event store"
+          }
+        },
+        {
+          "id": "e8",
+          "from": {
+            "device": "n14",
+            "label": "Analysts and auditors"
+          },
+          "to": {
+            "device": "n13",
+            "label": "Dashboards and alerting"
+          }
+        }
+      ]
+    }
+  ],
+  "counts": {
+    "pages": 1,
+    "devices": 9,
+    "links": 8
+  }
+}

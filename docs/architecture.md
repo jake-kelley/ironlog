@@ -1,11 +1,35 @@
 ---
 type: Architecture
 title: Ironlog architecture
-description: Color-coded draw.io diagrams of Ironlog's three container images, data flow and deployment targets, plus ingestion and user access with query auditing.
-tags: [architecture, deployment, containers, ingestion]
+description: Color-coded draw.io diagrams of Ironlog as technology-neutral concepts, its three container images, data flow and deployment targets, plus ingestion and user access with query auditing.
+tags: [architecture, concepts, deployment, containers, ingestion]
 ---
 
 # Ironlog architecture
+
+## Concept view
+
+![Ironlog conceptual architecture](images/ironlog-concepts/ironlog-concepts.svg)
+
+[Editable draw.io](images/ironlog-concepts/ironlog-concepts.drawio) ·
+[PNG](images/ironlog-concepts/ironlog-concepts.png) ·
+[SVG](images/ironlog-concepts/ironlog-concepts.svg) ·
+[DOT source](images/ironlog-concepts/ironlog-concepts.dot)
+
+Ironlog's architecture as concepts rather than products. The table names
+the technology that fills each role today.
+
+| Concept | Today |
+|---|---|
+| Host log agents | Vector agents (Windows, Linux) |
+| Cluster log shipper | Vector DaemonSet (Kubernetes) |
+| Cloud logs (optional) | AWS logs in S3, announced through SQS |
+| Streaming ETL: push and pull pipelines | Vector |
+| OLAP database: columnar event store | ClickHouse |
+| Cold tier (optional) | S3-compatible object storage |
+| Dashboards and alerting | Grafana |
+
+## Detailed architecture
 
 ![Ironlog architecture](images/ironlog-architecture/ironlog-architecture.svg)
 
