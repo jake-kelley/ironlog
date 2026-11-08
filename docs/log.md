@@ -2,7 +2,7 @@
 
 ## 2026-11-08
 
-* **Concept diagram**: Added a technology-neutral concept view of the architecture (`docs/images/ironlog-concepts/`) and a concept-to-implementation table in [architecture](architecture.md). Boxes name the building blocks (host log agents, streaming ETL, columnar OLAP database, tiered storage, query audit trail, database RBAC, schema migration job, visualisation and alerting UI, container images, runtimes) instead of products; each box's draw.io notes name today's implementation. Rendered through Drawbridge with the same lanes, colours and NIST tags as the detailed diagram; `scripts/render-diagrams.py` now rebuilds it too. No runtime change.
+* **Concept diagram**: Added a concept view of the architecture (`docs/images/ironlog-concepts/`) that names building blocks (streaming ETL, OLAP database, dashboards and alerting) instead of products, with a concept-to-technology table in [architecture](architecture.md). `scripts/render-diagrams.py` rebuilds it. No runtime change.
 
 ## 2026-11-04
 

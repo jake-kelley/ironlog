@@ -16,45 +16,18 @@ tags: [architecture, concepts, deployment, containers, ingestion]
 [SVG](images/ironlog-concepts/ironlog-concepts.svg) ·
 [DOT source](images/ironlog-concepts/ironlog-concepts.dot)
 
-This view shows Ironlog's architectural building blocks without naming
-products. Ironlog is a streaming ETL pipeline that feeds a columnar OLAP
-database, with a visualisation and alerting UI on top. Database identities,
-retention and a query audit trail are enforced inside the database. Each
-building block ships as an immutable container image that runs on several
-orchestrators. It has the same lanes, bands, colours and NIST tags as the
-detailed diagram below, which names the products, versions and ports. In
-the draw.io file, each box's notes name today's implementation, and the
-table below maps every concept to it.
+Ironlog's architecture as concepts rather than products. The table names
+the technology that fills each role today.
 
-Two concepts carry most of the design:
-
-- **Streaming ETL**: events are extracted at receivers (push) or from a
-  notification queue and object store (pull). They are transformed into one
-  typed row shape per source before storage (schema on write) and held in a
-  durable disk buffer that applies back-pressure when full rather than
-  dropping events. They are then loaded in batches by an identity that can
-  only write.
-- **Columnar OLAP database**: one append-only table per source, partitioned
-  and sorted by time, with bloom-filter skip indexes and full-text inverted
-  indexes. Age-based TTL rules implement retention and the optional cold tier.
-  The database's own query log feeds a materialized-view audit trail, so
-  reads are recorded where they happen.
-
-| Concept | Role in Ironlog | Implemented today by | Tags |
-|---|---|---|---|
-| Host log agents (edge collectors) | Read OS event, journal and audit logs on each host, buffer on disk, forward to the pipeline | Vector agents: `vector/agent-windows.yaml`, `vector/agent-linux.yaml` | AU-12 |
-| Cluster log shipper | Per-node daemon forwards container logs over an authenticated HTTP event API | Vector DaemonSet `k8s/vector-shipper.yaml`, Splunk HEC protocol on 8088 | AU-12 |
-| Cloud audit logs in object storage, with a notification queue (optional) | Cloud control-plane, threat, network-flow and access logs; a queue message announces each new object | AWS CloudTrail, GuardDuty, VPC Flow and S3 access logs in S3, one SQS queue per type | AU-12 |
-| Streaming ETL, push pipeline | Receive, route by source, normalise to typed rows, disk-buffer, batch-load | Vector 0.61.0, role `hosts` (`vector/hosts.yaml`): VRL remap, 2 GiB disk buffers that block when full | AU-3 |
-| Streaming ETL, pull pipeline (optional) | Consume the queue, fetch objects, normalise, disk-buffer, batch-load | Vector 0.61.0, role `aws` (`vector/vector.yaml`) | AU-3 |
-| Columnar OLAP database, hot tier | Seven typed event tables, skip and full-text indexes, SQL, TTL retention | ClickHouse 26.8.34.13 LTS, MergeTree tables in `siem`; `siem.log_search` view | AU-11 |
-| Tiered storage, cold tier (optional) | Moves data parts older than the hot window to S3-compatible object storage | ClickHouse S3 disk and storage policy, `IRONLOG_S3_TIER`, `IRONLOG_HOT_DAYS` | AU-4 |
-| Query audit trail | Materialized view copies every finished query from the database's query log; 2-year TTL | `audit.query_archive` filled by `query_archive_mv` from `system.query_log` | AU-9 |
-| Least-privilege identities (database RBAC) | The pipeline may only write; analyst and auditor identities may only read | ClickHouse roles `siem_ingest`, `siem_analyst`, `siem_auditor`; profile `siem_reader` | AC-6, AU-9 |
-| Schema migration job | One-shot: applies tables, identities and retention, verifies them, gates the other services | `ironlog-schema` command in the `ironlog-clickhouse` image | AU-9 |
-| Visualisation and alerting UI | The only UI: dashboards, free-text search, ad-hoc SQL, per-source silence alerts, local accounts | Grafana OSS 13.3.0 with ClickHouse plugin 4.23.4 | AU-5, AU-6 |
-| Immutable container images | One image per building block, configuration baked in, published by CI with an SBOM attestation | `ironlog-vector`, `ironlog-clickhouse`, `ironlog-grafana` on `ghcr.io/jake-kelley` | n/a |
-| Runtimes | Host service manager (verified), developer compose stack, Kubernetes package; managed container service planned; VM image appliance legacy | podman Quadlets on Oracle Linux 9, Compose, Helm; Amazon ECS on EC2 planned; Packer EC2 AMI legacy | n/a |
+| Concept | Today |
+|---|---|
+| Host log agents | Vector agents (Windows, Linux) |
+| Cluster log shipper | Vector DaemonSet (Kubernetes) |
+| Cloud logs (optional) | AWS logs in S3, announced through SQS |
+| Streaming ETL: push and pull pipelines | Vector |
+| OLAP database: columnar event store | ClickHouse |
+| Cold tier (optional) | S3-compatible object storage |
+| Dashboards and alerting | Grafana |
 
 ## Detailed architecture
 

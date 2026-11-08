@@ -1,220 +1,91 @@
 {
-  "Host log agents [AU-12]": {
-    "x": 50,
-    "y": 340,
-    "w": 420,
-    "h": 170
-  },
-  "Cluster log shipper [AU-12]": {
-    "x": 50,
-    "y": 560,
-    "w": 420,
-    "h": 170
-  },
-  "Cloud audit logs - OPTIONAL [AU-12]": {
-    "x": 50,
-    "y": 900,
-    "w": 420,
-    "h": 170
-  },
-  "01  SOURCES - systems that emit security events": {
-    "x": 40,
+  "01  SOURCES": {
+    "x": 80,
     "y": 80,
-    "w": 440,
-    "h": 1130,
+    "w": 240,
+    "h": 640,
     "color": "#7C3AED"
   },
-  "Push pipeline - always on [AU-3]": {
-    "x": 650,
-    "y": 340,
-    "w": 420,
-    "h": 170
-  },
-  "Pull pipeline - OPTIONAL [AU-3]": {
-    "x": 650,
-    "y": 900,
-    "w": 420,
-    "h": 170
-  },
-  "02  STREAMING ETL - extract, transform, buffer, load": {
-    "x": 640,
+  "02  STREAMING ETL": {
+    "x": 560,
     "y": 80,
-    "w": 440,
-    "h": 1130,
+    "w": 240,
+    "h": 640,
     "color": "#0D9488"
   },
-  "Event tables - hot tier [AU-11]": {
-    "x": 1250,
-    "y": 140,
-    "w": 420,
-    "h": 170
-  },
-  "Cold tier - OPTIONAL [AU-4]": {
-    "x": 1250,
-    "y": 360,
-    "w": 420,
-    "h": 170
-  },
-  "Query audit trail - 2-year TTL [AU-9]": {
-    "x": 1250,
-    "y": 580,
-    "w": 420,
-    "h": 170
-  },
-  "Least-privilege identities [AC-6, AU-9]": {
-    "x": 1250,
-    "y": 900,
-    "w": 420,
-    "h": 170
-  },
-  "03  COLUMNAR OLAP DATABASE - event store, SQL, RBAC": {
-    "x": 1240,
+  "03  OLAP DATABASE": {
+    "x": 1040,
     "y": 80,
-    "w": 440,
-    "h": 1130,
+    "w": 240,
+    "h": 640,
     "color": "#2563EB"
   },
-  "Visualisation and alerting UI [AU-5, AU-6]": {
-    "x": 1850,
-    "y": 340,
-    "w": 420,
-    "h": 170
-  },
-  "Schema migration job - one-shot [AU-9]": {
-    "x": 1850,
-    "y": 740,
-    "w": 420,
-    "h": 170
-  },
-  "04  APPLICATIONS - visualisation, alerting, schema control": {
-    "x": 1840,
+  "04  VISUALISATION": {
+    "x": 1520,
     "y": 80,
-    "w": 440,
-    "h": 1130,
+    "w": 240,
+    "h": 640,
     "color": "#D97706"
   },
-  "Analysts and auditors": {
-    "x": 2450,
-    "y": 340,
-    "w": 420,
-    "h": 170
-  },
-  "05  PEOPLE": {
-    "x": 2440,
+  "05  USERS": {
+    "x": 2000,
     "y": 80,
-    "w": 440,
-    "h": 1130,
+    "w": 240,
+    "h": 640,
     "color": "#7C3AED"
   },
-  "Pipeline image": {
-    "x": 650,
-    "y": 1330,
-    "w": 420,
-    "h": 170
+  "Host log agents": {
+    "x": 126,
+    "y": 160,
+    "w": 148,
+    "h": 108
   },
-  "Database image": {
-    "x": 1250,
-    "y": 1330,
-    "w": 420,
-    "h": 170
+  "Cluster log shipper": {
+    "x": 126,
+    "y": 330,
+    "w": 148,
+    "h": 108
   },
-  "UI image": {
-    "x": 1850,
-    "y": 1330,
-    "w": 420,
-    "h": 170
+  "Cloud logs": {
+    "x": 126,
+    "y": 540,
+    "w": 148,
+    "h": 108
   },
-  "06  PACKAGING - one immutable container image per concept, configuration baked in, published by CI with an SBOM": {
-    "x": 40,
-    "y": 1260,
-    "w": 2840,
-    "h": 280,
-    "color": "#475569"
+  "Push pipeline": {
+    "x": 606,
+    "y": 245,
+    "w": 148,
+    "h": 108
   },
-  "Host service manager [VERIFIED]": {
-    "x": 50,
-    "y": 1660,
-    "w": 420,
-    "h": 170
+  "Pull pipeline": {
+    "x": 606,
+    "y": 540,
+    "w": 148,
+    "h": 108
   },
-  "Developer compose stack": {
-    "x": 650,
-    "y": 1660,
-    "w": 420,
-    "h": 170
+  "Columnar event store": {
+    "x": 1086,
+    "y": 245,
+    "w": 148,
+    "h": 108
   },
-  "Kubernetes package": {
-    "x": 1250,
-    "y": 1660,
-    "w": 420,
-    "h": 170
+  "Cold tier": {
+    "x": 1086,
+    "y": 540,
+    "w": 148,
+    "h": 108
   },
-  "Managed container service - PLANNED": {
-    "x": 1850,
-    "y": 1660,
-    "w": 420,
-    "h": 170
+  "Dashboards and alerting": {
+    "x": 1566,
+    "y": 245,
+    "w": 148,
+    "h": 108
   },
-  "VM image appliance - LEGACY": {
-    "x": 2450,
-    "y": 1660,
-    "w": 420,
-    "h": 170
-  },
-  "07  RUNTIMES - the same three images on interchangeable orchestrators": {
-    "x": 40,
-    "y": 1590,
-    "w": 2840,
-    "h": 280,
-    "color": "#475569"
-  },
-  "Purple": {
-    "x": 65,
-    "y": 1990,
-    "w": 280,
-    "h": 150
-  },
-  "Teal": {
-    "x": 370,
-    "y": 1990,
-    "w": 280,
-    "h": 150
-  },
-  "Blue": {
-    "x": 675,
-    "y": 1990,
-    "w": 280,
-    "h": 150
-  },
-  "Amber": {
-    "x": 980,
-    "y": 1990,
-    "w": 280,
-    "h": 150
-  },
-  "Slate": {
-    "x": 1285,
-    "y": 1990,
-    "w": 280,
-    "h": 150
-  },
-  "Grey": {
-    "x": 1590,
-    "y": 1990,
-    "w": 280,
-    "h": 150
-  },
-  "Lines and tags": {
-    "x": 1895,
-    "y": 1990,
-    "w": 960,
-    "h": 150
-  },
-  "LEGEND - colours, lines and tags": {
-    "x": 40,
-    "y": 1920,
-    "w": 2840,
-    "h": 260,
-    "color": "#6B7280"
+  "Analysts and auditors": {
+    "x": 2046,
+    "y": 245,
+    "w": 148,
+    "h": 108
   }
 }
