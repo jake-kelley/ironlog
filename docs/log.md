@@ -1,5 +1,9 @@
 # SIEM documentation update log
 
+## 2026-11-08
+
+* **Concept diagram**: Added a technology-neutral concept view of the architecture (`docs/images/ironlog-concepts/`) and a concept-to-implementation table in [architecture](architecture.md). Boxes name the building blocks (host log agents, streaming ETL, columnar OLAP database, tiered storage, query audit trail, database RBAC, schema migration job, visualisation and alerting UI, container images, runtimes) instead of products; each box's draw.io notes name today's implementation. Rendered through Drawbridge with the same lanes, colours and NIST tags as the detailed diagram; `scripts/render-diagrams.py` now rebuilds it too. No runtime change.
+
 ## 2026-11-04
 
 * **Container images in Compose and Quadlets**: `docker-compose.yml` builds `ironlog-clickhouse`, `ironlog-grafana` and `ironlog-vector` from `images/` and no longer bind-mounts configuration; a one-shot `schema` service (`ironlog-schema`) gates Grafana and Vector. Quadlets reference `ghcr.io/jake-kelley/ironlog-*`, add `ironlog-schema.container`, and drop the config mounts, `Notify=healthy` and `NetworkAlias=` (not available in OL 9.4's podman 4.9). ClickHouse bind address is configurable (`IRONLOG_CLICKHOUSE_BIND`, default loopback) for the documented split-host mode in [quadlets/README.md](../quadlets/README.md). Podman hosts target Oracle Linux 9.

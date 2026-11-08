@@ -27,6 +27,7 @@ each panel tagged with its control ID. Querying: [docs/query-guide.md](docs/quer
 ![Ironlog architecture — sources, ingestion, data, and applications](docs/images/ironlog-architecture/ironlog-architecture.svg)
 
 [Architecture details](docs/architecture.md) ·
+[Concept view](docs/images/ironlog-concepts/ironlog-concepts.svg) ·
 [Editable diagram](docs/images/ironlog-architecture/ironlog-architecture.drawio) ·
 [PNG](docs/images/ironlog-architecture/ironlog-architecture.png) ·
 [Ingestion paths](docs/images/ironlog-ingestion/ironlog-ingestion.svg) ·

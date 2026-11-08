@@ -13,7 +13,8 @@ import xml.etree.ElementTree as ET
 
 REPO = Path(__file__).resolve().parents[1]
 ENDPOINT = "https://drawbridge.fortiknight.com/mcp"
-NAMES = ("ironlog-architecture", "ironlog-ingestion", "ironlog-access-audit")
+NAMES = ("ironlog-architecture", "ironlog-concepts", "ironlog-ingestion",
+         "ironlog-access-audit")
 
 
 def call(name, arguments):
